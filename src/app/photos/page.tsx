@@ -1,0 +1,290 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { createClient } from "@/lib/supabase";
+import { Photo, PhotoTag, Job } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Camera,
+  Search,
+  Image as ImageIcon,
+  Calendar,
+  MapPin,
+  Filter,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+import Link from "next/link";
+
+type PhotoWithJob = Photo & { job: Pick<Job, "id" | "job_number" | "property_address"> };
+
+export default function PhotosPage() {
+  const [photos, setPhotos] = useState<PhotoWithJob[]>([]);
+  const [tags, setTags] = useState<PhotoTag[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [selectedJob, setSelectedJob] = useState<string | null>(null);
+  const [jobs, setJobs] = useState<Pick<Job, "id" | "job_number" | "property_address">[]>([]);
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+
+  const fetchData = useCallback(async () => {
+    const supabase = createClient();
+
+    const [photosRes, tagsRes, jobsRes] = await Promise.all([
+      supabase
+        .from("photos")
+        .select("*, job:jobs!job_id(id, job_number, property_address)")
+        .order("created_at", { ascending: false }),
+      supabase.from("photo_tags").select("*").order("name"),
+      supabase
+        .from("jobs")
+        .select("id, job_number, property_address")
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (photosRes.data) setPhotos(photosRes.data as PhotoWithJob[]);
+    if (tagsRes.data) setTags(tagsRes.data as PhotoTag[]);
+    if (jobsRes.data) setJobs(jobsRes.data);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  function getPublicUrl(storagePath: string) {
+    return `${supabaseUrl}/storage/v1/object/public/photos/${storagePath}`;
+  }
+
+  const filtered = photos.filter((p) => {
+    if (selectedJob && p.job_id !== selectedJob) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const matchCaption = p.caption?.toLowerCase().includes(q);
+      const matchJob = p.job?.job_number?.toLowerCase().includes(q);
+      const matchAddress = p.job?.property_address?.toLowerCase().includes(q);
+      if (!matchCaption && !matchJob && !matchAddress) return false;
+    }
+    return true;
+  });
+
+  const totalPhotos = photos.length;
+  const jobsWithPhotos = new Set(photos.map((p) => p.job_id)).size;
+
+  if (loading) {
+    return (
+      <div className="text-center py-12 text-[#999999]">Loading photos...</div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-[#1A1A1A]">Photos</h1>
+          <p className="text-sm text-[#999999] mt-1">
+            {totalPhotos} photo{totalPhotos !== 1 ? "s" : ""} across{" "}
+            {jobsWithPhotos} job{jobsWithPhotos !== 1 ? "s" : ""}
+          </p>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <StatCard
+          label="Total Photos"
+          value={totalPhotos}
+          icon={Camera}
+          color="bg-[#2B5EA7]"
+        />
+        <StatCard
+          label="Jobs with Photos"
+          value={jobsWithPhotos}
+          icon={MapPin}
+          color="bg-[#0F6E56]"
+        />
+        <StatCard
+          label="This Week"
+          value={
+            photos.filter((p) => {
+              const d = new Date(p.created_at);
+              const now = new Date();
+              const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+              return d >= weekAgo;
+            }).length
+          }
+          icon={Calendar}
+          color="bg-[#6C5CE7]"
+        />
+        <StatCard
+          label="Tags"
+          value={tags.length}
+          icon={Filter}
+          color="bg-[#633806]"
+        />
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Search */}
+          <div className="relative flex-1">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999999]"
+            />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by caption, job number, or address..."
+              className="pl-9"
+            />
+          </div>
+          {/* Job filter */}
+          <select
+            value={selectedJob || ""}
+            onChange={(e) => setSelectedJob(e.target.value || null)}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/20 focus:border-[#2B5EA7]"
+          >
+            <option value="">All Jobs</option>
+            {jobs.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.job_number} — {j.property_address}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Tag pills */}
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            <button
+              onClick={() => setSelectedTag(null)}
+              className={cn(
+                "px-3 py-1 rounded-full text-xs font-medium border transition-all",
+                !selectedTag
+                  ? "bg-[#1B2434] text-white border-[#1B2434]"
+                  : "bg-white text-[#666666] border-gray-200 hover:border-gray-300"
+              )}
+            >
+              All
+            </button>
+            {tags.map((tag) => (
+              <button
+                key={tag.id}
+                onClick={() =>
+                  setSelectedTag(selectedTag === tag.id ? null : tag.id)
+                }
+                className={cn(
+                  "px-3 py-1 rounded-full text-xs font-medium border transition-all",
+                  selectedTag === tag.id
+                    ? "text-white border-transparent"
+                    : "bg-white text-[#666666] border-gray-200 hover:border-gray-300"
+                )}
+                style={
+                  selectedTag === tag.id
+                    ? { backgroundColor: tag.color, borderColor: tag.color }
+                    : undefined
+                }
+              >
+                {tag.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Photo grid */}
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <ImageIcon size={48} className="mx-auto text-[#CCCCCC] mb-3" />
+          <p className="text-[#999999] text-lg font-medium">No photos yet</p>
+          <p className="text-[#BBBBBB] text-sm mt-1">
+            Photos will appear here once uploaded to a job.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {filtered.map((photo) => (
+            <Link
+              key={photo.id}
+              href={`/jobs/${photo.job_id}`}
+              className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
+            >
+              <div className="aspect-square bg-gray-100 relative overflow-hidden">
+                <img
+                  src={getPublicUrl(photo.storage_path)}
+                  alt={photo.caption || "Job photo"}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                />
+                {photo.before_after_role && (
+                  <Badge
+                    className={cn(
+                      "absolute top-2 left-2 text-[10px] px-1.5 py-0 rounded",
+                      photo.before_after_role === "before"
+                        ? "bg-[#FCEBEB] text-[#791F1F]"
+                        : "bg-[#E1F5EE] text-[#085041]"
+                    )}
+                  >
+                    {photo.before_after_role === "before" ? "Before" : "After"}
+                  </Badge>
+                )}
+              </div>
+              <div className="p-3">
+                {photo.caption && (
+                  <p className="text-sm text-[#1A1A1A] font-medium truncate">
+                    {photo.caption}
+                  </p>
+                )}
+                <p className="text-xs text-[#2B5EA7] font-mono mt-1">
+                  {photo.job?.job_number}
+                </p>
+                <p className="text-xs text-[#999999] truncate">
+                  {photo.job?.property_address}
+                </p>
+                <p className="text-xs text-[#BBBBBB] mt-1">
+                  {format(new Date(photo.created_at), "MMM d, yyyy")}
+                </p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  color,
+}: {
+  label: string;
+  value: number;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  color: string;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="flex items-center gap-3">
+        <div
+          className={cn(
+            "w-9 h-9 rounded-lg flex items-center justify-center",
+            color
+          )}
+        >
+          <Icon size={18} className="text-white" />
+        </div>
+        <div>
+          <p className="text-xl font-bold text-[#1A1A1A]">{value}</p>
+          <p className="text-xs text-[#999999]">{label}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
