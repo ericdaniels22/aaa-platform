@@ -421,8 +421,19 @@ export default function PhotoAnnotator({
       canvas.off("mouse:up", onDragEnd);
     };
 
+    // Calculate label position offset perpendicular to the arrow, above the shaft
+    function getLabelPos(sh: any, eh: any) {
+      const ang = Math.atan2(eh.top - sh.top, eh.left - sh.left);
+      const perpAng = ang - Math.PI / 2;
+      return {
+        left: sh.left + Math.cos(perpAng) * 30,
+        top: sh.top + Math.sin(perpAng) * 30,
+      };
+    }
+
     // Store cleanup on all parts
     (arrowPath as any)._arrowCleanup = cleanup;
+    (arrowPath as any)._getLabelPos = getLabelPos;
 
     // Rebuild the arrow path from current handle positions
     function rebuildPath(sh: any, eh: any) {
@@ -447,6 +458,7 @@ export default function PhotoAnnotator({
       (newPath as any)._endHandle = eh;
       (newPath as any)._arrowColor = color;
       (newPath as any)._arrowCleanup = cleanup;
+      (newPath as any)._getLabelPos = getLabelPos;
       (newPath as any)._arrowLabel = path._arrowLabel;
       sh._arrowPath = newPath;
       eh._arrowPath = newPath;
@@ -471,26 +483,17 @@ export default function PhotoAnnotator({
         const eh = target._arrowRole === "end" ? target : other;
         rebuildPath(sh, eh);
         const label = sh._arrowPath?._arrowLabel;
-        if (label) label.set({ left: sh.left, top: sh.top + 10 });
+        if (label) {
+          const pos = getLabelPos(sh, eh);
+          label.set(pos);
+        }
         canvas.renderAll();
         return;
       }
 
-      // Label drag — move the whole arrow with it
+      // Label drag — let user freely position it (don't override)
       if (target?._parentArrow) {
         pathDragActive = false;
-        const ap = target._parentArrow;
-        const sh = ap._startHandle;
-        const eh = ap._endHandle;
-        const expectedLeft = sh?.left || 0;
-        const expectedTop = (sh?.top || 0) + 10;
-        const dx = target.left - expectedLeft;
-        const dy = target.top - expectedTop;
-        if (sh) { sh.set({ left: sh.left + dx, top: sh.top + dy }); sh.setCoords(); }
-        if (eh) { eh.set({ left: eh.left + dx, top: eh.top + dy }); eh.setCoords(); }
-        target.set({ left: sh.left, top: sh.top + 10 });
-        rebuildPath(sh, eh);
-        canvas.renderAll();
         return;
       }
 
@@ -514,7 +517,10 @@ export default function PhotoAnnotator({
         if (sh) { sh.set({ left: sh.left + dx, top: sh.top + dy }); sh.setCoords(); }
         if (eh) { eh.set({ left: eh.left + dx, top: eh.top + dy }); eh.setCoords(); }
         const label = target._arrowLabel;
-        if (label) label.set({ left: label.left + dx, top: label.top + dy });
+        if (label) {
+          const pos = getLabelPos(sh, eh);
+          label.set(pos);
+        }
         canvas.renderAll();
         return;
       }
@@ -547,12 +553,15 @@ export default function PhotoAnnotator({
     const fabric = fabricModuleRef.current;
     if (!canvas || !fabric || !handle) return;
 
-    // Place text below the tail (start handle) and attach it to the arrow
+    // Place text perpendicular to the arrow at the tail, offset so it doesn't overlap
     const startH = handle._arrowRole === "start" ? handle : handle._otherHandle;
+    const endH = handle._arrowRole === "end" ? handle : handle._otherHandle;
     const arrowPath = startH._arrowPath;
+    const posFunc = arrowPath?._getLabelPos;
+    const pos = posFunc ? posFunc(startH, endH) : { left: startH.left, top: startH.top - 30 };
     const label = new fabric.IText("Label", {
-      left: startH.left,
-      top: startH.top + 10,
+      left: pos.left,
+      top: pos.top,
       fontSize: 20,
       fill: handle._arrowColor || "#F59E0B",
       fontFamily: "Arial",
@@ -560,8 +569,8 @@ export default function PhotoAnnotator({
       stroke: "#000000",
       strokeWidth: 0.5,
       padding: 4,
-      originX: "center",
-      originY: "top",
+      originX: "left",
+      originY: "bottom",
     });
     // Attach label to the arrow so it moves with the tail
     if (arrowPath) {
