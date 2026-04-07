@@ -362,17 +362,16 @@ export default function PhotoAnnotator({
       return `M ${ax1} ${ay1} L ${ax2} ${ay2} M ${hx1} ${hy1} L ${ax2} ${ay2} L ${hx2} ${hy2}`;
     }
 
-    // Arrow shaft + head as a path (selectable so user can tap to select)
+    // Arrow shaft + head as a path — not selectable (no bounding box), but
+    // evented so mouse:down detects clicks on the stroke line
     const arrowPath = new fabric.Path(buildArrowPath(x1, y1, x2, y2), {
       stroke: color,
       strokeWidth: strokeW,
       strokeLineCap: "round",
       strokeLineJoin: "round",
       fill: "transparent",
-      selectable: true,
+      selectable: false,
       evented: true,
-      hasBorders: false,
-      hasControls: false,
       perPixelTargetFind: true,
       objectCaching: false,
     });
@@ -435,10 +434,8 @@ export default function PhotoAnnotator({
         strokeLineCap: "round",
         strokeLineJoin: "round",
         fill: "transparent",
-        selectable: true,
+        selectable: false,
         evented: true,
-        hasBorders: false,
-        hasControls: false,
         perPixelTargetFind: true,
         objectCaching: false,
       });
@@ -554,8 +551,32 @@ export default function PhotoAnnotator({
       canvas.isDrawingMode = false;
       canvas.selection = true;
       canvas.forEachObject((obj: any) => {
+        // Arrow paths should never be selectable (no bounding box)
+        if (obj._isArrow) return;
         obj.selectable = true;
         obj.evented = true;
+      });
+      // Detect arrow path clicks in select mode too
+      canvas.on("mouse:down", (opt: any) => {
+        const target = opt.target;
+        if (target?._isArrow) {
+          if (target._startHandle) target._startHandle.visible = true;
+          if (target._endHandle) target._endHandle.visible = true;
+          canvas.renderAll();
+          const canvasEl = canvas.getElement();
+          const rect = canvasEl.getBoundingClientRect();
+          const sh = target._startHandle;
+          if (sh) {
+            setArrowToolbar({ x: rect.left + sh.left - 56, y: rect.top + sh.top, handle: sh });
+          }
+        } else if (!target?._arrowRole) {
+          // Clicked something else or empty — hide arrow handles
+          canvas.getObjects().forEach((obj: any) => {
+            if (obj._arrowRole && obj.visible) obj.visible = false;
+          });
+          setArrowToolbar(null);
+          canvas.renderAll();
+        }
       });
     } else if (activeTool === "text") {
       canvas.isDrawingMode = false;
