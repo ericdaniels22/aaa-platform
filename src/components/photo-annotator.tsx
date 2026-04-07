@@ -416,7 +416,10 @@ export default function PhotoAnnotator({
     (endHandle as any)._arrowColor = color;
 
     // Cleanup function defined early so it can be referenced in onHandleMove
-    const cleanup = () => canvas.off("object:moving", onHandleMove);
+    const cleanup = () => {
+      canvas.off("object:moving", onHandleMove);
+      canvas.off("mouse:up", onDragEnd);
+    };
 
     // Store cleanup on all parts
     (arrowPath as any)._arrowCleanup = cleanup;
@@ -451,9 +454,10 @@ export default function PhotoAnnotator({
       return newPath;
     }
 
-    // Track previous position of arrow path for delta calculation during drag
-    let prevPathLeft = arrowPath.left;
-    let prevPathTop = arrowPath.top;
+    // Path drag state — tracks previous position per drag operation
+    let pathDragActive = false;
+    let prevPathLeft = 0;
+    let prevPathTop = 0;
 
     // Update arrow when a handle or the path itself moves
     function onHandleMove(e: any) {
@@ -461,6 +465,7 @@ export default function PhotoAnnotator({
 
       // Handle endpoint drag — stretch the arrow
       if (target?._arrowRole && target._arrowPath) {
+        pathDragActive = false;
         const other = target._otherHandle;
         const sh = target._arrowRole === "start" ? target : other;
         const eh = target._arrowRole === "end" ? target : other;
@@ -473,17 +478,16 @@ export default function PhotoAnnotator({
 
       // Label drag — move the whole arrow with it
       if (target?._parentArrow) {
+        pathDragActive = false;
         const ap = target._parentArrow;
         const sh = ap._startHandle;
         const eh = ap._endHandle;
-        // Calculate delta from label's movement
         const expectedLeft = sh?.left || 0;
         const expectedTop = (sh?.top || 0) + 10;
         const dx = target.left - expectedLeft;
         const dy = target.top - expectedTop;
         if (sh) { sh.set({ left: sh.left + dx, top: sh.top + dy }); sh.setCoords(); }
         if (eh) { eh.set({ left: eh.left + dx, top: eh.top + dy }); eh.setCoords(); }
-        // Reset label to be below the new start handle position
         target.set({ left: sh.left, top: sh.top + 10 });
         rebuildPath(sh, eh);
         canvas.renderAll();
@@ -492,10 +496,19 @@ export default function PhotoAnnotator({
 
       // Arrow path drag — move everything together
       if (target?._isArrow) {
+        // First move of this drag — initialize tracking
+        if (!pathDragActive) {
+          pathDragActive = true;
+          prevPathLeft = target.left;
+          prevPathTop = target.top;
+          // On first event the delta is often 0, so just record and return
+          return;
+        }
         const dx = target.left - prevPathLeft;
         const dy = target.top - prevPathTop;
         prevPathLeft = target.left;
         prevPathTop = target.top;
+        if (dx === 0 && dy === 0) return;
         const sh = target._startHandle;
         const eh = target._endHandle;
         if (sh) { sh.set({ left: sh.left + dx, top: sh.top + dy }); sh.setCoords(); }
@@ -507,7 +520,20 @@ export default function PhotoAnnotator({
       }
     }
 
+    // When drag ends, rebuild path to sync with final handle positions
+    function onDragEnd(e: any) {
+      const target = e.target;
+      if (target?._isArrow && pathDragActive) {
+        pathDragActive = false;
+        const sh = target._startHandle;
+        const eh = target._endHandle;
+        if (sh && eh) rebuildPath(sh, eh);
+        canvas.renderAll();
+      }
+    }
+
     canvas.on("object:moving", onHandleMove);
+    canvas.on("mouse:up", onDragEnd);
 
     // Store cleanup on handles too
     (startHandle as any)._arrowCleanup = cleanup;
