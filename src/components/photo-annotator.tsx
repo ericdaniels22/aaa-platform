@@ -589,7 +589,37 @@ export default function PhotoAnnotator({
       canvas.selection = false;
 
       canvas.on("mouse:down", (opt: any) => {
-        if (opt.target) return;
+        const target = opt.target;
+        // If clicking an arrow path or handle, activate it for editing
+        if (target?._isArrow || target?._arrowRole) {
+          // Let Fabric handle the click on handles for dragging
+          if (target._arrowRole) return;
+          // Clicked the arrow path — show handles
+          const ap = target;
+          if (ap._startHandle) ap._startHandle.visible = true;
+          if (ap._endHandle) ap._endHandle.visible = true;
+          canvas.discardActiveObject();
+          canvas.renderAll();
+          // Show toolbar
+          const canvasEl = canvas.getElement();
+          const rect = canvasEl.getBoundingClientRect();
+          const sh = ap._startHandle;
+          if (sh) {
+            setArrowToolbar({
+              x: rect.left + sh.left - 56,
+              y: rect.top + sh.top,
+              handle: sh,
+            });
+          }
+          return;
+        }
+        if (target) return;
+        // Clicked empty space — hide any visible arrow handles
+        canvas.getObjects().forEach((obj: any) => {
+          if (obj._arrowRole && obj.visible) obj.visible = false;
+        });
+        setArrowToolbar(null);
+        canvas.renderAll();
         const pointer = canvas.getScenePoint(opt.e);
         isDrawingShape.current = true;
         shapeStart.current = { x: pointer.x, y: pointer.y };
