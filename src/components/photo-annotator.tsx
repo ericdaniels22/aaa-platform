@@ -89,6 +89,9 @@ export default function PhotoAnnotator({
   const activeToolRef = useRef<Tool>(activeTool);
   const activeColorRef = useRef(activeColor);
   const cropRectRef = useRef<any>(null);
+  const cropOverlaysRef = useRef<any[]>([]);
+  const cropGridLinesRef = useRef<any[]>([]);
+  const hiddenObjectsRef = useRef<any[]>([]);
   const imgDimensionsRef = useRef<{
     width: number;
     height: number;
@@ -466,6 +469,113 @@ export default function PhotoAnnotator({
     canvas.renderAll();
   }
 
+  function updateCropOverlay(canvas: any) {
+    const cropRect = cropRectRef.current;
+    if (!cropRect) return;
+
+    const cw = canvas.width!;
+    const ch = canvas.height!;
+
+    // Get the bounding box of the crop rect (accounts for scaling)
+    const left = cropRect.left!;
+    const top = cropRect.top!;
+    const w = cropRect.width! * (cropRect.scaleX || 1);
+    const h = cropRect.height! * (cropRect.scaleY || 1);
+
+    const overlays = cropOverlaysRef.current;
+    if (overlays.length === 4) {
+      // Top overlay
+      overlays[0].set({ left: 0, top: 0, width: cw, height: Math.max(0, top) });
+      // Bottom overlay
+      overlays[1].set({ left: 0, top: top + h, width: cw, height: Math.max(0, ch - (top + h)) });
+      // Left overlay
+      overlays[2].set({ left: 0, top: top, width: Math.max(0, left), height: h });
+      // Right overlay
+      overlays[3].set({ left: left + w, top: top, width: Math.max(0, cw - (left + w)), height: h });
+    }
+
+    const gridLines = cropGridLinesRef.current;
+    if (gridLines.length === 4) {
+      const thirdW = w / 3;
+      const thirdH = h / 3;
+      // Vertical lines
+      gridLines[0].set({ x1: left + thirdW, y1: top, x2: left + thirdW, y2: top + h });
+      gridLines[1].set({ x1: left + 2 * thirdW, y1: top, x2: left + 2 * thirdW, y2: top + h });
+      // Horizontal lines
+      gridLines[2].set({ x1: left, y1: top + thirdH, x2: left + w, y2: top + thirdH });
+      gridLines[3].set({ x1: left, y1: top + 2 * thirdH, x2: left + w, y2: top + 2 * thirdH });
+    }
+
+    canvas.renderAll();
+  }
+
+  function cleanupCropObjects(canvas: any) {
+    // Remove overlays
+    cropOverlaysRef.current.forEach((o) => canvas.remove(o));
+    cropOverlaysRef.current = [];
+    // Remove grid lines
+    cropGridLinesRef.current.forEach((l) => canvas.remove(l));
+    cropGridLinesRef.current = [];
+    // Remove crop rect
+    if (cropRectRef.current) {
+      canvas.remove(cropRectRef.current);
+      cropRectRef.current = null;
+    }
+    // Restore hidden annotation objects
+    hiddenObjectsRef.current.forEach((obj) => {
+      obj.visible = true;
+    });
+    hiddenObjectsRef.current = [];
+    // Remove event listeners
+    canvas.off("object:moving", handleCropObjMove);
+    canvas.off("object:scaling", handleCropObjScale);
+  }
+
+  function handleCropObjMove(e: any) {
+    const canvas = fabricRef.current;
+    const cropRect = cropRectRef.current;
+    if (!canvas || !cropRect || e.target !== cropRect) return;
+
+    const cw = canvas.width!;
+    const ch = canvas.height!;
+    const w = cropRect.width! * (cropRect.scaleX || 1);
+    const h = cropRect.height! * (cropRect.scaleY || 1);
+
+    // Clamp position within canvas
+    cropRect.set({
+      left: Math.max(0, Math.min(cropRect.left!, cw - w)),
+      top: Math.max(0, Math.min(cropRect.top!, ch - h)),
+    });
+
+    updateCropOverlay(canvas);
+  }
+
+  function handleCropObjScale(e: any) {
+    const canvas = fabricRef.current;
+    const cropRect = cropRectRef.current;
+    if (!canvas || !cropRect || e.target !== cropRect) return;
+
+    const cw = canvas.width!;
+    const ch = canvas.height!;
+
+    let w = cropRect.width! * (cropRect.scaleX || 1);
+    let h = cropRect.height! * (cropRect.scaleY || 1);
+    let left = cropRect.left!;
+    let top = cropRect.top!;
+
+    // Enforce min size
+    if (w < 50) { cropRect.set({ scaleX: 50 / cropRect.width! }); w = 50; }
+    if (h < 50) { cropRect.set({ scaleY: 50 / cropRect.height! }); h = 50; }
+
+    // Clamp to canvas bounds
+    if (left < 0) cropRect.set({ left: 0 });
+    if (top < 0) cropRect.set({ top: 0 });
+    if (left + w > cw) cropRect.set({ scaleX: (cw - cropRect.left!) / cropRect.width! });
+    if (top + h > ch) cropRect.set({ scaleY: (ch - cropRect.top!) / cropRect.height! });
+
+    updateCropOverlay(canvas);
+  }
+
   function handleStartCrop() {
     const canvas = fabricRef.current;
     const fabric = fabricModuleRef.current;
@@ -474,32 +584,101 @@ export default function PhotoAnnotator({
     setIsCropping(true);
     setActiveTool("crop");
 
-    // Add a crop rectangle overlay
+    // Hide existing annotation objects
+    const existingObjects = canvas.getObjects().slice();
+    existingObjects.forEach((obj: any) => {
+      obj.visible = false;
+    });
+    hiddenObjectsRef.current = existingObjects;
+
     const cw = canvas.width!;
     const ch = canvas.height!;
-    const margin = 40;
+
+    // Create crop rectangle
     const cropRect = new fabric.Rect({
-      left: margin,
-      top: margin,
-      width: cw - margin * 2,
-      height: ch - margin * 2,
+      left: 0,
+      top: 0,
+      width: cw,
+      height: ch,
       fill: "transparent",
       stroke: "#FFFFFF",
       strokeWidth: 2,
-      strokeDashArray: [8, 4],
       cornerColor: "#FFFFFF",
-      cornerSize: 10,
+      cornerStrokeColor: "#FFFFFF",
+      cornerSize: 12,
       transparentCorners: false,
+      cornerStyle: "rect",
       selectable: true,
       evented: true,
       lockRotation: true,
       hasRotatingPoint: false,
     });
-
     cropRectRef.current = cropRect;
+
+    // Create 4 dark overlay rects
+    const overlayProps = {
+      fill: "rgba(0, 0, 0, 0.5)",
+      selectable: false,
+      evented: false,
+      excludeFromExport: true,
+    };
+    const overlays = [
+      new fabric.Rect({ ...overlayProps, left: 0, top: 0, width: cw, height: 0 }), // top
+      new fabric.Rect({ ...overlayProps, left: 0, top: ch, width: cw, height: 0 }), // bottom
+      new fabric.Rect({ ...overlayProps, left: 0, top: 0, width: 0, height: ch }), // left
+      new fabric.Rect({ ...overlayProps, left: cw, top: 0, width: 0, height: ch }), // right
+    ];
+    cropOverlaysRef.current = overlays;
+
+    // Create 4 grid lines (rule of thirds)
+    const gridProps = {
+      stroke: "rgba(255, 255, 255, 0.5)",
+      strokeWidth: 1,
+      selectable: false,
+      evented: false,
+      excludeFromExport: true,
+    };
+    const gridLines = [
+      new fabric.Line([0, 0, 0, 0], gridProps), // vertical 1
+      new fabric.Line([0, 0, 0, 0], gridProps), // vertical 2
+      new fabric.Line([0, 0, 0, 0], gridProps), // horizontal 1
+      new fabric.Line([0, 0, 0, 0], gridProps), // horizontal 2
+    ];
+    cropGridLinesRef.current = gridLines;
+
+    // Add to canvas in order: overlays, grid, crop rect on top
+    overlays.forEach((o) => canvas.add(o));
+    gridLines.forEach((l) => canvas.add(l));
     canvas.add(cropRect);
     canvas.setActiveObject(cropRect);
-    canvas.renderAll();
+
+    // Position overlays and grid
+    updateCropOverlay(canvas);
+
+    // Listen for crop rect movement/scaling
+    canvas.on("object:moving", handleCropObjMove);
+    canvas.on("object:scaling", handleCropObjScale);
+  }
+
+  function handleResetCrop() {
+    const canvas = fabricRef.current;
+    const cropRect = cropRectRef.current;
+    if (!canvas || !cropRect) return;
+
+    const cw = canvas.width!;
+    const ch = canvas.height!;
+
+    cropRect.set({
+      left: 0,
+      top: 0,
+      width: cw,
+      height: ch,
+      scaleX: 1,
+      scaleY: 1,
+    });
+    cropRect.setCoords();
+    canvas.setActiveObject(cropRect);
+    updateCropOverlay(canvas);
   }
 
   async function handleApplyCrop() {
@@ -509,17 +688,14 @@ export default function PhotoAnnotator({
     const bgImg = bgImageRef.current;
     if (!canvas || !fabric || !cropRect || !bgImg) return;
 
-    const { scale } = imgDimensionsRef.current;
-
     // Get crop rectangle bounds
     const left = cropRect.left!;
     const top = cropRect.top!;
     const cWidth = cropRect.width! * (cropRect.scaleX || 1);
     const cHeight = cropRect.height! * (cropRect.scaleY || 1);
 
-    // Remove crop rect from canvas
-    canvas.remove(cropRect);
-    cropRectRef.current = null;
+    // Remove all crop UI objects
+    cleanupCropObjects(canvas);
 
     // Create a temporary canvas to crop
     const tempCanvas = document.createElement("canvas");
@@ -576,10 +752,9 @@ export default function PhotoAnnotator({
 
   function handleCancelCrop() {
     const canvas = fabricRef.current;
-    const cropRect = cropRectRef.current;
-    if (canvas && cropRect) {
-      canvas.remove(cropRect);
-      cropRectRef.current = null;
+    if (canvas) {
+      cleanupCropObjects(canvas);
+      canvas.renderAll();
     }
     setIsCropping(false);
     setActiveTool("arrow");
@@ -852,26 +1027,35 @@ export default function PhotoAnnotator({
           </div>
         )}
 
-        {/* Crop action bar */}
+        {/* Crop floating panel */}
         {isCropping && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 bg-[#222] border border-[#444] rounded-xl px-4 py-2 flex items-center gap-3 shadow-xl">
-            <span className="text-sm text-[#ccc]">
-              Drag the handles to crop
-            </span>
-            <button
-              onClick={handleApplyCrop}
-              className="px-3 py-1.5 bg-[#0F6E56] hover:bg-[#0a5a46] text-white text-sm rounded-lg flex items-center gap-1"
-            >
-              <Check size={14} />
-              Apply
-            </button>
-            <button
-              onClick={handleCancelCrop}
-              className="px-3 py-1.5 bg-[#555] hover:bg-[#666] text-white text-sm rounded-lg flex items-center gap-1"
-            >
-              <X size={14} />
-              Cancel
-            </button>
+          <div className="absolute top-4 left-20 z-10 bg-white rounded-xl shadow-2xl w-[170px] overflow-hidden">
+            <div className="px-4 pt-3 pb-2">
+              <h3 className="text-sm font-semibold text-[#1a1a1a]">Crop Image</h3>
+            </div>
+            <div className="h-px bg-[#e5e5e5]" />
+            <div className="p-3 flex flex-col gap-2">
+              <button
+                onClick={handleResetCrop}
+                className="w-full px-3 py-2 bg-[#f0f0f0] hover:bg-[#e5e5e5] text-[#333] text-sm font-medium rounded-lg transition-colors"
+              >
+                Reset Crop
+              </button>
+              <button
+                onClick={handleApplyCrop}
+                className="w-full px-3 py-2 bg-[#0F6E56] hover:bg-[#0a5a46] text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Check size={14} />
+                Apply
+              </button>
+              <button
+                onClick={handleCancelCrop}
+                className="w-full px-3 py-2 bg-[#f0f0f0] hover:bg-[#e5e5e5] text-[#555] text-sm font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <X size={14} />
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
