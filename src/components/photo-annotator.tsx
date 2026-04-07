@@ -670,7 +670,9 @@ export default function PhotoAnnotator({
             setArrowToolbar({ x: rect.left + midX - 56, y: rect.top + midY, handle: sh });
           }
         } else if (target?._parentArrow) {
-          // Clicked an arrow label — let Fabric.js handle selection/editing naturally
+          // Clicked an arrow label — select it for editing
+          canvas.setActiveObject(target);
+          return;
         } else if (!target?._arrowRole) {
           // Clicked something else or empty — hide arrow handles
           canvas.getObjects().forEach((obj: any) => {
