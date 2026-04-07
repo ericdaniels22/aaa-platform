@@ -459,7 +459,9 @@ export default function PhotoAnnotator({
       (newPath as any)._arrowColor = color;
       (newPath as any)._arrowCleanup = cleanup;
       (newPath as any)._getLabelPos = getLabelPos;
-      (newPath as any)._arrowLabel = path._arrowLabel;
+      const existingLabel = path._arrowLabel;
+      (newPath as any)._arrowLabel = existingLabel;
+      if (existingLabel) existingLabel._parentArrow = newPath;
       sh._arrowPath = newPath;
       eh._arrowPath = newPath;
       canvas.insertAt(canvas.getObjects().indexOf(sh), newPath);
@@ -471,16 +473,24 @@ export default function PhotoAnnotator({
     let prevPathLeft = 0;
     let prevPathTop = 0;
 
+    // Get the current path for this arrow (may change via rebuildPath)
+    function isMyObject(target: any): boolean {
+      if (target === startHandle || target === endHandle) return true;
+      // Check if target is the current path for this arrow
+      if (target === startHandle._arrowPath) return true;
+      return false;
+    }
+
     // Update arrow when a handle or the path itself moves
     function onHandleMove(e: any) {
       const target = e.target;
+      if (!target || !isMyObject(target)) return;
 
       // Handle endpoint drag — stretch the arrow
-      if (target?._arrowRole && target._arrowPath) {
+      if (target === startHandle || target === endHandle) {
         pathDragActive = false;
-        const other = target._otherHandle;
-        const sh = target._arrowRole === "start" ? target : other;
-        const eh = target._arrowRole === "end" ? target : other;
+        const sh = startHandle;
+        const eh = endHandle;
         rebuildPath(sh, eh);
         const label = sh._arrowPath?._arrowLabel;
         if (label) {
@@ -491,20 +501,13 @@ export default function PhotoAnnotator({
         return;
       }
 
-      // Label drag — let user freely position it (don't override)
-      if (target?._parentArrow) {
-        pathDragActive = false;
-        return;
-      }
-
       // Arrow path drag — move everything together
-      if (target?._isArrow) {
+      if (target._isArrow) {
         // First move of this drag — initialize tracking
         if (!pathDragActive) {
           pathDragActive = true;
           prevPathLeft = target.left;
           prevPathTop = target.top;
-          // On first event the delta is often 0, so just record and return
           return;
         }
         const dx = target.left - prevPathLeft;
@@ -512,13 +515,13 @@ export default function PhotoAnnotator({
         prevPathLeft = target.left;
         prevPathTop = target.top;
         if (dx === 0 && dy === 0) return;
-        const sh = target._startHandle;
-        const eh = target._endHandle;
-        if (sh) { sh.set({ left: sh.left + dx, top: sh.top + dy }); sh.setCoords(); }
-        if (eh) { eh.set({ left: eh.left + dx, top: eh.top + dy }); eh.setCoords(); }
+        startHandle.set({ left: startHandle.left + dx, top: startHandle.top + dy });
+        startHandle.setCoords();
+        endHandle.set({ left: endHandle.left + dx, top: endHandle.top + dy });
+        endHandle.setCoords();
         const label = target._arrowLabel;
         if (label) {
-          const pos = getLabelPos(sh, eh);
+          const pos = getLabelPos(startHandle, endHandle);
           label.set(pos);
         }
         canvas.renderAll();
@@ -529,11 +532,10 @@ export default function PhotoAnnotator({
     // When drag ends, rebuild path to sync with final handle positions
     function onDragEnd(e: any) {
       const target = e.target;
-      if (target?._isArrow && pathDragActive) {
+      if (!target || !isMyObject(target)) return;
+      if (target._isArrow && pathDragActive) {
         pathDragActive = false;
-        const sh = target._startHandle;
-        const eh = target._endHandle;
-        if (sh && eh) rebuildPath(sh, eh);
+        rebuildPath(startHandle, endHandle);
         canvas.renderAll();
       }
     }
