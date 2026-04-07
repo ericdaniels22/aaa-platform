@@ -567,6 +567,9 @@ export default function PhotoAnnotator({
       padding: 4,
       originX: "center",
       originY: above ? "bottom" : "top",
+      selectable: true,
+      evented: true,
+      editable: true,
     });
     // Attach label to the arrow so it moves with the tail
     if (arrowPath) {
@@ -666,6 +669,8 @@ export default function PhotoAnnotator({
             const midY = Math.min(sh.top, eh.top);
             setArrowToolbar({ x: rect.left + midX - 56, y: rect.top + midY, handle: sh });
           }
+        } else if (target?._parentArrow) {
+          // Clicked an arrow label — let Fabric.js handle selection/editing naturally
         } else if (!target?._arrowRole) {
           // Clicked something else or empty — hide arrow handles
           canvas.getObjects().forEach((obj: any) => {
@@ -725,6 +730,11 @@ export default function PhotoAnnotator({
             const midY = Math.min(sh.top, eh.top);
             setArrowToolbar({ x: rect.left + midX - 56, y: rect.top + midY, handle: sh });
           }
+          return;
+        }
+        // Let IText labels (including arrow labels) be clicked/edited naturally
+        if (target instanceof fabric.IText) {
+          canvas.setActiveObject(target);
           return;
         }
         if (target) return;
