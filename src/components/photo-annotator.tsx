@@ -518,6 +518,9 @@ export default function PhotoAnnotator({
           evented: false,
         });
         canvas.add(previewPath);
+        // Keep label on top so it stays clickable
+        const lbl = startHandle._arrowPath?._arrowLabel;
+        if (lbl) canvas.moveObjectTo(lbl, canvas.getObjects().length - 1);
 
         // Move label to follow the start handle
         const currentPath = startHandle._arrowPath;
@@ -564,7 +567,10 @@ export default function PhotoAnnotator({
         if (previewPath) { canvas.remove(previewPath); previewPath = null; }
         const newPath = rebuildPath(startHandle, endHandle);
         const label = newPath?._arrowLabel;
-        if (label) label.set(getLabelPos());
+        if (label) {
+          label.set(getLabelPos());
+          canvas.moveObjectTo(label, canvas.getObjects().length - 1);
+        }
         canvas.renderAll();
         return;
       }
@@ -574,7 +580,10 @@ export default function PhotoAnnotator({
         pathDragActive = false;
         const newPath = rebuildPath(startHandle, endHandle);
         const label = newPath?._arrowLabel;
-        if (label) label.set(getLabelPos());
+        if (label) {
+          label.set(getLabelPos());
+          canvas.moveObjectTo(label, canvas.getObjects().length - 1);
+        }
         canvas.renderAll();
       }
     }
