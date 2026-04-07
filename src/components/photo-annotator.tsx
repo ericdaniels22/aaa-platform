@@ -126,8 +126,8 @@ export default function PhotoAnnotator({
     }
 
     function showHandlesFor(ap: any) {
-      if (ap._startHandle) ap._startHandle.visible = true;
-      if (ap._endHandle) ap._endHandle.visible = true;
+      if (ap._startHandle) { ap._startHandle.visible = true; ap._startHandle.setCoords(); }
+      if (ap._endHandle) { ap._endHandle.visible = true; ap._endHandle.setCoords(); }
     }
 
     function hideHandlesFor(ap: any) {
@@ -575,8 +575,8 @@ export default function PhotoAnnotator({
       canvas.on("mouse:down", (opt: any) => {
         const target = opt.target;
         if (target?._isArrow) {
-          if (target._startHandle) target._startHandle.visible = true;
-          if (target._endHandle) target._endHandle.visible = true;
+          if (target._startHandle) { target._startHandle.visible = true; target._startHandle.setCoords(); }
+          if (target._endHandle) { target._endHandle.visible = true; target._endHandle.setCoords(); }
           canvas.renderAll();
           const canvasEl = canvas.getElement();
           const rect = canvasEl.getBoundingClientRect();
@@ -634,8 +634,8 @@ export default function PhotoAnnotator({
           if (target._arrowRole) return;
           // Clicked the arrow path — show handles and toolbar
           const ap = target;
-          if (ap._startHandle) ap._startHandle.visible = true;
-          if (ap._endHandle) ap._endHandle.visible = true;
+          if (ap._startHandle) { ap._startHandle.visible = true; ap._startHandle.setCoords(); }
+          if (ap._endHandle) { ap._endHandle.visible = true; ap._endHandle.setCoords(); }
           canvas.discardActiveObject();
           canvas.renderAll();
           const canvasEl = canvas.getElement();
