@@ -442,8 +442,7 @@ export default function PhotoAnnotator({
       (newPath as any)._arrowLabel = path._arrowLabel;
       sh._arrowPath = newPath;
       eh._arrowPath = newPath;
-      canvas.add(newPath);
-      canvas.moveTo(newPath, canvas.getObjects().indexOf(sh) - 1);
+      canvas.insertAt(canvas.getObjects().indexOf(sh), newPath);
       return newPath;
     }
 
