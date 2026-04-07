@@ -204,6 +204,9 @@ export default function PhotoAnnotator({
       setSaturation(0);
       setShowAdjustments(false);
       setIsCropping(false);
+      cropRectRef.current = null;
+      cropRenderCallbackRef.current = null;
+      hiddenObjectsRef.current = [];
       const timer = setTimeout(() => initCanvas(), 200);
       return () => clearTimeout(timer);
     }
@@ -470,7 +473,7 @@ export default function PhotoAnnotator({
 
   function drawCropOverlay(canvas: any) {
     const cropRect = cropRectRef.current;
-    if (!cropRect) return;
+    if (!cropRect || !canvas.getObjects().includes(cropRect)) return;
 
     const ctx = canvas.getContext("2d");
     const cw = canvas.width!;
@@ -668,38 +671,32 @@ export default function PhotoAnnotator({
     const bgImg = bgImageRef.current;
     if (!canvas || !fabric || !cropRect || !bgImg || !photo) return;
 
-    // Get crop rectangle bounds
+    // Get crop rectangle bounds (in canvas/screen coordinates)
     const left = cropRect.left!;
     const top = cropRect.top!;
     const cWidth = cropRect.width! * (cropRect.scaleX || 1);
     const cHeight = cropRect.height! * (cropRect.scaleY || 1);
 
-    // Remove all crop UI objects
+    // Remove all crop UI objects before rendering
     cleanupCropObjects(canvas);
 
-    // Create a temporary canvas to crop from the background image only
+    // Render the full canvas at original resolution (bakes in filters + rotation)
     const { scale } = imgDimensionsRef.current;
-    const srcLeft = left / scale;
-    const srcTop = top / scale;
-    const srcWidth = cWidth / scale;
-    const srcHeight = cHeight / scale;
+    const multiplier = 1 / scale;
+    const fullResCanvas = canvas.toCanvasElement(multiplier);
 
+    // Calculate crop region in full-res coordinates
+    const srcLeft = Math.round(left * multiplier);
+    const srcTop = Math.round(top * multiplier);
+    const srcWidth = Math.round(cWidth * multiplier);
+    const srcHeight = Math.round(cHeight * multiplier);
+
+    // Extract the cropped region
     const tempCanvas = document.createElement("canvas");
     tempCanvas.width = srcWidth;
     tempCanvas.height = srcHeight;
     const ctx = tempCanvas.getContext("2d")!;
-
-    // Draw the cropped region from the original image element at full resolution
-    const imgEl = bgImg.getElement() as HTMLImageElement;
-    const angle = bgImg.angle || 0;
-
-    if (angle % 360 === 0) {
-      ctx.drawImage(imgEl, srcLeft, srcTop, srcWidth, srcHeight, 0, 0, srcWidth, srcHeight);
-    } else {
-      // For rotated images, draw from the canvas render instead
-      const canvasEl = canvas.toCanvasElement();
-      ctx.drawImage(canvasEl, left, top, cWidth, cHeight, 0, 0, srcWidth, srcHeight);
-    }
+    ctx.drawImage(fullResCanvas, srcLeft, srcTop, srcWidth, srcHeight, 0, 0, srcWidth, srcHeight);
 
     // Upload cropped image to Supabase Storage, replacing the original
     const supabase = createClient();
@@ -737,6 +734,7 @@ export default function PhotoAnnotator({
       height: srcHeight,
       scaleX: newScale,
       scaleY: newScale,
+      angle: 0,
       selectable: false,
       evented: false,
       originX: "left",
@@ -751,6 +749,11 @@ export default function PhotoAnnotator({
     canvas.renderAll();
 
     imgDimensionsRef.current = { width: srcWidth, height: srcHeight, scale: newScale };
+
+    // Reset adjustments since they're now baked into the cropped image
+    setBrightness(0);
+    setContrast(0);
+    setSaturation(0);
 
     setIsCropping(false);
     setActiveTool("arrow");
