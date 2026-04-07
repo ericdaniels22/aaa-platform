@@ -666,7 +666,7 @@ export default function PhotoAnnotator({
     const fabric = fabricModuleRef.current;
     const cropRect = cropRectRef.current;
     const bgImg = bgImageRef.current;
-    if (!canvas || !fabric || !cropRect || !bgImg) return;
+    if (!canvas || !fabric || !cropRect || !bgImg || !photo) return;
 
     // Get crop rectangle bounds
     const left = cropRect.left!;
@@ -677,39 +677,66 @@ export default function PhotoAnnotator({
     // Remove all crop UI objects
     cleanupCropObjects(canvas);
 
-    // Create a temporary canvas to crop
+    // Create a temporary canvas to crop from the background image only
+    const { scale } = imgDimensionsRef.current;
+    const srcLeft = left / scale;
+    const srcTop = top / scale;
+    const srcWidth = cWidth / scale;
+    const srcHeight = cHeight / scale;
+
     const tempCanvas = document.createElement("canvas");
-    tempCanvas.width = cWidth;
-    tempCanvas.height = cHeight;
+    tempCanvas.width = srcWidth;
+    tempCanvas.height = srcHeight;
     const ctx = tempCanvas.getContext("2d")!;
 
-    // Draw the current canvas content cropped
-    ctx.drawImage(
-      canvas.toCanvasElement(),
-      left,
-      top,
-      cWidth,
-      cHeight,
-      0,
-      0,
-      cWidth,
-      cHeight
-    );
+    // Draw the cropped region from the original image element at full resolution
+    const imgEl = bgImg.getElement() as HTMLImageElement;
+    const angle = bgImg.angle || 0;
 
-    // Load the cropped image as new background
+    if (angle % 360 === 0) {
+      ctx.drawImage(imgEl, srcLeft, srcTop, srcWidth, srcHeight, 0, 0, srcWidth, srcHeight);
+    } else {
+      // For rotated images, draw from the canvas render instead
+      const canvasEl = canvas.toCanvasElement();
+      ctx.drawImage(canvasEl, left, top, cWidth, cHeight, 0, 0, srcWidth, srcHeight);
+    }
+
+    // Upload cropped image to Supabase Storage, replacing the original
+    const supabase = createClient();
+    try {
+      const blob = await new Promise<Blob>((resolve) => {
+        tempCanvas.toBlob((b) => resolve(b!), "image/jpeg", 0.92);
+      });
+      await supabase.storage.from("photos").upload(photo.storage_path, blob, {
+        upsert: true,
+        contentType: "image/jpeg",
+      });
+    } catch (err) {
+      console.error("Failed to upload cropped image:", err);
+    }
+
+    // Load the cropped image as new background in the editor
+    const croppedDataUrl = tempCanvas.toDataURL("image/jpeg", 0.92);
     const croppedImg = await new Promise<HTMLImageElement>((resolve) => {
       const el = document.createElement("img");
       el.onload = () => resolve(el);
-      el.src = tempCanvas.toDataURL("image/png");
+      el.src = croppedDataUrl;
     });
+
+    // Recalculate scale for the new dimensions
+    const maxWidth = window.innerWidth - 72;
+    const maxHeight = window.innerHeight;
+    const newScale = Math.min(maxWidth / srcWidth, maxHeight / srcHeight, 1);
+    const newCanvasWidth = Math.round(srcWidth * newScale);
+    const newCanvasHeight = Math.round(srcHeight * newScale);
 
     const newFabricImg = new fabric.FabricImage(croppedImg, {
       left: 0,
       top: 0,
-      width: cWidth,
-      height: cHeight,
-      scaleX: 1,
-      scaleY: 1,
+      width: srcWidth,
+      height: srcHeight,
+      scaleX: newScale,
+      scaleY: newScale,
       selectable: false,
       evented: false,
       originX: "left",
@@ -718,16 +745,16 @@ export default function PhotoAnnotator({
 
     // Clear all objects and set new background
     canvas.getObjects().forEach((obj: any) => canvas.remove(obj));
-    canvas.setDimensions({ width: cWidth, height: cHeight });
+    canvas.setDimensions({ width: newCanvasWidth, height: newCanvasHeight });
     bgImageRef.current = newFabricImg;
     canvas.backgroundImage = newFabricImg;
     canvas.renderAll();
 
-    imgDimensionsRef.current = { width: cWidth, height: cHeight, scale: 1 };
+    imgDimensionsRef.current = { width: srcWidth, height: srcHeight, scale: newScale };
 
     setIsCropping(false);
     setActiveTool("arrow");
-    toast.success("Image cropped.");
+    toast.success("Image cropped and saved.");
   }
 
   function handleCancelCrop() {
