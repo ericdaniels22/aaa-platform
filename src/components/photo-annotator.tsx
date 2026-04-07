@@ -422,8 +422,13 @@ export default function PhotoAnnotator({
     };
 
     // Label position: centered below the start handle
-    function getLabelPos(sh: any) {
-      return { left: sh.left, top: sh.top + 20 };
+    function getLabelPos() {
+      const above = endHandle.top > startHandle.top;
+      return {
+        left: startHandle.left,
+        top: above ? startHandle.top - 20 : startHandle.top + 20,
+        originY: above ? "bottom" : "top",
+      };
     }
 
     // Store cleanup on all parts
@@ -487,7 +492,7 @@ export default function PhotoAnnotator({
         const eh = endHandle;
         rebuildPath(sh, eh);
         const label = sh._arrowPath?._arrowLabel;
-        if (label) label.set(getLabelPos(startHandle));
+        if (label) label.set(getLabelPos());
         canvas.renderAll();
         return;
       }
@@ -524,6 +529,8 @@ export default function PhotoAnnotator({
       if (target._isArrow && pathDragActive) {
         pathDragActive = false;
         rebuildPath(startHandle, endHandle);
+        const label = startHandle._arrowPath?._arrowLabel;
+        if (label) label.set(getLabelPos());
         canvas.renderAll();
       }
     }
@@ -543,12 +550,14 @@ export default function PhotoAnnotator({
     const fabric = fabricModuleRef.current;
     if (!canvas || !fabric || !handle) return;
 
-    // Place text centered below the tail (start handle)
+    // Place text centered above or below the tail depending on arrow direction
     const startH = handle._arrowRole === "start" ? handle : handle._otherHandle;
+    const endH = handle._arrowRole === "end" ? handle : handle._otherHandle;
     const arrowPath = startH._arrowPath;
+    const above = endH.top > startH.top;
     const label = new fabric.IText("Label", {
       left: startH.left,
-      top: startH.top + 20,
+      top: above ? startH.top - 20 : startH.top + 20,
       fontSize: 20,
       fill: handle._arrowColor || "#F59E0B",
       fontFamily: "Arial",
@@ -557,7 +566,7 @@ export default function PhotoAnnotator({
       strokeWidth: 0.5,
       padding: 4,
       originX: "center",
-      originY: "top",
+      originY: above ? "bottom" : "top",
     });
     // Attach label to the arrow so it moves with the tail
     if (arrowPath) {
