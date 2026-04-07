@@ -473,8 +473,6 @@ export default function PhotoAnnotator({
         const objs = canvas.getObjects();
         canvas.moveObjectTo(existingLabel, objs.length - 1);
       }
-      // Maintain selection through rebuild to prevent selection:cleared race
-      canvas.setActiveObject(newPath);
       return newPath;
     }
 
@@ -491,18 +489,23 @@ export default function PhotoAnnotator({
       return false;
     }
 
+    // Track whether a handle is being dragged
+    let handleDragActive = false;
+
     // Update arrow when a handle or the path itself moves
     function onHandleMove(e: any) {
       const target = e.target;
       if (!target || !isMyObject(target)) return;
 
-      // Handle endpoint drag — stretch the arrow
+      // Handle endpoint drag — hide path during drag, rebuild on release
       if (target === startHandle || target === endHandle) {
         pathDragActive = false;
-        const sh = startHandle;
-        const eh = endHandle;
-        rebuildPath(sh, eh);
-        const label = sh._arrowPath?._arrowLabel;
+        handleDragActive = true;
+        // Hide the path during drag (will be rebuilt on mouse:up)
+        const currentPath = startHandle._arrowPath;
+        if (currentPath) currentPath.visible = false;
+        // Move label to follow the start handle
+        const label = currentPath?._arrowLabel;
         if (label) label.set(getLabelPos());
         canvas.renderAll();
         return;
@@ -510,6 +513,7 @@ export default function PhotoAnnotator({
 
       // Arrow path drag — move everything together
       if (target._isArrow) {
+        handleDragActive = false;
         // First move of this drag — initialize tracking
         if (!pathDragActive) {
           pathDragActive = true;
@@ -537,10 +541,22 @@ export default function PhotoAnnotator({
     function onDragEnd(e: any) {
       const target = e.target;
       if (!target || !isMyObject(target)) return;
+
+      // Handle drag ended — rebuild path from final handle positions
+      if (handleDragActive && (target === startHandle || target === endHandle)) {
+        handleDragActive = false;
+        const newPath = rebuildPath(startHandle, endHandle);
+        const label = newPath?._arrowLabel;
+        if (label) label.set(getLabelPos());
+        canvas.renderAll();
+        return;
+      }
+
+      // Shaft drag ended — rebuild path to eliminate drift
       if (target._isArrow && pathDragActive) {
         pathDragActive = false;
-        rebuildPath(startHandle, endHandle);
-        const label = startHandle._arrowPath?._arrowLabel;
+        const newPath = rebuildPath(startHandle, endHandle);
+        const label = newPath?._arrowLabel;
         if (label) label.set(getLabelPos());
         canvas.renderAll();
       }
