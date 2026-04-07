@@ -25,6 +25,7 @@ import {
   ChevronUp,
   SlidersHorizontal,
   ImageOff,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -85,6 +86,11 @@ export default function PhotoAnnotator({
   const [saturation, setSaturation] = useState(0);
   const [isCropping, setIsCropping] = useState(false);
   const [hasOriginalBackup, setHasOriginalBackup] = useState(false);
+  const [arrowToolbar, setArrowToolbar] = useState<{
+    x: number;
+    y: number;
+    handle: any;
+  } | null>(null);
   const isDrawingShape = useRef(false);
   const shapeStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const currentShape = useRef<any>(null);
@@ -105,6 +111,45 @@ export default function PhotoAnnotator({
   useEffect(() => {
     activeColorRef.current = activeColor;
   }, [activeColor]);
+
+  // Show/hide arrow toolbar on selection
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas || !canvasReady) return;
+
+    function onSelected(e: any) {
+      const target = e.target;
+      if (target?._arrowRole) {
+        // Get canvas element position to convert to screen coords
+        const canvasEl = canvas.getElement();
+        const rect = canvasEl.getBoundingClientRect();
+        const startH = target._arrowRole === "start" ? target : target._otherHandle;
+        const { scale } = imgDimensionsRef.current;
+        setArrowToolbar({
+          x: rect.left + startH.left - 56, // offset for sidebar
+          y: rect.top + startH.top,
+          handle: target,
+        });
+      } else {
+        setArrowToolbar(null);
+      }
+    }
+
+    function onDeselected() {
+      setArrowToolbar(null);
+    }
+
+    canvas.on("selection:created", onSelected);
+    canvas.on("selection:updated", onSelected);
+    canvas.on("selection:cleared", onDeselected);
+    canvas.on("object:moving", () => setArrowToolbar(null));
+
+    return () => {
+      canvas.off("selection:created", onSelected);
+      canvas.off("selection:updated", onSelected);
+      canvas.off("selection:cleared", onDeselected);
+    };
+  }, [canvasReady]);
 
   const initCanvas = useCallback(async () => {
     if (!canvasRef.current || !photo) return;
@@ -289,8 +334,10 @@ export default function PhotoAnnotator({
     (endHandle as any)._arrowRole = "end";
     (startHandle as any)._arrowPath = arrowPath;
     (startHandle as any)._otherHandle = endHandle;
+    (startHandle as any)._arrowColor = color;
     (endHandle as any)._arrowPath = arrowPath;
     (endHandle as any)._otherHandle = startHandle;
+    (endHandle as any)._arrowColor = color;
 
     // Update arrow path when a handle moves
     function onHandleMove(e: any) {
@@ -331,6 +378,75 @@ export default function PhotoAnnotator({
     (endHandle as any)._arrowCleanup = startHandle._arrowCleanup;
 
     return { arrowPath, startHandle, endHandle };
+  }
+
+  function handleArrowAddText(handle: any) {
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!canvas || !fabric || !handle) return;
+
+    // Place text at the tail (start handle) of the arrow
+    const startH = handle._arrowRole === "start" ? handle : handle._otherHandle;
+    const label = new fabric.IText("Label", {
+      left: startH.left,
+      top: startH.top - 30,
+      fontSize: 20,
+      fill: handle._arrowColor || "#F59E0B",
+      fontFamily: "Arial",
+      fontWeight: "bold",
+      stroke: "#000000",
+      strokeWidth: 0.5,
+      padding: 4,
+      originX: "center",
+      originY: "bottom",
+    });
+    canvas.add(label);
+    canvas.setActiveObject(label);
+    label.enterEditing();
+    label.selectAll();
+    canvas.renderAll();
+    setArrowToolbar(null);
+  }
+
+  function handleArrowCopy(handle: any) {
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!canvas || !fabric || !handle) return;
+
+    const startH = handle._arrowRole === "start" ? handle : handle._otherHandle;
+    const endH = handle._arrowRole === "end" ? handle : handle._otherHandle;
+    const color = handle._arrowColor || "#F59E0B";
+
+    // Create a duplicate arrow offset by 30px
+    const { arrowPath, startHandle, endHandle } = createArrow(
+      fabric, canvas,
+      startH.left + 30, startH.top + 30,
+      endH.left + 30, endH.top + 30,
+      color
+    );
+    canvas.add(arrowPath);
+    canvas.add(startHandle);
+    canvas.add(endHandle);
+    canvas.renderAll();
+    setArrowToolbar(null);
+  }
+
+  function handleArrowDelete(handle: any) {
+    const canvas = fabricRef.current;
+    if (!canvas || !handle) return;
+
+    const other = handle._otherHandle;
+    const path = handle._arrowPath;
+
+    // Cleanup listener
+    if (handle._arrowCleanup) handle._arrowCleanup();
+
+    // Remove all three objects
+    if (path) canvas.remove(path);
+    if (other) canvas.remove(other);
+    canvas.remove(handle);
+    canvas.renderAll();
+    setArrowToolbar(null);
   }
 
   // Tool behavior
@@ -1206,6 +1322,39 @@ export default function PhotoAnnotator({
                 </>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Arrow action toolbar */}
+        {arrowToolbar && (
+          <div
+            className="absolute z-20 flex items-center gap-0.5 bg-[#333] rounded-lg shadow-xl p-1"
+            style={{
+              left: arrowToolbar.x,
+              top: arrowToolbar.y - 48,
+            }}
+          >
+            <button
+              onClick={() => handleArrowAddText(arrowToolbar.handle)}
+              title="Add Text"
+              className="w-9 h-9 rounded-md flex items-center justify-center text-white hover:bg-[#555] transition-colors"
+            >
+              <Type size={18} />
+            </button>
+            <button
+              onClick={() => handleArrowCopy(arrowToolbar.handle)}
+              title="Duplicate"
+              className="w-9 h-9 rounded-md flex items-center justify-center text-white hover:bg-[#555] transition-colors"
+            >
+              <Copy size={18} />
+            </button>
+            <button
+              onClick={() => handleArrowDelete(arrowToolbar.handle)}
+              title="Delete"
+              className="w-9 h-9 rounded-md flex items-center justify-center text-white hover:bg-[#C41E2A] transition-colors"
+            >
+              <Trash2 size={18} />
+            </button>
           </div>
         )}
 
