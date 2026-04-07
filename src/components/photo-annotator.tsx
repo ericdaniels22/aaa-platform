@@ -366,17 +366,19 @@ export default function PhotoAnnotator({
       return `M ${ax1} ${ay1} L ${ax2} ${ay2} M ${hx1} ${hy1} L ${ax2} ${ay2} L ${hx2} ${hy2}`;
     }
 
-    // Arrow shaft + head as a path — not selectable (no bounding box), but
-    // evented so mouse:down detects clicks on the stroke line
+    // Arrow shaft + head as a path — selectable for dragging but no bounding box
     const arrowPath = new fabric.Path(buildArrowPath(x1, y1, x2, y2), {
       stroke: color,
       strokeWidth: strokeW,
       strokeLineCap: "round",
       strokeLineJoin: "round",
       fill: "transparent",
-      selectable: false,
+      selectable: true,
       evented: true,
+      hasBorders: false,
+      hasControls: false,
       perPixelTargetFind: true,
+      lockRotation: true,
       objectCaching: false,
     });
 
@@ -429,9 +431,12 @@ export default function PhotoAnnotator({
         strokeLineCap: "round",
         strokeLineJoin: "round",
         fill: "transparent",
-        selectable: false,
+        selectable: true,
         evented: true,
+        hasBorders: false,
+        hasControls: false,
         perPixelTargetFind: true,
+        lockRotation: true,
         objectCaching: false,
       });
       (newPath as any)._isArrow = true;
@@ -446,22 +451,60 @@ export default function PhotoAnnotator({
       return newPath;
     }
 
-    // Update arrow path + attached label when a handle moves
+    // Track previous position of arrow path for delta calculation during drag
+    let prevPathLeft = arrowPath.left;
+    let prevPathTop = arrowPath.top;
+
+    // Update arrow when a handle or the path itself moves
     function onHandleMove(e: any) {
-      const handle = e.target;
-      if (!handle?._arrowPath) return;
-      const other = handle._otherHandle;
-      const sh = handle._arrowRole === "start" ? handle : other;
-      const eh = handle._arrowRole === "end" ? handle : other;
+      const target = e.target;
 
-      rebuildPath(sh, eh);
-
-      // Move attached label with the start handle
-      const label = sh._arrowPath?._arrowLabel;
-      if (label) {
-        label.set({ left: sh.left, top: sh.top + 10 });
+      // Handle endpoint drag — stretch the arrow
+      if (target?._arrowRole && target._arrowPath) {
+        const other = target._otherHandle;
+        const sh = target._arrowRole === "start" ? target : other;
+        const eh = target._arrowRole === "end" ? target : other;
+        rebuildPath(sh, eh);
+        const label = sh._arrowPath?._arrowLabel;
+        if (label) label.set({ left: sh.left, top: sh.top + 10 });
+        canvas.renderAll();
+        return;
       }
-      canvas.renderAll();
+
+      // Label drag — move the whole arrow with it
+      if (target?._parentArrow) {
+        const ap = target._parentArrow;
+        const sh = ap._startHandle;
+        const eh = ap._endHandle;
+        // Calculate delta from label's movement
+        const expectedLeft = sh?.left || 0;
+        const expectedTop = (sh?.top || 0) + 10;
+        const dx = target.left - expectedLeft;
+        const dy = target.top - expectedTop;
+        if (sh) { sh.set({ left: sh.left + dx, top: sh.top + dy }); sh.setCoords(); }
+        if (eh) { eh.set({ left: eh.left + dx, top: eh.top + dy }); eh.setCoords(); }
+        // Reset label to be below the new start handle position
+        target.set({ left: sh.left, top: sh.top + 10 });
+        rebuildPath(sh, eh);
+        canvas.renderAll();
+        return;
+      }
+
+      // Arrow path drag — move everything together
+      if (target?._isArrow) {
+        const dx = target.left - prevPathLeft;
+        const dy = target.top - prevPathTop;
+        prevPathLeft = target.left;
+        prevPathTop = target.top;
+        const sh = target._startHandle;
+        const eh = target._endHandle;
+        if (sh) { sh.set({ left: sh.left + dx, top: sh.top + dy }); sh.setCoords(); }
+        if (eh) { eh.set({ left: eh.left + dx, top: eh.top + dy }); eh.setCoords(); }
+        const label = target._arrowLabel;
+        if (label) label.set({ left: label.left + dx, top: label.top + dy });
+        canvas.renderAll();
+        return;
+      }
     }
 
     canvas.on("object:moving", onHandleMove);
@@ -495,7 +538,10 @@ export default function PhotoAnnotator({
       originY: "top",
     });
     // Attach label to the arrow so it moves with the tail
-    if (arrowPath) (arrowPath as any)._arrowLabel = label;
+    if (arrowPath) {
+      (arrowPath as any)._arrowLabel = label;
+      (label as any)._parentArrow = arrowPath;
+    }
     canvas.add(label);
     canvas.setActiveObject(label);
     label.enterEditing();
@@ -565,10 +611,13 @@ export default function PhotoAnnotator({
       canvas.isDrawingMode = false;
       canvas.selection = true;
       canvas.forEachObject((obj: any) => {
-        // Arrow paths should never be selectable (no bounding box)
-        if (obj._isArrow) return;
         obj.selectable = true;
         obj.evented = true;
+        // Arrow paths: no bounding box but still draggable
+        if (obj._isArrow) {
+          obj.hasBorders = false;
+          obj.hasControls = false;
+        }
       });
       // Detect arrow path clicks in select mode too
       canvas.on("mouse:down", (opt: any) => {
@@ -631,11 +680,10 @@ export default function PhotoAnnotator({
         // If clicking an arrow path or handle, activate it for editing
         if (target?._isArrow || target?._arrowRole) {
           if (target._arrowRole) return;
-          // Clicked the arrow path — show handles and toolbar
+          // Clicked the arrow path — show handles and toolbar, keep selected for drag
           const ap = target;
           if (ap._startHandle) { ap._startHandle.visible = true; ap._startHandle.setCoords(); }
           if (ap._endHandle) { ap._endHandle.visible = true; ap._endHandle.setCoords(); }
-          canvas.discardActiveObject();
           canvas.renderAll();
           const canvasEl = canvas.getElement();
           const rect = canvasEl.getBoundingClientRect();
