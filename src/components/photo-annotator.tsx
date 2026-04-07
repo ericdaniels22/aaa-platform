@@ -170,11 +170,6 @@ export default function PhotoAnnotator({
         activeArrowPath = ap;
         showHandlesFor(ap);
         showToolbarForArrow(ap, target);
-
-        // If user clicked the path line itself, deselect it so handles can be grabbed
-        if (target._isArrow) {
-          canvas.discardActiveObject();
-        }
         canvas.renderAll();
       } else {
         // Non-arrow selected — hide active arrow handles
@@ -497,14 +492,12 @@ export default function PhotoAnnotator({
       const target = e.target;
       if (!target || !isMyObject(target)) return;
 
-      // Handle endpoint drag — hide path during drag, rebuild on release
+      // Handle endpoint drag — leave path visible (stale), rebuild on release
       if (target === startHandle || target === endHandle) {
         pathDragActive = false;
         handleDragActive = true;
-        // Hide the path during drag (will be rebuilt on mouse:up)
+        // Move label to follow the start handle during drag
         const currentPath = startHandle._arrowPath;
-        if (currentPath) currentPath.visible = false;
-        // Move label to follow the start handle
         const label = currentPath?._arrowLabel;
         if (label) label.set(getLabelPos());
         canvas.renderAll();
@@ -759,8 +752,9 @@ export default function PhotoAnnotator({
         // If clicking an arrow path or handle, activate it for editing
         if (target?._isArrow || target?._arrowRole) {
           if (target._arrowRole) return;
-          // Clicked the arrow path — show handles and toolbar, keep selected for drag
+          // Clicked the arrow path — select it for dragging, show handles and toolbar
           const ap = target;
+          canvas.setActiveObject(ap);
           if (ap._startHandle) { ap._startHandle.visible = true; ap._startHandle.setCoords(); }
           if (ap._endHandle) { ap._endHandle.visible = true; ap._endHandle.setCoords(); }
           canvas.renderAll();
