@@ -112,42 +112,93 @@ export default function PhotoAnnotator({
     activeColorRef.current = activeColor;
   }, [activeColor]);
 
-  // Show/hide arrow toolbar on selection
+  // Show/hide arrow handles and toolbar on selection
   useEffect(() => {
     const canvas = fabricRef.current;
     if (!canvas || !canvasReady) return;
 
+    let activeArrowParts: any[] = [];
+
+    function showArrowHandles(arrowPath: any) {
+      const sh = arrowPath._startHandle;
+      const eh = arrowPath._endHandle;
+      if (sh) sh.visible = true;
+      if (eh) eh.visible = true;
+      activeArrowParts = [arrowPath, sh, eh].filter(Boolean);
+      canvas.renderAll();
+    }
+
+    function hideAllArrowHandles() {
+      canvas.getObjects().forEach((obj: any) => {
+        if (obj._arrowRole && obj.visible) {
+          obj.visible = false;
+        }
+      });
+      activeArrowParts = [];
+      canvas.renderAll();
+    }
+
+    function getArrowPath(target: any): any {
+      if (target?._isArrow) return target;
+      if (target?._arrowRole) return target._arrowPath;
+      return null;
+    }
+
+    function showToolbarForArrow(arrowPath: any, handle?: any) {
+      const canvasEl = canvas.getElement();
+      const rect = canvasEl.getBoundingClientRect();
+      const startH = arrowPath._startHandle;
+      const ref = handle || startH;
+      setArrowToolbar({
+        x: rect.left + startH.left - 56,
+        y: rect.top + startH.top,
+        handle: ref._arrowRole ? ref : startH,
+      });
+    }
+
     function onSelected(e: any) {
       const target = e.target;
-      if (target?._arrowRole) {
-        // Get canvas element position to convert to screen coords
-        const canvasEl = canvas.getElement();
-        const rect = canvasEl.getBoundingClientRect();
-        const startH = target._arrowRole === "start" ? target : target._otherHandle;
-        const { scale } = imgDimensionsRef.current;
-        setArrowToolbar({
-          x: rect.left + startH.left - 56, // offset for sidebar
-          y: rect.top + startH.top,
-          handle: target,
-        });
+      const ap = getArrowPath(target);
+      if (ap) {
+        hideAllArrowHandles();
+        showArrowHandles(ap);
+        showToolbarForArrow(ap, target);
+        // If user clicked the path, deselect it so handles become interactive
+        if (target._isArrow) {
+          canvas.discardActiveObject();
+          canvas.renderAll();
+        }
       } else {
+        hideAllArrowHandles();
         setArrowToolbar(null);
       }
     }
 
     function onDeselected() {
+      // Small delay to allow re-selection of handles
+      setTimeout(() => {
+        const active = canvas.getActiveObject();
+        if (!active || !getArrowPath(active)) {
+          hideAllArrowHandles();
+          setArrowToolbar(null);
+        }
+      }, 50);
+    }
+
+    function onMoving() {
       setArrowToolbar(null);
     }
 
     canvas.on("selection:created", onSelected);
     canvas.on("selection:updated", onSelected);
     canvas.on("selection:cleared", onDeselected);
-    canvas.on("object:moving", () => setArrowToolbar(null));
+    canvas.on("object:moving", onMoving);
 
     return () => {
       canvas.off("selection:created", onSelected);
       canvas.off("selection:updated", onSelected);
       canvas.off("selection:cleared", onDeselected);
+      canvas.off("object:moving", onMoving);
     };
   }, [canvasReady]);
 
@@ -299,19 +350,22 @@ export default function PhotoAnnotator({
       return `M ${ax1} ${ay1} L ${ax2} ${ay2} M ${hx1} ${hy1} L ${ax2} ${ay2} L ${hx2} ${hy2}`;
     }
 
-    // Arrow shaft + head as a path
+    // Arrow shaft + head as a path (selectable so user can tap to select)
     const arrowPath = new fabric.Path(buildArrowPath(x1, y1, x2, y2), {
       stroke: color,
       strokeWidth: strokeW,
       strokeLineCap: "round",
       strokeLineJoin: "round",
       fill: "transparent",
-      selectable: false,
-      evented: false,
+      selectable: true,
+      evented: true,
+      hasBorders: false,
+      hasControls: false,
+      perPixelTargetFind: true,
       objectCaching: false,
     });
 
-    // Endpoint handles (draggable circles)
+    // Endpoint handles (draggable circles) — hidden by default
     const handleRadius = 8;
     const handleProps = {
       radius: handleRadius,
@@ -324,12 +378,17 @@ export default function PhotoAnnotator({
       hasControls: false,
       selectable: true,
       evented: true,
+      visible: false,
     };
 
     const startHandle = new fabric.Circle({ ...handleProps, left: x1, top: y1 });
     const endHandle = new fabric.Circle({ ...handleProps, left: x2, top: y2 });
 
-    // Store references so handles know about each other
+    // Cross-reference all three objects
+    (arrowPath as any)._isArrow = true;
+    (arrowPath as any)._startHandle = startHandle;
+    (arrowPath as any)._endHandle = endHandle;
+    (arrowPath as any)._arrowColor = color;
     (startHandle as any)._arrowRole = "start";
     (endHandle as any)._arrowRole = "end";
     (startHandle as any)._arrowPath = arrowPath;
@@ -338,6 +397,12 @@ export default function PhotoAnnotator({
     (endHandle as any)._arrowPath = arrowPath;
     (endHandle as any)._otherHandle = startHandle;
     (endHandle as any)._arrowColor = color;
+
+    // Cleanup function defined early so it can be referenced in onHandleMove
+    const cleanup = () => canvas.off("object:moving", onHandleMove);
+
+    // Store cleanup on all parts
+    (arrowPath as any)._arrowCleanup = cleanup;
 
     // Update arrow path when a handle moves
     function onHandleMove(e: any) {
@@ -358,10 +423,18 @@ export default function PhotoAnnotator({
         strokeLineCap: "round",
         strokeLineJoin: "round",
         fill: "transparent",
-        selectable: false,
-        evented: false,
+        selectable: true,
+        evented: true,
+        hasBorders: false,
+        hasControls: false,
+        perPixelTargetFind: true,
         objectCaching: false,
       });
+      (newPath as any)._isArrow = true;
+      (newPath as any)._startHandle = handle._arrowRole === "start" ? handle : other;
+      (newPath as any)._endHandle = handle._arrowRole === "end" ? handle : other;
+      (newPath as any)._arrowColor = color;
+      (newPath as any)._arrowCleanup = cleanup;
       handle._arrowPath = newPath;
       other._arrowPath = newPath;
 
@@ -373,9 +446,9 @@ export default function PhotoAnnotator({
 
     canvas.on("object:moving", onHandleMove);
 
-    // Store cleanup function on handles so we can remove the listener
-    (startHandle as any)._arrowCleanup = () => canvas.off("object:moving", onHandleMove);
-    (endHandle as any)._arrowCleanup = startHandle._arrowCleanup;
+    // Store cleanup on handles too
+    (startHandle as any)._arrowCleanup = cleanup;
+    (endHandle as any)._arrowCleanup = cleanup;
 
     return { arrowPath, startHandle, endHandle };
   }
@@ -1018,10 +1091,31 @@ export default function PhotoAnnotator({
     const canvas = fabricRef.current;
     if (!canvas) return;
     const objects = canvas.getObjects();
-    if (objects.length > 0) {
-      canvas.remove(objects[objects.length - 1]);
-      canvas.renderAll();
+    if (objects.length === 0) return;
+
+    const last = objects[objects.length - 1];
+
+    // If it's part of an arrow, remove all 3 parts (path + 2 handles)
+    if (last._isArrow) {
+      const sh = last._startHandle;
+      const eh = last._endHandle;
+      if (last._arrowCleanup) last._arrowCleanup();
+      if (sh) canvas.remove(sh);
+      if (eh) canvas.remove(eh);
+      canvas.remove(last);
+    } else if (last._arrowRole) {
+      const path = last._arrowPath;
+      const other = last._otherHandle;
+      if (path?._arrowCleanup) path._arrowCleanup();
+      if (path) canvas.remove(path);
+      if (other) canvas.remove(other);
+      canvas.remove(last);
+    } else {
+      canvas.remove(last);
     }
+
+    setArrowToolbar(null);
+    canvas.renderAll();
   }
 
   function handleClear() {
