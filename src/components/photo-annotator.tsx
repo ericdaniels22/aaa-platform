@@ -483,6 +483,11 @@ export default function PhotoAnnotator({
 
     // Update the inverted clip to match crop rect position
     clipRect.set({ left, top, width: w, height: h });
+    // Force overlay to re-render with updated clip
+    const overlay = cropOverlayRef.current;
+    if (overlay) {
+      overlay.dirty = true;
+    }
 
     const gridLines = cropGridLinesRef.current;
     if (gridLines.length === 4) {
