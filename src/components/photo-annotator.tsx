@@ -117,26 +117,7 @@ export default function PhotoAnnotator({
     const canvas = fabricRef.current;
     if (!canvas || !canvasReady) return;
 
-    let activeArrowParts: any[] = [];
-
-    function showArrowHandles(arrowPath: any) {
-      const sh = arrowPath._startHandle;
-      const eh = arrowPath._endHandle;
-      if (sh) sh.visible = true;
-      if (eh) eh.visible = true;
-      activeArrowParts = [arrowPath, sh, eh].filter(Boolean);
-      canvas.renderAll();
-    }
-
-    function hideAllArrowHandles() {
-      canvas.getObjects().forEach((obj: any) => {
-        if (obj._arrowRole && obj.visible) {
-          obj.visible = false;
-        }
-      });
-      activeArrowParts = [];
-      canvas.renderAll();
-    }
+    let activeArrowPath: any = null;
 
     function getArrowPath(target: any): any {
       if (target?._isArrow) return target;
@@ -144,45 +125,76 @@ export default function PhotoAnnotator({
       return null;
     }
 
-    function showToolbarForArrow(arrowPath: any, handle?: any) {
+    function showHandlesFor(ap: any) {
+      if (ap._startHandle) ap._startHandle.visible = true;
+      if (ap._endHandle) ap._endHandle.visible = true;
+    }
+
+    function hideHandlesFor(ap: any) {
+      if (ap._startHandle) ap._startHandle.visible = false;
+      if (ap._endHandle) ap._endHandle.visible = false;
+    }
+
+    function showToolbarForArrow(ap: any, handle?: any) {
       const canvasEl = canvas.getElement();
       const rect = canvasEl.getBoundingClientRect();
-      const startH = arrowPath._startHandle;
-      const ref = handle || startH;
+      const startH = ap._startHandle;
+      if (!startH) return;
+      const ref = handle && handle._arrowRole ? handle : startH;
       setArrowToolbar({
         x: rect.left + startH.left - 56,
         y: rect.top + startH.top,
-        handle: ref._arrowRole ? ref : startH,
+        handle: ref,
       });
     }
 
     function onSelected(e: any) {
       const target = e.target;
       const ap = getArrowPath(target);
+
       if (ap) {
-        hideAllArrowHandles();
-        showArrowHandles(ap);
+        // If selecting a handle of the already-active arrow, just let it be dragged
+        if (target._arrowRole && ap === activeArrowPath) {
+          return;
+        }
+
+        // Hide handles of previously active arrow
+        if (activeArrowPath && activeArrowPath !== ap) {
+          hideHandlesFor(activeArrowPath);
+        }
+
+        activeArrowPath = ap;
+        showHandlesFor(ap);
         showToolbarForArrow(ap, target);
-        // If user clicked the path, deselect it so handles become interactive
+
+        // If user clicked the path line itself, deselect it so handles can be grabbed
         if (target._isArrow) {
           canvas.discardActiveObject();
+        }
+        canvas.renderAll();
+      } else {
+        // Non-arrow selected — hide active arrow handles
+        if (activeArrowPath) {
+          hideHandlesFor(activeArrowPath);
+          activeArrowPath = null;
           canvas.renderAll();
         }
-      } else {
-        hideAllArrowHandles();
         setArrowToolbar(null);
       }
     }
 
     function onDeselected() {
-      // Small delay to allow re-selection of handles
       setTimeout(() => {
         const active = canvas.getActiveObject();
         if (!active || !getArrowPath(active)) {
-          hideAllArrowHandles();
+          if (activeArrowPath) {
+            hideHandlesFor(activeArrowPath);
+            activeArrowPath = null;
+            canvas.renderAll();
+          }
           setArrowToolbar(null);
         }
-      }, 50);
+      }, 100);
     }
 
     function onMoving() {
