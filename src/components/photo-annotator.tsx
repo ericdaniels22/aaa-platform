@@ -594,15 +594,19 @@ export default function PhotoAnnotator({
     const cw = canvas.width!;
     const ch = canvas.height!;
 
-    // Create crop rectangle
+    // Create crop rectangle — inset by strokeWidth so border is fully visible
+    const sw = 2;
     const cropRect = new fabric.Rect({
-      left: 0,
-      top: 0,
-      width: cw,
-      height: ch,
-      fill: "transparent",
+      left: sw,
+      top: sw,
+      width: cw - sw * 2,
+      height: ch - sw * 2,
+      fill: "rgba(255,255,255,0.01)",
       stroke: "#FFFFFF",
-      strokeWidth: 2,
+      strokeWidth: sw,
+      strokeUniform: true,
+      originX: "left",
+      originY: "top",
       cornerColor: "#FFFFFF",
       cornerStrokeColor: "#FFFFFF",
       cornerSize: 12,
@@ -612,6 +616,7 @@ export default function PhotoAnnotator({
       evented: true,
       lockRotation: true,
       hasRotatingPoint: false,
+      perPixelTargetFind: false,
     });
     cropRectRef.current = cropRect;
 
@@ -667,12 +672,13 @@ export default function PhotoAnnotator({
 
     const cw = canvas.width!;
     const ch = canvas.height!;
+    const sw = 2;
 
     cropRect.set({
-      left: 0,
-      top: 0,
-      width: cw,
-      height: ch,
+      left: sw,
+      top: sw,
+      width: cw - sw * 2,
+      height: ch - sw * 2,
       scaleX: 1,
       scaleY: 1,
     });
@@ -1029,7 +1035,7 @@ export default function PhotoAnnotator({
 
         {/* Crop floating panel */}
         {isCropping && (
-          <div className="absolute top-4 left-20 z-10 bg-white rounded-xl shadow-2xl w-[170px] overflow-hidden">
+          <div className="absolute top-4 left-2 z-10 bg-white rounded-xl shadow-2xl w-[170px] overflow-hidden">
             <div className="px-4 pt-3 pb-2">
               <h3 className="text-sm font-semibold text-[#1a1a1a]">Crop Image</h3>
             </div>
