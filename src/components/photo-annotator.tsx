@@ -232,39 +232,105 @@ export default function PhotoAnnotator({
     };
   }, [open, photo, initCanvas]);
 
-  // Build arrow as a single Path (line + arrowhead) — no bounding box
+  // Build arrow as line + arrowhead path + two draggable endpoint handles
   function createArrow(
     fabric: any,
+    canvas: any,
     x1: number,
     y1: number,
     x2: number,
     y2: number,
     color: string
   ) {
-    const angle = Math.atan2(y2 - y1, x2 - x1);
-    const headLen = 20;
+    const strokeW = 6;
+    const headLen = 24;
 
-    // Arrowhead points
-    const hx1 = x2 - headLen * Math.cos(angle - Math.PI / 6);
-    const hy1 = y2 - headLen * Math.sin(angle - Math.PI / 6);
-    const hx2 = x2 - headLen * Math.cos(angle + Math.PI / 6);
-    const hy2 = y2 - headLen * Math.sin(angle + Math.PI / 6);
+    function buildArrowPath(ax1: number, ay1: number, ax2: number, ay2: number) {
+      const ang = Math.atan2(ay2 - ay1, ax2 - ax1);
+      const hx1 = ax2 - headLen * Math.cos(ang - Math.PI / 6);
+      const hy1 = ay2 - headLen * Math.sin(ang - Math.PI / 6);
+      const hx2 = ax2 - headLen * Math.cos(ang + Math.PI / 6);
+      const hy2 = ay2 - headLen * Math.sin(ang + Math.PI / 6);
+      return `M ${ax1} ${ay1} L ${ax2} ${ay2} M ${hx1} ${hy1} L ${ax2} ${ay2} L ${hx2} ${hy2}`;
+    }
 
-    const pathData = `M ${x1} ${y1} L ${x2} ${y2} M ${hx1} ${hy1} L ${x2} ${y2} L ${hx2} ${hy2}`;
-
-    const arrow = new fabric.Path(pathData, {
+    // Arrow shaft + head as a path
+    const arrowPath = new fabric.Path(buildArrowPath(x1, y1, x2, y2), {
       stroke: color,
-      strokeWidth: 4,
+      strokeWidth: strokeW,
       strokeLineCap: "round",
       strokeLineJoin: "round",
       fill: "transparent",
-      selectable: true,
-      evented: true,
-      hasBorders: false,
-      perPixelTargetFind: true,
+      selectable: false,
+      evented: false,
+      objectCaching: false,
     });
 
-    return arrow;
+    // Endpoint handles (draggable circles)
+    const handleRadius = 8;
+    const handleProps = {
+      radius: handleRadius,
+      fill: "#FFFFFF",
+      stroke: color,
+      strokeWidth: 2,
+      originX: "center" as const,
+      originY: "center" as const,
+      hasBorders: false,
+      hasControls: false,
+      selectable: true,
+      evented: true,
+    };
+
+    const startHandle = new fabric.Circle({ ...handleProps, left: x1, top: y1 });
+    const endHandle = new fabric.Circle({ ...handleProps, left: x2, top: y2 });
+
+    // Store references so handles know about each other
+    (startHandle as any)._arrowRole = "start";
+    (endHandle as any)._arrowRole = "end";
+    (startHandle as any)._arrowPath = arrowPath;
+    (startHandle as any)._otherHandle = endHandle;
+    (endHandle as any)._arrowPath = arrowPath;
+    (endHandle as any)._otherHandle = startHandle;
+
+    // Update arrow path when a handle moves
+    function onHandleMove(e: any) {
+      const handle = e.target;
+      if (!handle?._arrowPath) return;
+      const other = handle._otherHandle;
+      const path = handle._arrowPath;
+      const sx = handle._arrowRole === "start" ? handle.left : other.left;
+      const sy = handle._arrowRole === "start" ? handle.top : other.top;
+      const ex = handle._arrowRole === "end" ? handle.left : other.left;
+      const ey = handle._arrowRole === "end" ? handle.top : other.top;
+
+      // Remove old path and create new one
+      canvas.remove(path);
+      const newPath = new fabric.Path(buildArrowPath(sx, sy, ex, ey), {
+        stroke: color,
+        strokeWidth: strokeW,
+        strokeLineCap: "round",
+        strokeLineJoin: "round",
+        fill: "transparent",
+        selectable: false,
+        evented: false,
+        objectCaching: false,
+      });
+      handle._arrowPath = newPath;
+      other._arrowPath = newPath;
+
+      // Insert path below the handles
+      canvas.add(newPath);
+      canvas.moveTo(newPath, canvas.getObjects().indexOf(handle) - 1);
+      canvas.renderAll();
+    }
+
+    canvas.on("object:moving", onHandleMove);
+
+    // Store cleanup function on handles so we can remove the listener
+    (startHandle as any)._arrowCleanup = () => canvas.off("object:moving", onHandleMove);
+    (endHandle as any)._arrowCleanup = startHandle._arrowCleanup;
+
+    return { arrowPath, startHandle, endHandle };
   }
 
   // Tool behavior
@@ -367,7 +433,25 @@ export default function PhotoAnnotator({
             selectable: false,
           });
         } else if (tool === "arrow") {
-          shape = createArrow(fabric, sx, sy, pointer.x, pointer.y, color);
+          // Preview arrow as a simple temporary path (no handles yet)
+          const ang = Math.atan2(pointer.y - sy, pointer.x - sx);
+          const hl = 24;
+          const hx1 = pointer.x - hl * Math.cos(ang - Math.PI / 6);
+          const hy1 = pointer.y - hl * Math.sin(ang - Math.PI / 6);
+          const hx2 = pointer.x - hl * Math.cos(ang + Math.PI / 6);
+          const hy2 = pointer.y - hl * Math.sin(ang + Math.PI / 6);
+          shape = new fabric.Path(
+            `M ${sx} ${sy} L ${pointer.x} ${pointer.y} M ${hx1} ${hy1} L ${pointer.x} ${pointer.y} L ${hx2} ${hy2}`,
+            {
+              stroke: color,
+              strokeWidth: 6,
+              strokeLineCap: "round",
+              strokeLineJoin: "round",
+              fill: "transparent",
+              selectable: false,
+              evented: false,
+            }
+          );
         }
 
         if (shape) {
@@ -381,34 +465,23 @@ export default function PhotoAnnotator({
         if (!isDrawingShape.current) return;
         isDrawingShape.current = false;
 
-        // For arrows, prompt for text label
-        if (
-          activeToolRef.current === "arrow" &&
-          currentShape.current
-        ) {
+        // For arrows, remove the preview and create the real arrow with handles
+        if (activeToolRef.current === "arrow" && currentShape.current) {
+          canvas.remove(currentShape.current);
           const pointer = canvas.getScenePoint(opt.e);
           const { x: sx, y: sy } = shapeStart.current;
-          const midX = (sx + pointer.x) / 2;
-          const midY = (sy + pointer.y) / 2;
-          const fabric = fabricModuleRef.current;
 
-          // Add editable text near the arrow midpoint
-          const label = new fabric.IText("", {
-            left: midX,
-            top: midY - 20,
-            fontSize: 18,
-            fill: activeColorRef.current,
-            fontFamily: "Arial",
-            fontWeight: "bold",
-            stroke: "#000000",
-            strokeWidth: 0.3,
-            padding: 2,
-            textAlign: "center",
-          });
-          canvas.add(label);
-          canvas.setActiveObject(label);
-          label.enterEditing();
-          canvas.renderAll();
+          // Only create if dragged a meaningful distance
+          const dist = Math.sqrt((pointer.x - sx) ** 2 + (pointer.y - sy) ** 2);
+          if (dist > 10) {
+            const { arrowPath, startHandle, endHandle } = createArrow(
+              fabric, canvas, sx, sy, pointer.x, pointer.y, activeColorRef.current
+            );
+            canvas.add(arrowPath);
+            canvas.add(startHandle);
+            canvas.add(endHandle);
+            canvas.renderAll();
+          }
         }
 
         currentShape.current = null;
