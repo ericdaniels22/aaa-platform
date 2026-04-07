@@ -486,17 +486,40 @@ export default function PhotoAnnotator({
 
     // Track whether a handle is being dragged
     let handleDragActive = false;
+    let previewPath: any = null;
 
     // Update arrow when a handle or the path itself moves
     function onHandleMove(e: any) {
       const target = e.target;
       if (!target || !isMyObject(target)) return;
 
-      // Handle endpoint drag — leave path visible (stale), rebuild on release
+      // Handle endpoint drag — show real-time preview path
       if (target === startHandle || target === endHandle) {
         pathDragActive = false;
-        handleDragActive = true;
-        // Move label to follow the start handle during drag
+
+        // First move: hide the real path
+        if (!handleDragActive) {
+          handleDragActive = true;
+          const currentPath = startHandle._arrowPath;
+          if (currentPath) currentPath.visible = false;
+        }
+
+        // Remove old preview
+        if (previewPath) canvas.remove(previewPath);
+
+        // Create new preview at current handle positions
+        previewPath = new fabric.Path(buildArrowPath(startHandle.left, startHandle.top, endHandle.left, endHandle.top), {
+          stroke: color,
+          strokeWidth: strokeW,
+          strokeLineCap: "round",
+          strokeLineJoin: "round",
+          fill: "transparent",
+          selectable: false,
+          evented: false,
+        });
+        canvas.add(previewPath);
+
+        // Move label to follow the start handle
         const currentPath = startHandle._arrowPath;
         const label = currentPath?._arrowLabel;
         if (label) label.set(getLabelPos());
@@ -535,9 +558,10 @@ export default function PhotoAnnotator({
       const target = e.target;
       if (!target || !isMyObject(target)) return;
 
-      // Handle drag ended — rebuild path from final handle positions
+      // Handle drag ended — remove preview, rebuild final path
       if (handleDragActive && (target === startHandle || target === endHandle)) {
         handleDragActive = false;
+        if (previewPath) { canvas.remove(previewPath); previewPath = null; }
         const newPath = rebuildPath(startHandle, endHandle);
         const label = newPath?._arrowLabel;
         if (label) label.set(getLabelPos());
