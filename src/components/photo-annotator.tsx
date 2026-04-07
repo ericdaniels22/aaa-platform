@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ChevronUp,
   SlidersHorizontal,
+  ImageOff,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -83,6 +84,7 @@ export default function PhotoAnnotator({
   const [contrast, setContrast] = useState(0);
   const [saturation, setSaturation] = useState(0);
   const [isCropping, setIsCropping] = useState(false);
+  const [hasOriginalBackup, setHasOriginalBackup] = useState(false);
   const isDrawingShape = useRef(false);
   const shapeStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const currentShape = useRef<any>(null);
@@ -171,6 +173,17 @@ export default function PhotoAnnotator({
       canvas.selection = false;
 
       loadAnnotations(canvas, photo.id);
+
+      // Check if an original backup exists
+      const supabase = createClient();
+      const backupPath = photo.storage_path.replace(/\.[^.]+$/, "-original$&");
+      const { data: backupData } = await supabase.storage.from("photos").list(
+        backupPath.substring(0, backupPath.lastIndexOf("/")),
+        { search: backupPath.substring(backupPath.lastIndexOf("/") + 1) }
+      );
+      setHasOriginalBackup(
+        !!backupData && backupData.some((f) => backupPath.endsWith(f.name))
+      );
     } catch (err) {
       console.error("Failed to load image for annotation:", err);
       toast.error("Failed to load image.");
@@ -698,8 +711,19 @@ export default function PhotoAnnotator({
     const ctx = tempCanvas.getContext("2d")!;
     ctx.drawImage(fullResCanvas, srcLeft, srcTop, srcWidth, srcHeight, 0, 0, srcWidth, srcHeight);
 
-    // Upload cropped image to Supabase Storage, replacing the original
+    // Save backup of original before first crop
     const supabase = createClient();
+    const backupPath = photo.storage_path.replace(/\.[^.]+$/, "-original$&");
+    if (!hasOriginalBackup) {
+      try {
+        await supabase.storage.from("photos").copy(photo.storage_path, backupPath);
+        setHasOriginalBackup(true);
+      } catch (err) {
+        console.error("Failed to backup original:", err);
+      }
+    }
+
+    // Upload cropped image to Supabase Storage, replacing the current
     try {
       const blob = await new Promise<Blob>((resolve) => {
         tempCanvas.toBlob((b) => resolve(b!), "image/jpeg", 0.92);
@@ -758,6 +782,37 @@ export default function PhotoAnnotator({
     setIsCropping(false);
     setActiveTool("arrow");
     toast.success("Image cropped and saved.");
+  }
+
+  async function handleRestoreOriginal() {
+    if (!photo || !hasOriginalBackup) return;
+
+    const supabase = createClient();
+    const backupPath = photo.storage_path.replace(/\.[^.]+$/, "-original$&");
+
+    try {
+      // Download the backup
+      const { data: backupBlob } = await supabase.storage.from("photos").download(backupPath);
+      if (!backupBlob) throw new Error("Backup not found");
+
+      // Overwrite current with the original backup
+      await supabase.storage.from("photos").upload(photo.storage_path, backupBlob, {
+        upsert: true,
+        contentType: backupBlob.type,
+      });
+
+      // Remove the backup file
+      await supabase.storage.from("photos").remove([backupPath]);
+      setHasOriginalBackup(false);
+
+      // Reload the editor with the restored image
+      toast.success("Original image restored.");
+      onOpenChange(false);
+      onSaved();
+    } catch (err) {
+      console.error("Failed to restore original:", err);
+      toast.error("Failed to restore original image.");
+    }
   }
 
   function handleCancelCrop() {
@@ -1065,6 +1120,18 @@ export default function PhotoAnnotator({
                 <X size={14} />
                 Cancel
               </button>
+              {hasOriginalBackup && (
+                <>
+                  <div className="h-px bg-[#e5e5e5] my-1" />
+                  <button
+                    onClick={handleRestoreOriginal}
+                    className="w-full px-3 py-2 bg-[#f0f0f0] hover:bg-[#FCEBEB] text-[#791F1F] text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <ImageOff size={12} />
+                    Restore Original
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
