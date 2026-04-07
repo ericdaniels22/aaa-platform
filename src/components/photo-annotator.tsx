@@ -89,7 +89,8 @@ export default function PhotoAnnotator({
   const activeToolRef = useRef<Tool>(activeTool);
   const activeColorRef = useRef(activeColor);
   const cropRectRef = useRef<any>(null);
-  const cropOverlaysRef = useRef<any[]>([]);
+  const cropOverlayRef = useRef<any>(null);
+  const cropClipRef = useRef<any>(null);
   const cropGridLinesRef = useRef<any[]>([]);
   const hiddenObjectsRef = useRef<any[]>([]);
   const imgDimensionsRef = useRef<{
@@ -471,10 +472,8 @@ export default function PhotoAnnotator({
 
   function updateCropOverlay(canvas: any) {
     const cropRect = cropRectRef.current;
-    if (!cropRect) return;
-
-    const cw = canvas.width!;
-    const ch = canvas.height!;
+    const clipRect = cropClipRef.current;
+    if (!cropRect || !clipRect) return;
 
     // Get the bounding box of the crop rect (accounts for scaling)
     const left = cropRect.left!;
@@ -482,17 +481,8 @@ export default function PhotoAnnotator({
     const w = cropRect.width! * (cropRect.scaleX || 1);
     const h = cropRect.height! * (cropRect.scaleY || 1);
 
-    const overlays = cropOverlaysRef.current;
-    if (overlays.length === 4) {
-      // Top overlay
-      overlays[0].set({ left: 0, top: 0, width: cw, height: Math.max(0, top) });
-      // Bottom overlay
-      overlays[1].set({ left: 0, top: top + h, width: cw, height: Math.max(0, ch - (top + h)) });
-      // Left overlay
-      overlays[2].set({ left: 0, top: top, width: Math.max(0, left), height: h });
-      // Right overlay
-      overlays[3].set({ left: left + w, top: top, width: Math.max(0, cw - (left + w)), height: h });
-    }
+    // Update the inverted clip to match crop rect position
+    clipRect.set({ left, top, width: w, height: h });
 
     const gridLines = cropGridLinesRef.current;
     if (gridLines.length === 4) {
@@ -510,9 +500,12 @@ export default function PhotoAnnotator({
   }
 
   function cleanupCropObjects(canvas: any) {
-    // Remove overlays
-    cropOverlaysRef.current.forEach((o) => canvas.remove(o));
-    cropOverlaysRef.current = [];
+    // Remove overlay
+    if (cropOverlayRef.current) {
+      canvas.remove(cropOverlayRef.current);
+      cropOverlayRef.current = null;
+    }
+    cropClipRef.current = null;
     // Remove grid lines
     cropGridLinesRef.current.forEach((l) => canvas.remove(l));
     cropGridLinesRef.current = [];
@@ -620,8 +613,22 @@ export default function PhotoAnnotator({
     });
     cropRectRef.current = cropRect;
 
-    // Create 4 dark overlay rects
-    const overlayProps = {
+    // Create single dark overlay with inverted clip (hole for crop area)
+    const clipRect = new fabric.Rect({
+      left: sw,
+      top: sw,
+      width: cw - sw * 2,
+      height: ch - sw * 2,
+      absolutePositioned: true,
+      inverted: true,
+    });
+    cropClipRef.current = clipRect;
+
+    const overlay = new fabric.Rect({
+      left: 0,
+      top: 0,
+      width: cw,
+      height: ch,
       fill: "rgba(0, 0, 0, 0.5)",
       stroke: "",
       strokeWidth: 0,
@@ -629,14 +636,9 @@ export default function PhotoAnnotator({
       evented: false,
       excludeFromExport: true,
       objectCaching: false,
-    };
-    const overlays = [
-      new fabric.Rect({ ...overlayProps, left: 0, top: 0, width: cw, height: 0 }), // top
-      new fabric.Rect({ ...overlayProps, left: 0, top: ch, width: cw, height: 0 }), // bottom
-      new fabric.Rect({ ...overlayProps, left: 0, top: 0, width: 0, height: ch }), // left
-      new fabric.Rect({ ...overlayProps, left: cw, top: 0, width: 0, height: ch }), // right
-    ];
-    cropOverlaysRef.current = overlays;
+      clipPath: clipRect,
+    });
+    cropOverlayRef.current = overlay;
 
     // Create 4 grid lines (rule of thirds)
     const gridProps = {
@@ -654,8 +656,8 @@ export default function PhotoAnnotator({
     ];
     cropGridLinesRef.current = gridLines;
 
-    // Add to canvas in order: overlays, grid, crop rect on top
-    overlays.forEach((o) => canvas.add(o));
+    // Add to canvas in order: overlay, grid, crop rect on top
+    canvas.add(overlay);
     gridLines.forEach((l) => canvas.add(l));
     canvas.add(cropRect);
     canvas.setActiveObject(cropRect);
