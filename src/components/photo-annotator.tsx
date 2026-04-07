@@ -570,6 +570,10 @@ export default function PhotoAnnotator({
       selectable: true,
       evented: true,
       editable: true,
+      lockMovementX: true,
+      lockMovementY: true,
+      hasControls: false,
+      hasBorders: false,
     });
     // Attach label to the arrow so it moves with the tail
     if (arrowPath) {
@@ -651,6 +655,13 @@ export default function PhotoAnnotator({
         if (obj._isArrow) {
           obj.hasBorders = false;
           obj.hasControls = false;
+        }
+        // Arrow labels: clickable for editing but not draggable
+        if (obj._parentArrow) {
+          obj.lockMovementX = true;
+          obj.lockMovementY = true;
+          obj.hasControls = false;
+          obj.hasBorders = false;
         }
       });
       // Detect arrow path clicks in select mode too
