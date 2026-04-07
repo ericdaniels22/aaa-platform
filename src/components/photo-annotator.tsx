@@ -189,16 +189,20 @@ export default function PhotoAnnotator({
 
     function onDeselected() {
       setTimeout(() => {
+        // Don't hide if an arrow-related object is active
         const active = canvas.getActiveObject();
-        if (!active || !getArrowPath(active)) {
-          if (activeArrowPath) {
-            hideHandlesFor(activeArrowPath);
-            activeArrowPath = null;
-            canvas.renderAll();
-          }
-          setArrowToolbar(null);
+        if (active && (active._isArrow || active._arrowRole || active._parentArrow)) return;
+        // Don't hide if handles are currently visible (onSelected just showed them)
+        const anyHandleVisible = canvas.getObjects().some((obj: any) => obj._arrowRole && obj.visible);
+        if (anyHandleVisible) return;
+        // Safe to hide
+        if (activeArrowPath) {
+          hideHandlesFor(activeArrowPath);
+          activeArrowPath = null;
+          canvas.renderAll();
         }
-      }, 100);
+        setArrowToolbar(null);
+      }, 250);
     }
 
     function onMoving() {
@@ -469,6 +473,8 @@ export default function PhotoAnnotator({
         const objs = canvas.getObjects();
         canvas.moveObjectTo(existingLabel, objs.length - 1);
       }
+      // Maintain selection through rebuild to prevent selection:cleared race
+      canvas.setActiveObject(newPath);
       return newPath;
     }
 
