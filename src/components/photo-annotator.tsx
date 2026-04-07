@@ -623,9 +623,12 @@ export default function PhotoAnnotator({
     // Create 4 dark overlay rects
     const overlayProps = {
       fill: "rgba(0, 0, 0, 0.5)",
+      stroke: "",
+      strokeWidth: 0,
       selectable: false,
       evented: false,
       excludeFromExport: true,
+      objectCaching: false,
     };
     const overlays = [
       new fabric.Rect({ ...overlayProps, left: 0, top: 0, width: cw, height: 0 }), // top
