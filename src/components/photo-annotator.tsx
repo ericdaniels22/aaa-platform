@@ -89,9 +89,7 @@ export default function PhotoAnnotator({
   const activeToolRef = useRef<Tool>(activeTool);
   const activeColorRef = useRef(activeColor);
   const cropRectRef = useRef<any>(null);
-  const cropOverlayRef = useRef<any>(null);
-  const cropClipRef = useRef<any>(null);
-  const cropGridLinesRef = useRef<any[]>([]);
+  const cropRenderCallbackRef = useRef<any>(null);
   const hiddenObjectsRef = useRef<any[]>([]);
   const imgDimensionsRef = useRef<{
     width: number;
@@ -470,50 +468,58 @@ export default function PhotoAnnotator({
     canvas.renderAll();
   }
 
-  function updateCropOverlay(canvas: any) {
+  function drawCropOverlay(canvas: any) {
     const cropRect = cropRectRef.current;
-    const clipRect = cropClipRef.current;
-    if (!cropRect || !clipRect) return;
+    if (!cropRect) return;
 
-    // Get the bounding box of the crop rect (accounts for scaling)
+    const ctx = canvas.getContext("2d");
+    const cw = canvas.width!;
+    const ch = canvas.height!;
+
     const left = cropRect.left!;
     const top = cropRect.top!;
     const w = cropRect.width! * (cropRect.scaleX || 1);
     const h = cropRect.height! * (cropRect.scaleY || 1);
 
-    // Update the inverted clip to match crop rect position
-    clipRect.set({ left, top, width: w, height: h });
-    // Force overlay to re-render with updated clip
-    const overlay = cropOverlayRef.current;
-    if (overlay) {
-      overlay.dirty = true;
-    }
+    // Draw dark overlay with hole using evenodd fill rule
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, cw, ch);
+    ctx.moveTo(left, top);
+    ctx.lineTo(left, top + h);
+    ctx.lineTo(left + w, top + h);
+    ctx.lineTo(left + w, top);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.fill("evenodd");
 
-    const gridLines = cropGridLinesRef.current;
-    if (gridLines.length === 4) {
-      const thirdW = w / 3;
-      const thirdH = h / 3;
-      // Vertical lines
-      gridLines[0].set({ x1: left + thirdW, y1: top, x2: left + thirdW, y2: top + h });
-      gridLines[1].set({ x1: left + 2 * thirdW, y1: top, x2: left + 2 * thirdW, y2: top + h });
-      // Horizontal lines
-      gridLines[2].set({ x1: left, y1: top + thirdH, x2: left + w, y2: top + thirdH });
-      gridLines[3].set({ x1: left, y1: top + 2 * thirdH, x2: left + w, y2: top + 2 * thirdH });
-    }
+    // Draw rule-of-thirds grid lines
+    const thirdW = w / 3;
+    const thirdH = h / 3;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    // Vertical lines
+    ctx.moveTo(left + thirdW, top);
+    ctx.lineTo(left + thirdW, top + h);
+    ctx.moveTo(left + 2 * thirdW, top);
+    ctx.lineTo(left + 2 * thirdW, top + h);
+    // Horizontal lines
+    ctx.moveTo(left, top + thirdH);
+    ctx.lineTo(left + w, top + thirdH);
+    ctx.moveTo(left, top + 2 * thirdH);
+    ctx.lineTo(left + w, top + 2 * thirdH);
+    ctx.stroke();
 
-    canvas.renderAll();
+    ctx.restore();
   }
 
   function cleanupCropObjects(canvas: any) {
-    // Remove overlay
-    if (cropOverlayRef.current) {
-      canvas.remove(cropOverlayRef.current);
-      cropOverlayRef.current = null;
+    // Remove after:render callback for overlay
+    if (cropRenderCallbackRef.current) {
+      canvas.off("after:render", cropRenderCallbackRef.current);
+      cropRenderCallbackRef.current = null;
     }
-    cropClipRef.current = null;
-    // Remove grid lines
-    cropGridLinesRef.current.forEach((l) => canvas.remove(l));
-    cropGridLinesRef.current = [];
     // Remove crop rect
     if (cropRectRef.current) {
       canvas.remove(cropRectRef.current);
@@ -545,7 +551,7 @@ export default function PhotoAnnotator({
       top: Math.max(0, Math.min(cropRect.top!, ch - h)),
     });
 
-    updateCropOverlay(canvas);
+    canvas.renderAll();
   }
 
   function handleCropObjScale(e: any) {
@@ -571,7 +577,7 @@ export default function PhotoAnnotator({
     if (left + w > cw) cropRect.set({ scaleX: (cw - cropRect.left!) / cropRect.width! });
     if (top + h > ch) cropRect.set({ scaleY: (ch - cropRect.top!) / cropRect.height! });
 
-    updateCropOverlay(canvas);
+    canvas.renderAll();
   }
 
   function handleStartCrop() {
@@ -618,57 +624,15 @@ export default function PhotoAnnotator({
     });
     cropRectRef.current = cropRect;
 
-    // Create single dark overlay with inverted clip (hole for crop area)
-    const clipRect = new fabric.Rect({
-      left: sw,
-      top: sw,
-      width: cw - sw * 2,
-      height: ch - sw * 2,
-      absolutePositioned: true,
-      inverted: true,
-    });
-    cropClipRef.current = clipRect;
+    // Register after:render callback to draw overlay + grid natively
+    const renderCallback = () => drawCropOverlay(canvas);
+    cropRenderCallbackRef.current = renderCallback;
+    canvas.on("after:render", renderCallback);
 
-    const overlay = new fabric.Rect({
-      left: 0,
-      top: 0,
-      width: cw,
-      height: ch,
-      fill: "rgba(0, 0, 0, 0.5)",
-      stroke: "",
-      strokeWidth: 0,
-      selectable: false,
-      evented: false,
-      excludeFromExport: true,
-      objectCaching: false,
-      clipPath: clipRect,
-    });
-    cropOverlayRef.current = overlay;
-
-    // Create 4 grid lines (rule of thirds)
-    const gridProps = {
-      stroke: "rgba(255, 255, 255, 0.5)",
-      strokeWidth: 1,
-      selectable: false,
-      evented: false,
-      excludeFromExport: true,
-    };
-    const gridLines = [
-      new fabric.Line([0, 0, 0, 0], gridProps), // vertical 1
-      new fabric.Line([0, 0, 0, 0], gridProps), // vertical 2
-      new fabric.Line([0, 0, 0, 0], gridProps), // horizontal 1
-      new fabric.Line([0, 0, 0, 0], gridProps), // horizontal 2
-    ];
-    cropGridLinesRef.current = gridLines;
-
-    // Add to canvas in order: overlay, grid, crop rect on top
-    canvas.add(overlay);
-    gridLines.forEach((l) => canvas.add(l));
+    // Add crop rect to canvas
     canvas.add(cropRect);
     canvas.setActiveObject(cropRect);
-
-    // Position overlays and grid
-    updateCropOverlay(canvas);
+    canvas.renderAll();
 
     // Listen for crop rect movement/scaling
     canvas.on("object:moving", handleCropObjMove);
@@ -694,7 +658,7 @@ export default function PhotoAnnotator({
     });
     cropRect.setCoords();
     canvas.setActiveObject(cropRect);
-    updateCropOverlay(canvas);
+    canvas.renderAll();
   }
 
   async function handleApplyCrop() {
