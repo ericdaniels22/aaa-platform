@@ -153,8 +153,7 @@ export default function PhotoAnnotator({
     }
 
     function onSelected(e: any) {
-      console.log("onSelected:", e.target?.type, "_parentArrow:", !!e.target?._parentArrow, "selectable:", e.target?.selectable);
-      const target = e.target;
+      const target = e.selected?.[0] || e.target;
       const ap = getArrowPath(target);
 
       if (ap) {
@@ -189,7 +188,6 @@ export default function PhotoAnnotator({
     }
 
     function onDeselected() {
-      console.log("onDeselected fired");
       setTimeout(() => {
         const active = canvas.getActiveObject();
         if (!active || !getArrowPath(active)) {
@@ -466,6 +464,11 @@ export default function PhotoAnnotator({
       sh._arrowPath = newPath;
       eh._arrowPath = newPath;
       canvas.insertAt(canvas.getObjects().indexOf(sh), newPath);
+      // Keep label on top so it's clickable above the path
+      if (existingLabel) {
+        const objs = canvas.getObjects();
+        canvas.moveObjectTo(existingLabel, objs.length - 1);
+      }
       return newPath;
     }
 
@@ -583,6 +586,9 @@ export default function PhotoAnnotator({
       (label as any)._parentArrow = arrowPath;
     }
     canvas.add(label);
+    // Ensure label is on top of the arrow path so it's clickable
+    const objs = canvas.getObjects();
+    canvas.moveObjectTo(label, objs.length - 1);
     canvas.setActiveObject(label);
     label.enterEditing();
     label.selectAll();
@@ -651,7 +657,6 @@ export default function PhotoAnnotator({
       canvas.isDrawingMode = false;
       canvas.selection = true;
       canvas.forEachObject((obj: any) => {
-        console.log("forEachObject setting:", obj.type, "_parentArrow:", !!obj._parentArrow, "visible:", obj.visible, "selectable:", obj.selectable);
         obj.selectable = true;
         obj.evented = true;
         // Arrow paths: no bounding box but still draggable
@@ -669,7 +674,6 @@ export default function PhotoAnnotator({
       });
       // Detect arrow path clicks in select mode too
       canvas.on("mouse:down", (opt: any) => {
-        console.log("SELECT mouse:down target:", opt.target?.type, "_isArrow:", opt.target?._isArrow, "_arrowRole:", opt.target?._arrowRole, "_parentArrow:", !!opt.target?._parentArrow, "selectable:", opt.target?.selectable, "evented:", opt.target?.evented);
         const target = opt.target;
         if (target?._isArrow) {
           if (target._startHandle) { target._startHandle.visible = true; target._startHandle.setCoords(); }
@@ -729,7 +733,6 @@ export default function PhotoAnnotator({
       canvas.selection = false;
 
       canvas.on("mouse:down", (opt: any) => {
-        console.log("ARROW mouse:down target:", opt.target?.type, "_isArrow:", opt.target?._isArrow, "_arrowRole:", opt.target?._arrowRole, "_parentArrow:", !!opt.target?._parentArrow, "selectable:", opt.target?.selectable, "evented:", opt.target?.evented);
         const target = opt.target;
         // If clicking an arrow path or handle, activate it for editing
         if (target?._isArrow || target?._arrowRole) {
