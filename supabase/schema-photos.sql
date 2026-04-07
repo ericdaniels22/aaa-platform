@@ -145,3 +145,10 @@ CREATE INDEX idx_photo_tag_assignments_photo_id ON photo_tag_assignments(photo_i
 CREATE INDEX idx_photo_tag_assignments_tag_id ON photo_tag_assignments(tag_id);
 CREATE INDEX idx_photo_annotations_photo_id ON photo_annotations(photo_id);
 CREATE INDEX idx_photo_reports_job_id ON photo_reports(job_id);
+
+-- ============================================
+-- STORAGE BUCKET FOR REPORT PDFs
+-- ============================================
+-- Run this in the Supabase SQL Editor to create the reports bucket:
+--   INSERT INTO storage.buckets (id, name, public) VALUES ('reports', 'reports', true);
+--   CREATE POLICY "Allow all on reports bucket" ON storage.objects FOR ALL USING (bucket_id = 'reports') WITH CHECK (bucket_id = 'reports');

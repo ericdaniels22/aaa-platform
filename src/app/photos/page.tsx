@@ -12,6 +12,7 @@ import {
   Calendar,
   MapPin,
   Filter,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -217,7 +218,7 @@ export default function PhotosPage() {
             >
               <div className="aspect-square bg-gray-100 relative overflow-hidden">
                 <img
-                  src={getPublicUrl(photo.storage_path)}
+                  src={getPublicUrl(photo.annotated_path || photo.storage_path)}
                   alt={photo.caption || "Job photo"}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                 />
@@ -232,6 +233,12 @@ export default function PhotosPage() {
                   >
                     {photo.before_after_role === "before" ? "Before" : "After"}
                   </Badge>
+                )}
+                {photo.annotated_path && (
+                  <div className="absolute bottom-2 right-2 bg-black/60 rounded px-1.5 py-0.5 flex items-center gap-1">
+                    <Pencil size={10} className="text-white" />
+                    <span className="text-[10px] text-white font-medium">Edited</span>
+                  </div>
                 )}
               </div>
               <div className="p-3">

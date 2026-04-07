@@ -177,7 +177,7 @@ function StatCard({
 }: {
   label: string;
   value: number;
-  icon: React.ComponentType<{ size?: number }>;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
   accent: string;
 }) {
   return (

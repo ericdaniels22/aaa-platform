@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
-import { Job, JobActivity, Payment, Photo, PhotoTag } from "@/lib/types";
+import { Job, JobActivity, Payment, Photo, PhotoTag, PhotoReport, Email } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import ActivityTimeline from "@/components/activity-timeline";
 import RecordPaymentModal from "@/components/record-payment";
 import PhotoUploadModal from "@/components/photo-upload";
 import PhotoDetailModal from "@/components/photo-detail";
 import PhotoAnnotator from "@/components/photo-annotator";
+import ComposeEmailModal from "@/components/compose-email";
 import {
   MapPin,
   Home,
@@ -24,6 +25,10 @@ import {
   Droplets,
   Camera,
   Image as ImageIcon,
+  Pencil,
+  Inbox,
+  Send,
+  Clock,
 } from "lucide-react";
 import {
   statusColors,
@@ -51,6 +56,11 @@ export default function JobDetail({ jobId }: { jobId: string }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [tags, setTags] = useState<PhotoTag[]>([]);
+  const [reports, setReports] = useState<PhotoReport[]>([]);
+  const [emails, setEmails] = useState<Email[]>([]);
+  const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeDefaults, setComposeDefaults] = useState({ to: "", subject: "", replyToMessageId: "" });
   const [loading, setLoading] = useState(true);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [photoUploadOpen, setPhotoUploadOpen] = useState(false);
@@ -64,7 +74,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
   const fetchData = useCallback(async () => {
     const supabase = createClient();
 
-    const [jobRes, activitiesRes, paymentsRes, photosRes, tagsRes] = await Promise.all([
+    const [jobRes, activitiesRes, paymentsRes, photosRes, tagsRes, reportsRes, emailsRes] = await Promise.all([
       supabase
         .from("jobs")
         .select("*, contact:contacts!contact_id(*), adjuster:contacts!adjuster_contact_id(*)")
@@ -86,6 +96,16 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         .eq("job_id", jobId)
         .order("created_at", { ascending: false }),
       supabase.from("photo_tags").select("*").order("name"),
+      supabase
+        .from("photo_reports")
+        .select("*")
+        .eq("job_id", jobId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("emails")
+        .select("*")
+        .eq("job_id", jobId)
+        .order("received_at", { ascending: false }),
     ]);
 
     if (jobRes.data) setJob(jobRes.data as Job);
@@ -93,6 +113,8 @@ export default function JobDetail({ jobId }: { jobId: string }) {
     if (paymentsRes.data) setPayments(paymentsRes.data as Payment[]);
     if (photosRes.data) setPhotos(photosRes.data as Photo[]);
     if (tagsRes.data) setTags(tagsRes.data as PhotoTag[]);
+    if (reportsRes.data) setReports(reportsRes.data as PhotoReport[]);
+    if (emailsRes.data) setEmails(emailsRes.data as Email[]);
     setLoading(false);
   }, [jobId]);
 
@@ -424,12 +446,23 @@ export default function JobDetail({ jobId }: { jobId: string }) {
             <Camera size={16} className="inline mr-2 -mt-0.5" />
             Photos ({photos.length})
           </h3>
-          <button
-            onClick={() => setPhotoUploadOpen(true)}
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 bg-[#1B2434] hover:bg-[#2a3a52] text-white transition-colors"
-          >
-            + Upload Photos
-          </button>
+          <div className="flex gap-2">
+            {photos.length > 0 && (
+              <Link
+                href={`/reports/new?jobId=${jobId}`}
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 border border-gray-200 bg-white text-[#2B5EA7] hover:bg-[#E8F0FE] transition-colors gap-1.5"
+              >
+                <FileText size={14} />
+                Generate Report
+              </Link>
+            )}
+            <button
+              onClick={() => setPhotoUploadOpen(true)}
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 bg-[#1B2434] hover:bg-[#2a3a52] text-white transition-colors"
+            >
+              + Upload Photos
+            </button>
+          </div>
         </div>
         <PhotoUploadModal
           open={photoUploadOpen}
@@ -455,7 +488,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
                 className="aspect-square bg-gray-100 rounded-lg overflow-hidden relative group text-left"
               >
                 <img
-                  src={`${supabaseUrl}/storage/v1/object/public/photos/${photo.storage_path}`}
+                  src={`${supabaseUrl}/storage/v1/object/public/photos/${photo.annotated_path || photo.storage_path}`}
                   alt={photo.caption || "Job photo"}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                 />
@@ -478,6 +511,12 @@ export default function JobDetail({ jobId }: { jobId: string }) {
                     {photo.before_after_role === "before" ? "Before" : "After"}
                   </Badge>
                 )}
+                {photo.annotated_path && (
+                  <div className="absolute bottom-2 right-2 bg-black/60 rounded px-1.5 py-0.5 flex items-center gap-1">
+                    <Pencil size={10} className="text-white" />
+                    <span className="text-[10px] text-white font-medium">Edited</span>
+                  </div>
+                )}
               </button>
             ))}
           </div>
@@ -492,7 +531,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         allTags={tags}
         photoUrl={
           selectedPhoto
-            ? `${supabaseUrl}/storage/v1/object/public/photos/${selectedPhoto.storage_path}`
+            ? `${supabaseUrl}/storage/v1/object/public/photos/${selectedPhoto.annotated_path || selectedPhoto.storage_path}`
             : ""
         }
         onUpdated={() => {
@@ -515,10 +554,135 @@ export default function JobDetail({ jobId }: { jobId: string }) {
             setAnnotatorUrl("");
           }
         }}
-        photo={annotatorPhoto}
-        photoUrl={annotatorUrl}
+        photos={photos}
+        initialPhotoIndex={photos.findIndex((p) => p.id === annotatorPhoto?.id)}
         onSaved={fetchData}
       />
+
+      {/* Reports */}
+      {reports.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-[#1A1A1A]">
+              <FileText size={16} className="inline mr-2 -mt-0.5" />
+              Reports ({reports.length})
+            </h3>
+            <Link
+              href={`/reports/new?jobId=${jobId}`}
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 border border-gray-200 bg-white text-[#2B5EA7] hover:bg-[#E8F0FE] transition-colors gap-1.5"
+            >
+              <FileText size={14} />
+              New Report
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {reports.map((report) => (
+              <Link
+                key={report.id}
+                href={`/reports/${report.id}`}
+                className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50/50 transition-all"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={cn(
+                      "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+                      report.status === "generated"
+                        ? "bg-[#0F6E56]/10"
+                        : "bg-[#6C5CE7]/10"
+                    )}
+                  >
+                    <FileText
+                      size={14}
+                      className={
+                        report.status === "generated"
+                          ? "text-[#0F6E56]"
+                          : "text-[#6C5CE7]"
+                      }
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#1A1A1A] truncate">
+                      {report.title}
+                    </p>
+                    <p className="text-xs text-[#999999]">
+                      {format(new Date(report.report_date), "MMM d, yyyy")}
+                    </p>
+                  </div>
+                </div>
+                <Badge
+                  className={cn(
+                    "text-[10px] px-1.5 py-0 rounded capitalize flex-shrink-0",
+                    report.status === "generated"
+                      ? "bg-[#E1F5EE] text-[#085041]"
+                      : "bg-[#F3F0FF] text-[#5B4DB5]"
+                  )}
+                >
+                  {report.status}
+                </Badge>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Emails */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-[#1A1A1A]">
+            <Mail size={16} className="inline mr-2 -mt-0.5" />
+            Emails ({emails.length})
+          </h3>
+          <button
+            onClick={() => {
+              const defaultTo = job.contact?.email || job.adjuster?.email || "";
+              const defaultSubject = job.job_number ? `Re: ${job.job_number}` : "";
+              setComposeDefaults({ to: defaultTo, subject: defaultSubject, replyToMessageId: "" });
+              setComposeOpen(true);
+            }}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 bg-[#2B5EA7] hover:bg-[#234b87] text-white transition-colors gap-1.5"
+          >
+            <Send size={14} />
+            Send Email
+          </button>
+        </div>
+        <ComposeEmailModal
+          open={composeOpen}
+          onOpenChange={setComposeOpen}
+          jobId={jobId}
+          defaultTo={composeDefaults.to}
+          defaultSubject={composeDefaults.subject}
+          replyToMessageId={composeDefaults.replyToMessageId || undefined}
+          onSent={fetchData}
+        />
+        {emails.length > 0 && (
+          <div className="space-y-2">
+            {emails.map((email) => (
+              <EmailRow
+                key={email.id}
+                email={email}
+                isExpanded={expandedEmailId === email.id}
+                onToggle={() => setExpandedEmailId(expandedEmailId === email.id ? null : email.id)}
+                onReply={() => {
+                  const isSent = email.folder === "sent" || email.folder === "drafts";
+                  const replyTo = isSent ? (email.to_addresses?.[0]?.email || "") : email.from_address;
+                  const replySubject = email.subject.startsWith("Re:") ? email.subject : "Re: " + email.subject;
+                  setComposeDefaults({ to: replyTo, subject: replySubject, replyToMessageId: email.message_id });
+                  setComposeOpen(true);
+                }}
+              />
+            ))}
+          </div>
+        )}
+        {emails.length === 0 && (
+          <div className="text-center py-6">
+            <Mail size={32} className="mx-auto text-[#CCCCCC] mb-2" />
+            <p className="text-sm text-[#999999]">No emails linked to this job yet.</p>
+            <p className="text-xs text-[#BBBBBB] mt-1">
+              Sync your email or send one using the button above.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Activity Timeline */}
       <ActivityTimeline
@@ -546,6 +710,92 @@ function InfoRow({
         <p className="text-xs text-[#999999]">{label}</p>
         <p className="text-[#1A1A1A]">{value}</p>
       </div>
+    </div>
+  );
+}
+
+function EmailRow({
+  email,
+  isExpanded,
+  onToggle,
+  onReply,
+}: {
+  email: Email;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onReply: () => void;
+}) {
+  const isSent = email.folder === "sent" || email.folder === "drafts";
+  const toLine = (email.to_addresses || []).map((a) => a.name || a.email).join(", ");
+
+  const directionIcon = isSent
+    ? <Send size={14} className="text-[#0F6E56]" />
+    : <Inbox size={14} className="text-[#2B5EA7]" />;
+
+  const iconBg = isSent ? "bg-[#0F6E56]/10" : "bg-[#2B5EA7]/10";
+  const folderBadge = isSent ? "bg-[#E1F5EE] text-[#085041]" : "bg-[#E6F1FB] text-[#0C447C]";
+
+  const fromDisplay = isSent
+    ? "To: " + toLine
+    : "From: " + (email.from_name || email.from_address);
+
+  const fullFrom = email.from_name
+    ? email.from_name + " (" + email.from_address + ")"
+    : email.from_address;
+
+  return (
+    <div className="border border-gray-100 rounded-lg overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-start gap-3 p-3 hover:bg-gray-50/50 transition-colors text-left"
+      >
+        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5", iconBg)}>
+          {directionIcon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className={cn("text-sm font-medium text-[#1A1A1A] truncate", !email.is_read && "font-bold")}>
+              {email.subject || "(No Subject)"}
+            </p>
+            <Badge className={cn("text-[10px] px-1.5 py-0 rounded flex-shrink-0", folderBadge)}>
+              {email.folder}
+            </Badge>
+            {email.matched_by && (
+              <Badge className="text-[10px] px-1.5 py-0 rounded bg-gray-100 text-[#666] flex-shrink-0">
+                {email.matched_by}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-xs text-[#666666] truncate">{fromDisplay}</p>
+            <span className="text-xs text-[#999999] flex items-center gap-1 flex-shrink-0">
+              <Clock size={10} />
+              {format(new Date(email.received_at), "MMM d, h:mm a")}
+            </span>
+          </div>
+          {!isExpanded && email.snippet && (
+            <p className="text-xs text-[#999999] mt-1 line-clamp-1">{email.snippet}</p>
+          )}
+        </div>
+      </button>
+      {isExpanded && (
+        <div className="px-3 pb-3 pt-0 border-t border-gray-100">
+          <div className="mt-3 text-xs text-[#666666] space-y-1 mb-3">
+            <p><span className="font-medium text-[#333]">From:</span> {fullFrom}</p>
+            <p><span className="font-medium text-[#333]">To:</span> {toLine}</p>
+            <p><span className="font-medium text-[#333]">Date:</span> {format(new Date(email.received_at), "EEEE, MMM d, yyyy 'at' h:mm a")}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3 text-sm text-[#333] whitespace-pre-wrap leading-relaxed max-h-80 overflow-y-auto">
+            {email.body_text || email.snippet || "(No content)"}
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); onReply(); }}
+            className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-[#2B5EA7] hover:underline"
+          >
+            <Send size={12} /> Reply
+          </button>
+        </div>
+      )}
     </div>
   );
 }

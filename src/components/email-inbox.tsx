@@ -1,0 +1,668 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { format, isToday, isYesterday } from "date-fns";
+import {
+  Inbox,
+  Send,
+  FileEdit,
+  Trash2,
+  Archive,
+  AlertCircle,
+  Star,
+  Search,
+  RefreshCw,
+  Paperclip,
+  Briefcase,
+  MailPlus,
+  MailCheck,
+  ChevronDown,
+  Settings,
+} from "lucide-react";
+import { toast } from "sonner";
+import type { Email, EmailAccount } from "@/lib/types";
+import EmailReader from "@/components/email-reader";
+import ComposeEmailModal from "@/components/compose-email";
+
+interface FolderCounts {
+  [key: string]: { total: number; unread: number };
+}
+
+interface ListResponse {
+  emails: Email[];
+  total: number;
+  page: number;
+  hasMore: boolean;
+}
+
+const FOLDERS = [
+  { key: "inbox", label: "Inbox", icon: Inbox },
+  { key: "sent", label: "Sent", icon: Send },
+  { key: "drafts", label: "Drafts", icon: FileEdit },
+  { key: "trash", label: "Trash", icon: Trash2 },
+  { key: "archive", label: "Archive", icon: Archive },
+  { key: "spam", label: "Spam", icon: AlertCircle },
+  { key: "starred", label: "Starred", icon: Star },
+];
+
+function formatEmailDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  if (isToday(date)) return format(date, "h:mm a");
+  if (isYesterday(date)) return "Yesterday";
+  return format(date, "MMM d");
+}
+
+export default function EmailInbox() {
+  const [folder, setFolder] = useState("inbox");
+  const [emails, setEmails] = useState<Email[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [searchDebounced, setSearchDebounced] = useState("");
+
+  const [accounts, setAccounts] = useState<EmailAccount[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [counts, setCounts] = useState<FolderCounts>({});
+
+  const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+
+  // Compose state
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeMode, setComposeMode] = useState<"compose" | "reply" | "forward">("compose");
+  const [replyTo, setReplyTo] = useState<{
+    to: string;
+    cc: string;
+    bcc: string;
+    subject: string;
+    body: string;
+    messageId: string;
+    jobId: string;
+    draftId?: string;
+    accountId?: string;
+  } | null>(null);
+
+  // Load accounts on mount
+  useEffect(() => {
+    fetch("/api/email/accounts")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          const active = data.filter((a: EmailAccount) => a.is_active);
+          setAccounts(active);
+        }
+      });
+  }, []);
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchDebounced(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Load emails when folder, account, search, or page changes
+  const loadEmails = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (folder === "starred") {
+        params.set("starred", "true");
+      } else {
+        params.set("folder", folder);
+      }
+      if (selectedAccountId) params.set("accountId", selectedAccountId);
+      if (searchDebounced) params.set("search", searchDebounced);
+      params.set("page", page.toString());
+
+      const res = await fetch(`/api/email/list?${params}`);
+      const data: ListResponse = await res.json();
+      setEmails(data.emails);
+      setTotal(data.total);
+      setHasMore(data.hasMore);
+    } catch {
+      toast.error("Failed to load emails");
+    }
+    setLoading(false);
+  }, [folder, selectedAccountId, searchDebounced, page]);
+
+  useEffect(() => {
+    loadEmails();
+  }, [loadEmails]);
+
+  // Load folder counts
+  const loadCounts = useCallback(async () => {
+    try {
+      const params = selectedAccountId
+        ? `?accountId=${selectedAccountId}`
+        : "";
+      const res = await fetch(`/api/email/counts${params}`);
+      const data = await res.json();
+      setCounts(data);
+    } catch {
+      // silent
+    }
+  }, [selectedAccountId]);
+
+  useEffect(() => {
+    loadCounts();
+  }, [loadCounts]);
+
+  // Sync all accounts
+  async function handleSync() {
+    if (syncing) return;
+    setSyncing(true);
+    const toSync = selectedAccountId
+      ? accounts.filter((a) => a.id === selectedAccountId)
+      : accounts;
+
+    let totalSynced = 0;
+    for (const acc of toSync) {
+      try {
+        const res = await fetch("/api/email/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accountId: acc.id }),
+        });
+        const data = await res.json();
+        totalSynced += data.total_synced || 0;
+      } catch {
+        toast.error(`Sync failed for ${acc.label}`);
+      }
+    }
+
+    toast.success(`Synced ${totalSynced} new email${totalSynced !== 1 ? "s" : ""}`);
+    setSyncing(false);
+    loadEmails();
+    loadCounts();
+  }
+
+  // Mark all as read
+  async function handleMarkAllRead() {
+    try {
+      await fetch("/api/email/mark-all-read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          folder,
+          accountId: selectedAccountId || undefined,
+        }),
+      });
+      setEmails((prev) => prev.map((e) => ({ ...e, is_read: true })));
+      loadCounts();
+      toast.success("All marked as read");
+    } catch {
+      toast.error("Failed to mark all as read");
+    }
+  }
+
+  // Toggle star
+  async function handleStarToggle(id: string, starred: boolean) {
+    await fetch(`/api/email/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_starred: starred }),
+    });
+    setEmails((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, is_starred: starred } : e))
+    );
+    loadCounts();
+  }
+
+  // Mark read/unread
+  async function handleReadToggle(id: string, read: boolean) {
+    await fetch(`/api/email/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_read: read }),
+    });
+    setEmails((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, is_read: read } : e))
+    );
+    loadCounts();
+  }
+
+  // Open email (or resume draft)
+  function handleSelectEmail(email: Email) {
+    if (folder === "drafts") {
+      // Resume draft in compose modal
+      const toList = (email.to_addresses || []).map((a) => a.email).join(", ");
+      const ccList = (email.cc_addresses || []).map((a) => a.email).join(", ");
+      const bccList = (email.bcc_addresses || []).map((a) => a.email).join(", ");
+      setComposeMode("compose");
+      setReplyTo({
+        to: toList,
+        cc: ccList,
+        bcc: bccList,
+        subject: email.subject,
+        body: email.body_html || email.body_text || "",
+        messageId: email.thread_id || "",
+        jobId: email.job_id || "",
+        draftId: email.id,
+        accountId: email.account_id,
+      });
+      setComposeOpen(true);
+      return;
+    }
+    setSelectedEmailId(email.id);
+    if (!email.is_read) {
+      handleReadToggle(email.id, true);
+    }
+  }
+
+  // Build quoted HTML for reply/forward
+  function buildQuotedHtml(email: Email): string {
+    const date = format(new Date(email.received_at), "MMM d, yyyy 'at' h:mm a");
+    const from = email.from_name
+      ? `${email.from_name} &lt;${email.from_address}&gt;`
+      : email.from_address;
+    const originalBody = email.body_html || `<p>${(email.body_text || "").replace(/\n/g, "<br>")}</p>`;
+    return `<br><div style="border-left: 2px solid #ccc; padding-left: 12px; margin-left: 0; color: #666;">
+      <p style="margin: 0 0 8px; font-size: 12px;">On ${date}, ${from} wrote:</p>
+      ${originalBody}
+    </div>`;
+  }
+
+  // Reply
+  function handleReply(email: Email) {
+    setComposeMode("reply");
+    setReplyTo({
+      to: email.from_address,
+      cc: "",
+      subject: email.subject.startsWith("Re:") ? email.subject : `Re: ${email.subject}`,
+      body: buildQuotedHtml(email),
+      messageId: email.message_id,
+      jobId: email.job_id || "",
+      bcc: "",
+    });
+    setComposeOpen(true);
+  }
+
+  // Reply All
+  function handleReplyAll(email: Email) {
+    setComposeMode("reply");
+    // CC = original To + CC minus our own accounts
+    const ownEmails = new Set(accounts.map((a) => a.email_address.toLowerCase()));
+    const allRecipients = [
+      ...(email.to_addresses || []),
+      ...(email.cc_addresses || []),
+    ].filter((r) => !ownEmails.has(r.email.toLowerCase()) && r.email.toLowerCase() !== email.from_address.toLowerCase());
+    const ccList = allRecipients.map((r) => r.email).join(", ");
+
+    setReplyTo({
+      to: email.from_address,
+      cc: ccList,
+      bcc: "",
+      subject: email.subject.startsWith("Re:") ? email.subject : `Re: ${email.subject}`,
+      body: buildQuotedHtml(email),
+      messageId: email.message_id,
+      jobId: email.job_id || "",
+    });
+    setComposeOpen(true);
+  }
+
+  // Forward
+  function handleForward(email: Email) {
+    setComposeMode("forward");
+    setReplyTo({
+      to: "",
+      cc: "",
+      bcc: "",
+      subject: email.subject.startsWith("Fwd:") ? email.subject : `Fwd: ${email.subject}`,
+      body: buildQuotedHtml(email),
+      messageId: email.message_id,
+      jobId: email.job_id || "",
+    });
+    setComposeOpen(true);
+  }
+
+  // New compose
+  function handleCompose() {
+    setComposeMode("compose");
+    setReplyTo(null);
+    setComposeOpen(true);
+  }
+
+  function handleFolderChange(key: string) {
+    setFolder(key);
+    setPage(1);
+    setSelectedEmailId(null);
+  }
+
+  return (
+    <div className="h-[calc(100vh-2rem)] flex flex-col">
+      {/* Top bar */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 shrink-0">
+        <h1 className="text-lg font-bold text-[#333] mr-2">Email</h1>
+
+        {/* Account filter */}
+        <div className="relative">
+          <select
+            value={selectedAccountId}
+            onChange={(e) => {
+              setSelectedAccountId(e.target.value);
+              setPage(1);
+            }}
+            className="text-sm border border-gray-200 rounded-lg pl-3 pr-8 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 appearance-none"
+          >
+            <option value="">All Inboxes</option>
+            {accounts.map((acc) => (
+              <option key={acc.id} value={acc.id}>
+                {acc.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={14}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#999] pointer-events-none"
+          />
+        </div>
+
+        {/* Search */}
+        <div className="flex-1 max-w-md relative">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]"
+          />
+          <input
+            type="text"
+            placeholder="Search emails..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            onClick={handleSync}
+            disabled={syncing || accounts.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#666] border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            <RefreshCw
+              size={14}
+              className={syncing ? "animate-spin" : ""}
+            />
+            {syncing ? "Syncing..." : "Sync"}
+          </button>
+          <button
+            onClick={handleCompose}
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-[#2B5EA7] text-white rounded-lg text-sm font-medium hover:bg-[#234b87]"
+          >
+            <MailPlus size={14} />
+            Compose
+          </button>
+          <a
+            href="/settings/email"
+            className="p-1.5 text-[#999] hover:text-[#666] hover:bg-gray-100 rounded"
+            title="Email Settings"
+          >
+            <Settings size={16} />
+          </a>
+        </div>
+      </div>
+
+      {/* 3-column layout */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Column 1: Folder sidebar */}
+        <div className="w-52 border-r border-gray-200 bg-gray-50/50 shrink-0 flex flex-col">
+          <nav className="flex-1 py-2">
+            {FOLDERS.map(({ key, label, icon: Icon }) => {
+              const isActive = folder === key;
+              const unread = counts[key]?.unread || 0;
+              const total2 = counts[key]?.total || 0;
+
+              return (
+                <button
+                  key={key}
+                  onClick={() => handleFolderChange(key)}
+                  className={`w-full flex items-center gap-2.5 px-4 py-2 text-sm transition-colors ${
+                    isActive
+                      ? "bg-[#2B5EA7]/10 text-[#2B5EA7] font-medium"
+                      : "text-[#666] hover:bg-gray-100"
+                  }`}
+                >
+                  <Icon size={16} />
+                  <span className="flex-1 text-left">{label}</span>
+                  {key === "starred" && total2 > 0 && (
+                    <span className="text-xs text-[#999]">{total2}</span>
+                  )}
+                  {key !== "starred" && unread > 0 && (
+                    <span className="text-xs font-bold text-[#2B5EA7] bg-[#2B5EA7]/10 rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                      {unread}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Column 2: Email list */}
+        <div
+          className={`w-96 border-r border-gray-200 flex flex-col bg-white shrink-0 ${
+            selectedEmailId ? "hidden lg:flex" : "flex"
+          }`}
+        >
+          {/* List header */}
+          <div className="px-4 py-2 border-b border-gray-100 text-xs text-[#999] flex items-center justify-between">
+            <span>
+              {total} email{total !== 1 ? "s" : ""}
+              {folder !== "starred" && counts[folder]?.unread
+                ? ` (${counts[folder].unread} unread)`
+                : ""}
+            </span>
+            <div className="flex items-center gap-2">
+              {counts[folder]?.unread > 0 && (
+                <button
+                  onClick={handleMarkAllRead}
+                  className="flex items-center gap-1 text-[#2B5EA7] hover:underline"
+                  title="Mark all as read"
+                >
+                  <MailCheck size={12} />
+                  Mark all read
+                </button>
+              )}
+            {hasMore && (
+              <button
+                onClick={() => setPage((p) => p + 1)}
+                className="text-[#2B5EA7] hover:underline"
+              >
+                Load more
+              </button>
+            )}
+            </div>
+          </div>
+
+          {/* Email rows */}
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="flex items-center justify-center py-12 text-[#999] text-sm">
+                Loading...
+              </div>
+            ) : emails.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-[#999]">
+                <Inbox size={32} className="mb-2 opacity-40" />
+                <p className="text-sm">No emails</p>
+              </div>
+            ) : (
+              emails.map((email) => (
+                <EmailRow
+                  key={email.id}
+                  email={email}
+                  isSelected={email.id === selectedEmailId}
+                  folder={folder}
+                  onSelect={() => handleSelectEmail(email)}
+                  onStar={() =>
+                    handleStarToggle(email.id, !email.is_starred)
+                  }
+                />
+              ))
+            )}
+
+            {/* Pagination */}
+            {!loading && total > 50 && (
+              <div className="flex items-center justify-center gap-2 py-3 border-t border-gray-100">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="px-3 py-1 text-xs border border-gray-200 rounded disabled:opacity-30 hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-[#999]">Page {page}</span>
+                <button
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={!hasMore}
+                  className="px-3 py-1 text-xs border border-gray-200 rounded disabled:opacity-30 hover:bg-gray-50"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Column 3: Reading pane */}
+        <div
+          className={`flex-1 bg-gray-50 ${
+            selectedEmailId ? "flex" : "hidden lg:flex"
+          }`}
+        >
+          {selectedEmailId ? (
+            <EmailReader
+              emailId={selectedEmailId}
+              onBack={() => setSelectedEmailId(null)}
+              onReply={handleReply}
+              onReplyAll={handleReplyAll}
+              onForward={handleForward}
+              onStarToggle={handleStarToggle}
+            />
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-[#999]">
+              <Inbox size={48} className="mb-3 opacity-30" />
+              <p className="text-sm">Select an email to read</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Compose modal */}
+      <ComposeEmailModal
+        open={composeOpen}
+        onOpenChange={setComposeOpen}
+        mode={composeMode}
+        jobId={replyTo?.jobId || ""}
+        draftId={replyTo?.draftId}
+        defaultTo={replyTo?.to || ""}
+        defaultCc={replyTo?.cc || ""}
+        defaultBcc={replyTo?.bcc || ""}
+        defaultSubject={replyTo?.subject || ""}
+        defaultBody={replyTo?.body || ""}
+        defaultAccountId={replyTo?.accountId}
+        replyToMessageId={replyTo?.messageId}
+        onSent={() => {
+          loadEmails();
+          loadCounts();
+        }}
+      />
+    </div>
+  );
+}
+
+// Email row component
+function EmailRow({
+  email,
+  isSelected,
+  folder,
+  onSelect,
+  onStar,
+}: {
+  email: Email;
+  isSelected: boolean;
+  folder: string;
+  onSelect: () => void;
+  onStar: () => void;
+}) {
+  // Show recipient for sent/drafts, sender for everything else
+  const isSentView = folder === "sent" || folder === "drafts";
+  const displayName = isSentView
+    ? email.to_addresses?.[0]?.name || email.to_addresses?.[0]?.email || "Unknown"
+    : email.from_name || email.from_address;
+
+  return (
+    <div
+      onClick={onSelect}
+      className={`flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-gray-50 transition-colors ${
+        isSelected
+          ? "bg-[#2B5EA7]/5 border-l-2 border-l-[#2B5EA7]"
+          : email.is_read
+          ? "hover:bg-gray-50"
+          : "bg-blue-50/30 hover:bg-blue-50/50"
+      }`}
+    >
+      {/* Star */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onStar();
+        }}
+        className="mt-0.5 shrink-0"
+      >
+        <Star
+          size={14}
+          className={
+            email.is_starred
+              ? "fill-yellow-400 text-yellow-400"
+              : "text-gray-300 hover:text-gray-400"
+          }
+        />
+      </button>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span
+            className={`text-sm truncate ${
+              email.is_read ? "text-[#666]" : "font-semibold text-[#333]"
+            }`}
+          >
+            {displayName}
+          </span>
+          <span className="text-xs text-[#999] shrink-0 ml-auto">
+            {formatEmailDate(email.received_at)}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span
+            className={`text-sm truncate ${
+              email.is_read ? "text-[#999]" : "text-[#333]"
+            }`}
+          >
+            {email.subject || "(no subject)"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-xs text-[#bbb] truncate flex-1">
+            {email.snippet}
+          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {email.has_attachments && (
+              <Paperclip size={12} className="text-[#bbb]" />
+            )}
+            {email.job && (
+              <span className="flex items-center gap-0.5 text-[10px] bg-blue-50 text-[#2B5EA7] px-1.5 py-0.5 rounded">
+                <Briefcase size={10} />
+                {email.job.job_number}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

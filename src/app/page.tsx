@@ -2,23 +2,24 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase";
-import { Briefcase, FileText, CalendarDays } from "lucide-react";
+import { Briefcase, FileText, CalendarDays, Camera } from "lucide-react";
 import Link from "next/link";
 import { Job } from "@/lib/types";
 import JobCard from "@/components/job-card";
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState({ active: 0, pendingInvoice: 0, thisMonth: 0 });
+  const [stats, setStats] = useState({ active: 0, pendingInvoice: 0, thisMonth: 0, reports: 0 });
   const [recentJobs, setRecentJobs] = useState<Job[]>([]);
 
   useEffect(() => {
     async function load() {
       const supabase = createClient();
 
-      // Fetch all jobs for stats
-      const { data: allJobs } = await supabase
-        .from("jobs")
-        .select("status, urgency, created_at");
+      // Fetch all jobs + report count for stats
+      const [{ data: allJobs }, { count: reportCount }] = await Promise.all([
+        supabase.from("jobs").select("status, urgency, created_at"),
+        supabase.from("photo_reports").select("*", { count: "exact", head: true }),
+      ]);
 
       if (allJobs) {
         const now = new Date();
@@ -33,6 +34,7 @@ export default function DashboardPage() {
           thisMonth: allJobs.filter(
             (j) => new Date(j.created_at) >= monthStart
           ).length,
+          reports: reportCount ?? 0,
         });
       }
 
@@ -59,7 +61,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         <StatCard
           label="Active Jobs"
           value={stats.active}
@@ -77,6 +79,12 @@ export default function DashboardPage() {
           value={stats.thisMonth}
           icon={CalendarDays}
           accent="border-l-[#2B5EA7]"
+        />
+        <StatCard
+          label="Reports"
+          value={stats.reports}
+          icon={Camera}
+          accent="border-l-[#C41E2A]"
         />
       </div>
 
@@ -119,7 +127,7 @@ function StatCard({
 }: {
   label: string;
   value: number;
-  icon: React.ComponentType<{ size?: number }>;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
   accent: string;
 }) {
   return (

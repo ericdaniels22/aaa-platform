@@ -1,0 +1,521 @@
+"use client";
+
+import { useState, useEffect, useMemo, useRef } from "react";
+import { flushSync } from "react-dom";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Loader2, Send, ChevronDown, ChevronUp, Paperclip, X, FileIcon, Save } from "lucide-react";
+import { toast } from "sonner";
+import TiptapEditor from "@/components/tiptap-editor";
+import EmailAddressInput, { EmailAddressInputHandle } from "@/components/email-address-input";
+
+interface EmailAccountData {
+  id: string;
+  label: string;
+  email_address: string;
+  display_name: string;
+  signature: string | null;
+  is_default: boolean;
+  is_active: boolean;
+}
+
+interface Recipient {
+  email: string;
+  name: string;
+}
+
+interface UploadedFile {
+  filename: string;
+  content_type: string;
+  file_size: number;
+  storage_path: string;
+}
+
+interface ComposeEmailProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  jobId?: string;
+  draftId?: string;
+  defaultTo?: string;
+  defaultCc?: string;
+  defaultBcc?: string;
+  defaultSubject?: string;
+  defaultBody?: string;
+  defaultAccountId?: string;
+  replyToMessageId?: string;
+  mode?: "compose" | "reply" | "forward";
+  onSent?: () => void;
+}
+
+export default function ComposeEmailModal({
+  open,
+  onOpenChange,
+  jobId,
+  draftId: initialDraftId,
+  defaultTo = "",
+  defaultCc = "",
+  defaultBcc = "",
+  defaultSubject = "",
+  defaultBody = "",
+  defaultAccountId,
+  replyToMessageId,
+  mode = "compose",
+  onSent,
+}: ComposeEmailProps) {
+  const [accounts, setAccounts] = useState<EmailAccountData[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [toRecipients, setToRecipients] = useState<Recipient[]>([]);
+  const [ccRecipients, setCcRecipients] = useState<Recipient[]>([]);
+  const [bccRecipients, setBccRecipients] = useState<Recipient[]>([]);
+  const [showCcBcc, setShowCcBcc] = useState(false);
+  const [subject, setSubject] = useState(defaultSubject);
+  const [bodyHtml, setBodyHtml] = useState("");
+  const [sending, setSending] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId || null);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [editorKey, setEditorKey] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const toRef = useRef<EmailAddressInputHandle>(null);
+  const ccRef = useRef<EmailAddressInputHandle>(null);
+  const bccRef = useRef<EmailAddressInputHandle>(null);
+
+  // Keep refs in sync so handleSend always reads current values
+  const toRecipientsRef = useRef(toRecipients);
+  toRecipientsRef.current = toRecipients;
+  const ccRecipientsRef = useRef(ccRecipients);
+  ccRecipientsRef.current = ccRecipients;
+  const bccRecipientsRef = useRef(bccRecipients);
+  bccRecipientsRef.current = bccRecipients;
+
+  const selectedAccount = useMemo(
+    () => accounts.find((a) => a.id === selectedAccountId),
+    [accounts, selectedAccountId]
+  );
+
+  // Build initial body with signature
+  function buildInitialBody(account: EmailAccountData | undefined, quotedHtml: string) {
+    let html = "";
+    if (quotedHtml) {
+      html = quotedHtml;
+    }
+    if (account?.signature) {
+      const sigHtml = account.signature.includes("<")
+        ? account.signature
+        : `<p>${account.signature.replace(/\n/g, "<br>")}</p>`;
+      html = `<p></p><br><div style="border-top: 1px solid #ccc; padding-top: 8px; margin-top: 16px; color: #666;">${sigHtml}</div>${html ? `<br>${html}` : ""}`;
+    }
+    return html;
+  }
+
+  useEffect(() => {
+    if (open) {
+      setSubject(defaultSubject);
+      setUploadedFiles([]);
+      setDraftId(initialDraftId || null);
+
+      // Set To recipients
+      if (defaultTo) {
+        const toEmails = defaultTo.split(",").map((e) => e.trim()).filter(Boolean);
+        setToRecipients(toEmails.map((email) => ({ email, name: "" })));
+      } else {
+        setToRecipients([]);
+      }
+
+      // Set CC recipients (for Reply All)
+      if (defaultCc) {
+        const ccEmails = defaultCc.split(",").map((e) => e.trim()).filter(Boolean);
+        setCcRecipients(ccEmails.map((email) => ({ email, name: "" })));
+        setShowCcBcc(true);
+      } else {
+        setCcRecipients([]);
+        setShowCcBcc(false);
+      }
+
+      // Set BCC recipients (for draft resume)
+      if (defaultBcc) {
+        const bccEmails = defaultBcc.split(",").map((e) => e.trim()).filter(Boolean);
+        setBccRecipients(bccEmails.map((email) => ({ email, name: "" })));
+        setShowCcBcc(true);
+      } else {
+        setBccRecipients([]);
+      }
+
+      // Fetch accounts
+      fetch("/api/email/accounts")
+        .then((res) => res.json())
+        .then((data) => {
+          if (!Array.isArray(data)) return;
+          const active = data.filter((a: EmailAccountData) => a.is_active);
+          setAccounts(active);
+
+          // Pick account: use defaultAccountId if provided, else default, else first
+          const defaultAcc = (defaultAccountId && active.find((a: EmailAccountData) => a.id === defaultAccountId))
+            || active.find((a: EmailAccountData) => a.is_default)
+            || active[0];
+          if (defaultAcc) {
+            setSelectedAccountId(defaultAcc.id);
+            setBodyHtml(buildInitialBody(defaultAcc, defaultBody));
+            setEditorKey((k) => k + 1);
+          }
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultTo, defaultCc, defaultBcc, defaultSubject, defaultBody, defaultAccountId, initialDraftId]);
+
+  // Handle file upload
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    for (const file of Array.from(files)) {
+      if (file.size > 25 * 1024 * 1024) {
+        toast.error(`${file.name} is too large (max 25MB)`);
+        continue;
+      }
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await fetch("/api/email/attachments/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setUploadedFiles((prev) => [...prev, data]);
+        } else {
+          toast.error(data.error || `Failed to upload ${file.name}`);
+        }
+      } catch {
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
+    setUploading(false);
+    // Reset the input so the same file can be selected again
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function removeFile(index: number) {
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  // Save draft
+  async function handleSaveDraft() {
+    if (!selectedAccountId) {
+      toast.error("No email account selected.");
+      return;
+    }
+    toRef.current?.flush();
+    ccRef.current?.flush();
+    bccRef.current?.flush();
+    const currentTo = toRecipientsRef.current;
+    const currentCc = ccRecipientsRef.current;
+    const currentBcc = bccRecipientsRef.current;
+
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = bodyHtml;
+    const bodyText = tempDiv.textContent || tempDiv.innerText || "";
+
+    setSavingDraft(true);
+    try {
+      const res = await fetch("/api/email/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draftId: draftId || undefined,
+          accountId: selectedAccountId,
+          to: currentTo.map((r) => r.email).join(", "),
+          cc: currentCc.length > 0 ? currentCc.map((r) => r.email).join(", ") : undefined,
+          bcc: currentBcc.length > 0 ? currentBcc.map((r) => r.email).join(", ") : undefined,
+          subject,
+          bodyText,
+          bodyHtml,
+          jobId: jobId || undefined,
+          replyToMessageId,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDraftId(data.id);
+        toast.success("Draft saved.");
+        onOpenChange(false);
+        onSent?.();
+      } else {
+        toast.error(data.error || "Failed to save draft.");
+      }
+    } catch {
+      toast.error("Failed to save draft.");
+    }
+    setSavingDraft(false);
+  }
+
+  // Update signature when account changes
+  function handleAccountChange(accountId: string) {
+    setSelectedAccountId(accountId);
+    const account = accounts.find((a) => a.id === accountId);
+    // Reset body with new signature (preserve user content before sig)
+    setBodyHtml(buildInitialBody(account, defaultBody));
+  }
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    // Commit any typed-but-uncommitted email addresses
+    toRef.current?.flush();
+    ccRef.current?.flush();
+    bccRef.current?.flush();
+
+    // Read from refs to get post-flush values (closures may be stale)
+    const currentTo = toRecipientsRef.current;
+    const currentCc = ccRecipientsRef.current;
+    const currentBcc = bccRecipientsRef.current;
+
+    if (!selectedAccountId || currentTo.length === 0 || !subject) {
+      toast.error("Please fill in To and Subject fields.");
+      return;
+    }
+
+    // Extract plain text from HTML for body_text
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = bodyHtml;
+    const bodyText = tempDiv.textContent || tempDiv.innerText || "";
+
+    if (!bodyText.trim()) {
+      toast.error("Please write a message.");
+      return;
+    }
+
+    setSending(true);
+    try {
+      const res = await fetch("/api/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: selectedAccountId,
+          jobId: jobId || undefined,
+          to: currentTo.map((r) => r.email).join(", "),
+          cc: currentCc.length > 0 ? currentCc.map((r) => r.email).join(", ") : undefined,
+          bcc: currentBcc.length > 0 ? currentBcc.map((r) => r.email).join(", ") : undefined,
+          subject,
+          body: bodyText,
+          bodyHtml,
+          replyToMessageId,
+          attachments: uploadedFiles.length > 0 ? uploadedFiles : undefined,
+          draftId: draftId || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Email sent successfully.");
+        onOpenChange(false);
+        onSent?.();
+      } else {
+        toast.error(data.error || "Failed to send email.");
+      }
+    } catch {
+      toast.error("Network error sending email.");
+    }
+    setSending(false);
+  }
+
+  const title =
+    mode === "reply" ? "Reply" : mode === "forward" ? "Forward" : "Compose Email";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSend} className="space-y-3">
+          {/* From account */}
+          <div>
+            <label className="block text-sm font-medium text-[#333] mb-1">
+              From
+            </label>
+            {accounts.length === 0 ? (
+              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
+                No email accounts configured.{" "}
+                <a href="/settings/email" className="underline font-medium">
+                  Add one in Settings.
+                </a>
+              </p>
+            ) : (
+              <select
+                value={selectedAccountId}
+                onChange={(e) => handleAccountChange(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 focus:border-[#2B5EA7]"
+              >
+                {accounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.display_name || acc.label} &lt;{acc.email_address}&gt;
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* To */}
+          <EmailAddressInput
+            ref={toRef}
+            label="To"
+            recipients={toRecipients}
+            onChange={setToRecipients}
+            placeholder="Type name or email..."
+          />
+
+          {/* CC/BCC toggle */}
+          <button
+            type="button"
+            onClick={() => setShowCcBcc(!showCcBcc)}
+            className="flex items-center gap-1 text-xs text-[#2B5EA7] hover:underline"
+          >
+            {showCcBcc ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            {showCcBcc ? "Hide CC/BCC" : "Add CC/BCC"}
+          </button>
+
+          {showCcBcc && (
+            <>
+              <EmailAddressInput
+                ref={ccRef}
+                label="CC"
+                recipients={ccRecipients}
+                onChange={setCcRecipients}
+                placeholder="Add CC recipients..."
+              />
+              <EmailAddressInput
+                ref={bccRef}
+                label="BCC"
+                recipients={bccRecipients}
+                onChange={setBccRecipients}
+                placeholder="Add BCC recipients..."
+              />
+            </>
+          )}
+
+          {/* Subject */}
+          <div>
+            <label className="block text-sm font-medium text-[#333] mb-1">
+              Subject
+            </label>
+            <Input
+              required
+              placeholder="Email subject"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+            />
+          </div>
+
+          {/* Rich text body */}
+          <div>
+            <label className="block text-sm font-medium text-[#333] mb-1">
+              Message
+            </label>
+            <TiptapEditor
+              key={editorKey}
+              content={bodyHtml}
+              onChange={setBodyHtml}
+              placeholder="Type your message..."
+            />
+          </div>
+
+          {/* Attachments */}
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+            {uploadedFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {uploadedFiles.map((f, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1.5 bg-gray-100 text-[#333] text-xs px-2.5 py-1.5 rounded-lg"
+                  >
+                    <FileIcon size={12} className="text-[#999] shrink-0" />
+                    <span className="truncate max-w-[180px]">{f.filename}</span>
+                    <span className="text-[#999]">
+                      ({(f.file_size / 1024).toFixed(0)}KB)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeFile(i)}
+                      className="hover:text-red-600 ml-0.5"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Signature preview */}
+          {selectedAccount?.signature && (
+            <p className="text-xs text-[#999]">
+              Signature from &quot;{selectedAccount.label}&quot; will be included.
+            </p>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              type="submit"
+              disabled={sending || uploading || accounts.length === 0}
+              className="px-5 py-2.5 bg-[#2B5EA7] text-white rounded-lg text-sm font-medium hover:bg-[#234b87] disabled:opacity-50 flex items-center gap-2"
+            >
+              {sending ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Send size={16} />
+              )}
+              Send Email
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-[#666666] hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {uploading ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Paperclip size={14} />
+              )}
+              Attach
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveDraft}
+              disabled={savingDraft || accounts.length === 0}
+              className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-[#666666] hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {savingDraft ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Save size={14} />
+              )}
+              Save Draft
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-[#666666] hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

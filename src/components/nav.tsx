@@ -9,6 +9,8 @@ import {
   Briefcase,
   Users,
   Camera,
+  FileText,
+  Mail,
   Menu,
   X,
 } from "lucide-react";
@@ -20,7 +22,9 @@ const navItems = [
   { href: "/intake", label: "New Intake", icon: ClipboardPlus },
   { href: "/jobs", label: "Jobs", icon: Briefcase },
   { href: "/photos", label: "Photos", icon: Camera },
+  { href: "/reports", label: "Reports", icon: FileText },
   { href: "/contacts", label: "Contacts", icon: Users },
+  { href: "/email", label: "Email", icon: Mail },
 ];
 
 export default function Sidebar() {

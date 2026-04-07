@@ -1,0 +1,561 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import {
+  Mail,
+  Plus,
+  Trash2,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Server,
+  ArrowLeft,
+  RefreshCw,
+  Pencil,
+  Check,
+  X,
+} from "lucide-react";
+import Link from "next/link";
+import { EMAIL_PROVIDERS } from "@/lib/types";
+
+interface EmailAccount {
+  id: string;
+  label: string;
+  email_address: string;
+  display_name: string;
+  provider: string;
+  signature: string | null;
+  imap_host: string;
+  imap_port: number;
+  smtp_host: string;
+  smtp_port: number;
+  username: string;
+  is_active: boolean;
+  is_default: boolean;
+  last_synced_at: string | null;
+  created_at: string;
+}
+
+export default function EmailSettingsPage() {
+  const [accounts, setAccounts] = useState<EmailAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, { imap: boolean; smtp: boolean; imapError: string; smtpError: string }>>({});
+  const [saving, setSaving] = useState(false);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [syncResults, setSyncResults] = useState<Record<string, { total_synced: number; total_matched: number; error?: string }>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState({ label: "", display_name: "", signature: "" });
+
+  // Form state
+  const [form, setForm] = useState({
+    label: "",
+    email_address: "",
+    display_name: "AAA Disaster Recovery",
+    provider: "hostinger",
+    imap_host: "imap.hostinger.com",
+    imap_port: 993,
+    smtp_host: "smtp.hostinger.com",
+    smtp_port: 465,
+    username: "",
+    password: "",
+  });
+
+  function handleProviderChange(provider: string) {
+    const preset = EMAIL_PROVIDERS[provider];
+    if (preset) {
+      setForm((prev) => ({
+        ...prev,
+        provider,
+        imap_host: preset.imap_host || prev.imap_host,
+        imap_port: preset.imap_port,
+        smtp_host: preset.smtp_host || prev.smtp_host,
+        smtp_port: preset.smtp_port,
+      }));
+    }
+  }
+
+  const fetchAccounts = useCallback(async () => {
+    const res = await fetch("/api/email/accounts");
+    if (res.ok) {
+      const data = await res.json();
+      setAccounts(data);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchAccounts();
+  }, [fetchAccounts]);
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    const res = await fetch("/api/email/accounts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...form,
+        username: form.username || form.email_address,
+      }),
+    });
+    if (res.ok) {
+      setShowForm(false);
+      setForm({
+        label: "",
+        email_address: "",
+        display_name: "AAA Disaster Recovery",
+        provider: "hostinger",
+        imap_host: "imap.hostinger.com",
+        imap_port: 993,
+        smtp_host: "smtp.hostinger.com",
+        smtp_port: 465,
+        username: "",
+        password: "",
+      });
+      fetchAccounts();
+    }
+    setSaving(false);
+  }
+
+  function startEditing(account: EmailAccount) {
+    setEditingId(account.id);
+    setEditValues({ label: account.label, display_name: account.display_name || "", signature: account.signature || "" });
+  }
+
+  async function handleSaveEdit(id: string) {
+    await fetch(`/api/email/accounts/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editValues),
+    });
+    setEditingId(null);
+    fetchAccounts();
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Remove this email account?")) return;
+    await fetch(`/api/email/accounts/${id}`, { method: "DELETE" });
+    fetchAccounts();
+  }
+
+  async function handleSync(id: string) {
+    setSyncingId(id);
+    setSyncResults((prev) => ({ ...prev, [id]: undefined as never }));
+    try {
+      const res = await fetch("/api/email/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId: id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSyncResults((prev) => ({ ...prev, [id]: data }));
+      } else {
+        setSyncResults((prev) => ({ ...prev, [id]: { total_synced: data.total_synced || 0, total_matched: data.total_matched || 0, error: data.error } }));
+      }
+      fetchAccounts(); // refresh last_synced_at
+    } catch {
+      setSyncResults((prev) => ({ ...prev, [id]: { total_synced: 0, total_matched: 0, error: "Network error" } }));
+    }
+    setSyncingId(null);
+  }
+
+  async function handleTest(id: string) {
+    setTestingId(id);
+    setTestResults((prev) => ({ ...prev, [id]: undefined as never }));
+    const res = await fetch(`/api/email/accounts/${id}/test`, { method: "POST" });
+    if (res.ok) {
+      const data = await res.json();
+      setTestResults((prev) => ({ ...prev, [id]: data }));
+    }
+    setTestingId(null);
+  }
+
+  return (
+    <div className="max-w-3xl">
+      {/* Header */}
+      <div className="mb-6">
+        <Link
+          href="/email"
+          className="text-sm text-[#2B5EA7] hover:underline inline-flex items-center gap-1 mb-3"
+        >
+          <ArrowLeft size={14} /> Back to Email
+        </Link>
+        <h1 className="text-2xl font-bold text-[#1A1A1A] flex items-center gap-2">
+          <Mail size={24} /> Email Accounts
+        </h1>
+        <p className="text-[#666666] mt-1">
+          Connect your email accounts to sync and send emails from jobs.
+        </p>
+      </div>
+
+      {/* Existing accounts */}
+      {loading ? (
+        <div className="text-center py-12 text-[#999999]">Loading...</div>
+      ) : (
+        <div className="space-y-4 mb-6">
+          {accounts.map((account) => (
+            <div
+              key={account.id}
+              className="bg-white rounded-xl border border-gray-200 p-5"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[#2B5EA7]/10 flex items-center justify-center">
+                    <Mail size={20} className="text-[#2B5EA7]" />
+                  </div>
+                  {editingId === account.id ? (
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-xs text-[#999] mb-0.5">Label</label>
+                        <input
+                          type="text"
+                          value={editValues.label}
+                          onChange={(e) => setEditValues({ ...editValues, label: e.target.value })}
+                          className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[#999] mb-0.5">Display Name (From field)</label>
+                        <input
+                          type="text"
+                          value={editValues.display_name}
+                          onChange={(e) => setEditValues({ ...editValues, display_name: e.target.value })}
+                          className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[#999] mb-0.5">Email Signature</label>
+                        <textarea
+                          value={editValues.signature}
+                          onChange={(e) => setEditValues({ ...editValues, signature: e.target.value })}
+                          placeholder="Eric Daniels&#10;AAA Disaster Recovery&#10;(512) 555-1234"
+                          rows={4}
+                          className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 resize-none"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleSaveEdit(account.id)}
+                          className="flex items-center gap-1 text-xs font-medium text-green-700 hover:underline"
+                        >
+                          <Check size={14} /> Save
+                        </button>
+                        <button
+                          onClick={() => setEditingId(null)}
+                          className="flex items-center gap-1 text-xs font-medium text-[#666] hover:underline"
+                        >
+                          <X size={14} /> Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-[#1A1A1A]">{account.label}</p>
+                        <button
+                          onClick={() => startEditing(account)}
+                          className="text-[#999] hover:text-[#2B5EA7]"
+                          title="Edit account"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      </div>
+                      <p className="text-sm text-[#666666]">{account.email_address}</p>
+                      {account.display_name && (
+                        <p className="text-xs text-[#999]">Sends as: {account.display_name}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
+                      account.is_active
+                        ? "bg-green-50 text-green-700"
+                        : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${account.is_active ? "bg-green-500" : "bg-gray-400"}`} />
+                    {account.is_active ? "Active" : "Inactive"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Server details */}
+              <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-[#666666]">
+                <div className="flex items-center gap-1.5">
+                  <Server size={12} />
+                  IMAP: {account.imap_host}:{account.imap_port}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Server size={12} />
+                  SMTP: {account.smtp_host}:{account.smtp_port}
+                </div>
+              </div>
+
+              {account.last_synced_at && (
+                <p className="text-xs text-[#999999] mt-2">
+                  Last synced: {new Date(account.last_synced_at).toLocaleString()}
+                </p>
+              )}
+
+              {/* Test results */}
+              {testResults[account.id] && (
+                <div className="mt-3 p-3 rounded-lg bg-gray-50 space-y-1.5">
+                  <div className="flex items-center gap-2 text-sm">
+                    {testResults[account.id].imap ? (
+                      <CheckCircle2 size={16} className="text-green-600" />
+                    ) : (
+                      <XCircle size={16} className="text-red-600" />
+                    )}
+                    <span>
+                      IMAP: {testResults[account.id].imap ? "Connected" : testResults[account.id].imapError}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    {testResults[account.id].smtp ? (
+                      <CheckCircle2 size={16} className="text-green-600" />
+                    ) : (
+                      <XCircle size={16} className="text-red-600" />
+                    )}
+                    <span>
+                      SMTP: {testResults[account.id].smtp ? "Connected" : testResults[account.id].smtpError}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Sync results */}
+              {syncResults[account.id] && (
+                <div className={`mt-3 p-3 rounded-lg text-sm ${syncResults[account.id].error ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700"}`}>
+                  {syncResults[account.id].error ? (
+                    <p>Sync error: {syncResults[account.id].error}</p>
+                  ) : (
+                    <p>
+                      Synced {syncResults[account.id].total_synced} new emails, {syncResults[account.id].total_matched} matched to jobs.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  onClick={() => handleSync(account.id)}
+                  disabled={syncingId === account.id}
+                  className="text-sm font-medium text-[#0F6E56] hover:underline disabled:opacity-50 flex items-center gap-1"
+                >
+                  {syncingId === account.id ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" /> Syncing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw size={14} /> Sync Now
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => handleTest(account.id)}
+                  disabled={testingId === account.id}
+                  className="text-sm font-medium text-[#2B5EA7] hover:underline disabled:opacity-50 flex items-center gap-1"
+                >
+                  {testingId === account.id ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" /> Testing...
+                    </>
+                  ) : (
+                    "Test Connection"
+                  )}
+                </button>
+                <button
+                  onClick={() => handleDelete(account.id)}
+                  className="text-sm font-medium text-red-600 hover:underline flex items-center gap-1"
+                >
+                  <Trash2 size={14} /> Remove
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {accounts.length === 0 && !showForm && (
+            <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+              <Mail size={40} className="mx-auto text-[#CCCCCC] mb-3" />
+              <p className="text-[#999999]">No email accounts connected.</p>
+              <p className="text-sm text-[#BBBBBB] mt-1">
+                Add an account to start syncing emails with your jobs.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add account form */}
+      {showForm ? (
+        <form
+          onSubmit={handleAdd}
+          className="bg-white rounded-xl border border-gray-200 p-6 space-y-4"
+        >
+          <h3 className="font-semibold text-[#1A1A1A] text-lg">Add Email Account</h3>
+
+          {/* Provider preset */}
+          <div>
+            <label className="block text-sm font-medium text-[#333] mb-1">
+              Email Provider
+            </label>
+            <select
+              value={form.provider}
+              onChange={(e) => handleProviderChange(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 focus:border-[#2B5EA7]"
+            >
+              {Object.entries(EMAIL_PROVIDERS).map(([key, val]) => (
+                <option key={key} value={key}>{val.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-[#333] mb-1">
+                Label
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Main Office"
+                value={form.label}
+                onChange={(e) => setForm({ ...form, label: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 focus:border-[#2B5EA7]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#333] mb-1">
+                Email Address <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="email"
+                required
+                placeholder="eric@aaadisasterrecovery.com"
+                value={form.email_address}
+                onChange={(e) => setForm({ ...form, email_address: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 focus:border-[#2B5EA7]"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[#333] mb-1">
+              Display Name <span className="text-[#999] font-normal">(shown in From field)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="AAA Disaster Recovery"
+              value={form.display_name}
+              onChange={(e) => setForm({ ...form, display_name: e.target.value })}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 focus:border-[#2B5EA7]"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-[#333] mb-1">
+                Username <span className="text-[#999] font-normal">(defaults to email)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Same as email address"
+                value={form.username}
+                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 focus:border-[#2B5EA7]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#333] mb-1">
+                Password <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                required
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 focus:border-[#2B5EA7]"
+              />
+            </div>
+          </div>
+
+          {/* Server settings (collapsible with defaults) */}
+          <details className="text-sm">
+            <summary className="cursor-pointer text-[#2B5EA7] font-medium">
+              Server Settings (auto-filled from provider)
+            </summary>
+            <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">IMAP Host</label>
+                <input
+                  type="text"
+                  value={form.imap_host}
+                  onChange={(e) => setForm({ ...form, imap_host: e.target.value })}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 focus:border-[#2B5EA7]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">IMAP Port</label>
+                <input
+                  type="number"
+                  value={form.imap_port}
+                  onChange={(e) => setForm({ ...form, imap_port: Number(e.target.value) })}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 focus:border-[#2B5EA7]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">SMTP Host</label>
+                <input
+                  type="text"
+                  value={form.smtp_host}
+                  onChange={(e) => setForm({ ...form, smtp_host: e.target.value })}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 focus:border-[#2B5EA7]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#666] mb-1">SMTP Port</label>
+                <input
+                  type="number"
+                  value={form.smtp_port}
+                  onChange={(e) => setForm({ ...form, smtp_port: Number(e.target.value) })}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 focus:border-[#2B5EA7]"
+                />
+              </div>
+            </div>
+          </details>
+
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2.5 bg-[#2B5EA7] text-white rounded-lg text-sm font-medium hover:bg-[#234b87] disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+              Add Account
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-[#666666] hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button
+          onClick={() => setShowForm(true)}
+          className="px-5 py-2.5 bg-[#2B5EA7] text-white rounded-lg text-sm font-medium hover:bg-[#234b87] flex items-center gap-2"
+        >
+          <Plus size={16} /> Add Email Account
+        </button>
+      )}
+    </div>
+  );
+}

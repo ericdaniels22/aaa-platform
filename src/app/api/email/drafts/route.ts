@@ -1,0 +1,96 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createApiClient } from "@/lib/supabase-api";
+
+// POST /api/email/drafts — save or update a draft
+// Body: { draftId?, accountId, to, cc, bcc, subject, bodyText, bodyHtml, jobId?, replyToMessageId? }
+export async function POST(request: NextRequest) {
+  const {
+    draftId,
+    accountId,
+    to,
+    cc,
+    bcc,
+    subject,
+    bodyText,
+    bodyHtml,
+    jobId,
+    replyToMessageId,
+  } = await request.json();
+
+  if (!accountId) {
+    return NextResponse.json({ error: "accountId is required" }, { status: 400 });
+  }
+
+  const supabase = createApiClient();
+
+  // Get account for from address
+  const { data: account } = await supabase
+    .from("email_accounts")
+    .select("email_address, display_name")
+    .eq("id", accountId)
+    .single();
+
+  if (!account) {
+    return NextResponse.json({ error: "Account not found" }, { status: 404 });
+  }
+
+  const toAddresses = to
+    ? to.split(",").map((e: string) => ({ email: e.trim() }))
+    : [];
+  const ccAddresses = cc
+    ? cc.split(",").map((e: string) => ({ email: e.trim() }))
+    : [];
+  const bccAddresses = bcc
+    ? bcc.split(",").map((e: string) => ({ email: e.trim() }))
+    : [];
+  const snippet = (bodyText || "").replace(/\s+/g, " ").trim().slice(0, 200);
+
+  const draftData = {
+    account_id: accountId,
+    job_id: jobId || null,
+    message_id: draftId || `draft-${Date.now()}`,
+    thread_id: replyToMessageId || null,
+    folder: "drafts" as const,
+    from_address: account.email_address,
+    from_name: account.display_name || null,
+    to_addresses: toAddresses,
+    cc_addresses: ccAddresses,
+    bcc_addresses: bccAddresses,
+    subject: subject || "(no subject)",
+    body_text: bodyText || null,
+    body_html: bodyHtml || null,
+    snippet: snippet || null,
+    is_read: true,
+    is_starred: false,
+    has_attachments: false,
+    matched_by: jobId ? ("job_id" as const) : null,
+    received_at: new Date().toISOString(),
+  };
+
+  if (draftId) {
+    // Update existing draft
+    const { data, error } = await supabase
+      .from("emails")
+      .update(draftData)
+      .eq("id", draftId)
+      .select("id")
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ id: data.id, updated: true });
+  } else {
+    // Create new draft
+    const { data, error } = await supabase
+      .from("emails")
+      .insert(draftData)
+      .select("id")
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ id: data.id, created: true });
+  }
+}

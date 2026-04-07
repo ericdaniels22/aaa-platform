@@ -156,19 +156,75 @@ export interface PhotoReport {
   updated_at: string;
 }
 
-export interface JobEmail {
+export interface EmailAddress {
+  email: string;
+  name?: string;
+}
+
+export interface Email {
   id: string;
-  job_id: string;
-  gmail_id: string;
+  account_id: string;
+  job_id: string | null;
+  message_id: string;
   thread_id: string | null;
+  folder: "inbox" | "sent" | "drafts" | "trash" | "archive" | "spam" | "other";
   from_address: string;
   from_name: string | null;
-  to_address: string;
+  to_addresses: EmailAddress[];
+  cc_addresses: EmailAddress[];
+  bcc_addresses: EmailAddress[];
   subject: string;
+  body_text: string | null;
+  body_html: string | null;
   snippet: string | null;
-  direction: "inbound" | "outbound";
+  is_read: boolean;
+  is_starred: boolean;
   has_attachments: boolean;
-  matched_by: "contact" | "claim_number" | "address" | "job_id" | "manual";
+  matched_by: "contact" | "claim_number" | "address" | "job_id" | "manual" | null;
+  uid: number | null;
   received_at: string;
   created_at: string;
+  // Joined fields
+  job?: Job;
+  account?: EmailAccount;
+  attachments?: EmailAttachment[];
 }
+
+export interface EmailAttachment {
+  id: string;
+  email_id: string;
+  filename: string;
+  content_type: string | null;
+  file_size: number | null;
+  storage_path: string | null;
+  created_at: string;
+}
+
+export interface EmailAccount {
+  id: string;
+  label: string;
+  email_address: string;
+  display_name: string;
+  provider: string;
+  imap_host: string;
+  imap_port: number;
+  smtp_host: string;
+  smtp_port: number;
+  username: string;
+  encrypted_password: string;
+  signature: string | null;
+  is_active: boolean;
+  is_default: boolean;
+  last_synced_at: string | null;
+  last_synced_uid: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const EMAIL_PROVIDERS: Record<string, { label: string; imap_host: string; imap_port: number; smtp_host: string; smtp_port: number }> = {
+  hostinger: { label: "Hostinger", imap_host: "imap.hostinger.com", imap_port: 993, smtp_host: "smtp.hostinger.com", smtp_port: 465 },
+  network_solutions: { label: "Network Solutions", imap_host: "mail.aaacontracting.com", imap_port: 993, smtp_host: "smtp.aaacontracting.com", smtp_port: 587 },
+  gmail: { label: "Gmail", imap_host: "imap.gmail.com", imap_port: 993, smtp_host: "smtp.gmail.com", smtp_port: 587 },
+  outlook: { label: "Outlook / Microsoft 365", imap_host: "outlook.office365.com", imap_port: 993, smtp_host: "smtp.office365.com", smtp_port: 587 },
+  custom: { label: "Custom", imap_host: "", imap_port: 993, smtp_host: "", smtp_port: 465 },
+};

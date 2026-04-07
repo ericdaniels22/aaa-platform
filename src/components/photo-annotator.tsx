@@ -16,18 +16,17 @@ import {
   ArrowUpRight,
   RotateCw,
   Crop,
-  Sun,
-  Contrast as ContrastIcon,
-  Droplets,
   Check,
   X,
-  ChevronDown,
-  ChevronUp,
-  SlidersHorizontal,
-  ImageOff,
   Copy,
+  ChevronLeft,
+  ChevronRight,
+  Share2,
+  ImageOff,
 } from "lucide-react";
 import { toast } from "sonner";
+
+// ─── Types & Constants ───────────────────────────────────────────────────────
 
 type Tool =
   | "select"
@@ -36,6 +35,7 @@ type Tool =
   | "rectangle"
   | "text"
   | "arrow"
+  | "polyline"
   | "crop";
 
 const COLORS = [
@@ -45,6 +45,12 @@ const COLORS = [
   { value: "#0F6E56", label: "Green" },
   { value: "#FFFFFF", label: "White" },
   { value: "#1A1A1A", label: "Black" },
+];
+
+const THICKNESSES = [
+  { value: 2, label: "Thin" },
+  { value: 4, label: "Medium" },
+  { value: 8, label: "Thick" },
 ];
 
 const TOOLS: {
@@ -57,171 +63,348 @@ const TOOLS: {
   { value: "circle", label: "Circle", icon: Circle },
   { value: "rectangle", label: "Rectangle", icon: Square },
   { value: "text", label: "Text", icon: Type },
+  { value: "polyline", label: "Polyline", icon: Share2 },
 ];
+
+const SHADOW_CONFIG = {
+  color: "rgba(0,0,0,0.6)",
+  blur: 4,
+  offsetX: 2,
+  offsetY: 2,
+};
+
+// ─── FabricArrow Custom Class (initialized once on first fabric import) ──────
+
+let fabricClassesReady = false;
+
+function initFabricClasses(fabric: any) {
+  if (fabricClassesReady) return;
+
+  const { FabricObject, classRegistry, Control, Point, Shadow } = fabric;
+
+  class FabricArrow extends FabricObject {
+    static type = "FabricArrow";
+    static customProperties = [
+      "x1",
+      "y1",
+      "x2",
+      "y2",
+      "arrowColor",
+      "labelText",
+      "labelFontSize",
+      "arrowThickness",
+    ];
+
+    declare x1: number;
+    declare y1: number;
+    declare x2: number;
+    declare y2: number;
+    declare arrowColor: string;
+    declare labelText: string | null;
+    declare labelFontSize: number;
+    declare arrowThickness: number;
+
+    constructor(options: any = {}) {
+      super(options);
+      this.x1 = options.x1 ?? 0;
+      this.y1 = options.y1 ?? 0;
+      this.x2 = options.x2 ?? 100;
+      this.y2 = options.y2 ?? 0;
+      this.arrowColor = options.arrowColor ?? "#F59E0B";
+      this.labelText = options.labelText ?? null;
+      this.labelFontSize = options.labelFontSize ?? 20;
+      this.arrowThickness = options.arrowThickness ?? 4;
+
+      this.objectCaching = false;
+      this.hasBorders = false;
+      this.selectable = true;
+      this.evented = true;
+      this.hasControls = true;
+      this.perPixelTargetFind = false;
+      this.lockRotation = true;
+      this.shadow = new Shadow(SHADOW_CONFIG);
+
+      this._updateBounds();
+      this._initControls();
+    }
+
+    /** Recompute bounding box from absolute endpoint coords */
+    _updateBounds() {
+      const pad = this.arrowThickness * 4 + 15;
+      const minX = Math.min(this.x1, this.x2);
+      const minY = Math.min(this.y1, this.y2);
+      const maxX = Math.max(this.x1, this.x2);
+      const maxY = Math.max(this.y1, this.y2);
+      this.set({
+        left: (minX + maxX) / 2,
+        top: (minY + maxY) / 2,
+        width: maxX - minX + pad * 2,
+        height: maxY - minY + pad * 2,
+        originX: "center",
+        originY: "center",
+      });
+      this.setCoords();
+    }
+
+    /** Sync absolute endpoints when the whole arrow is dragged */
+    _syncEndpointsToPosition() {
+      const midX = (this.x1 + this.x2) / 2;
+      const midY = (this.y1 + this.y2) / 2;
+      const dx = (this.left ?? 0) - midX;
+      const dy = (this.top ?? 0) - midY;
+      if (dx !== 0 || dy !== 0) {
+        this.x1 += dx;
+        this.y1 += dy;
+        this.x2 += dx;
+        this.y2 += dy;
+      }
+    }
+
+    _render(ctx: CanvasRenderingContext2D) {
+      const cx = this.left ?? 0;
+      const cy = this.top ?? 0;
+      const lx1 = this.x1 - cx;
+      const ly1 = this.y1 - cy;
+      const lx2 = this.x2 - cx;
+      const ly2 = this.y2 - cy;
+      const thick = this.arrowThickness;
+      const headLen = thick * 4;
+      const ang = Math.atan2(ly2 - ly1, lx2 - lx1);
+
+      // Shaft
+      ctx.beginPath();
+      ctx.moveTo(lx1, ly1);
+      ctx.lineTo(lx2, ly2);
+      ctx.strokeStyle = this.arrowColor;
+      ctx.lineWidth = thick;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.stroke();
+
+      // Arrowhead
+      const hx1 = lx2 - headLen * Math.cos(ang - Math.PI / 6);
+      const hy1 = ly2 - headLen * Math.sin(ang - Math.PI / 6);
+      const hx2 = lx2 - headLen * Math.cos(ang + Math.PI / 6);
+      const hy2 = ly2 - headLen * Math.sin(ang + Math.PI / 6);
+      ctx.beginPath();
+      ctx.moveTo(hx1, hy1);
+      ctx.lineTo(lx2, ly2);
+      ctx.lineTo(hx2, hy2);
+      ctx.stroke();
+
+      // Label text
+      if (this.labelText) {
+        const fs = this.labelFontSize;
+        ctx.font = `bold ${fs}px Arial`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const labelOffset = ly1 > ly2 ? fs + 6 : -(fs + 6);
+        // Stroke outline for readability
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = 1;
+        ctx.lineJoin = "round";
+        ctx.strokeText(this.labelText, lx1, ly1 + labelOffset);
+        ctx.fillStyle = this.arrowColor;
+        ctx.fillText(this.labelText, lx1, ly1 + labelOffset);
+      }
+    }
+
+    _initControls() {
+      const self = this;
+
+      const makeHandle = (
+        getLocalX: () => number,
+        getLocalY: () => number,
+        setEndpoint: (x: number, y: number) => void
+      ) =>
+        new Control({
+          actionName: "modifyArrow",
+          cursorStyle: "grab",
+          sizeX: 20,
+          sizeY: 20,
+          touchSizeX: 30,
+          touchSizeY: 30,
+          positionHandler(dim: any, finalMatrix: any) {
+            return new Point(getLocalX(), getLocalY()).transform(finalMatrix);
+          },
+          actionHandler(
+            _eventData: any,
+            transform: any,
+            x: number,
+            y: number
+          ) {
+            setEndpoint(x, y);
+            transform.target._updateBounds();
+            transform.target.set("dirty", true);
+            return true;
+          },
+          render(
+            ctx: CanvasRenderingContext2D,
+            left: number,
+            top: number,
+            _style: any,
+            fabricObject: any
+          ) {
+            ctx.save();
+            ctx.fillStyle = "#FFFFFF";
+            ctx.strokeStyle = fabricObject.arrowColor || "#F59E0B";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(left, top, 8, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+          },
+        });
+
+      this.controls = {
+        start: makeHandle(
+          () => self.x1 - (self.left ?? 0),
+          () => self.y1 - (self.top ?? 0),
+          (x, y) => {
+            self.x1 = x;
+            self.y1 = y;
+          }
+        ),
+        end: makeHandle(
+          () => self.x2 - (self.left ?? 0),
+          () => self.y2 - (self.top ?? 0),
+          (x, y) => {
+            self.x2 = x;
+            self.y2 = y;
+          }
+        ),
+      };
+    }
+
+    toObject(propertiesToInclude?: string[]) {
+      return {
+        ...super.toObject(propertiesToInclude),
+        x1: this.x1,
+        y1: this.y1,
+        x2: this.x2,
+        y2: this.y2,
+        arrowColor: this.arrowColor,
+        labelText: this.labelText,
+        labelFontSize: this.labelFontSize,
+        arrowThickness: this.arrowThickness,
+      };
+    }
+
+    static fromObject(object: any) {
+      return Promise.resolve(new FabricArrowRef(object));
+    }
+  }
+
+  // Reference for fromObject closure
+  const FabricArrowRef = FabricArrow;
+
+  classRegistry.setClass(FabricArrow, "FabricArrow");
+  fabricClassesReady = true;
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function PhotoAnnotator({
   open,
   onOpenChange,
-  photo,
-  photoUrl,
+  photos,
+  initialPhotoIndex,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  photo: Photo | null;
-  photoUrl: string;
+  photos: Photo[];
+  initialPhotoIndex: number;
   onSaved: () => void;
 }) {
+  // ── Photo navigation state ──
+  const [currentIndex, setCurrentIndex] = useState(
+    Math.max(0, initialPhotoIndex)
+  );
+  const currentPhoto = photos[currentIndex] ?? null;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+
+  // ── Canvas state ──
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricRef = useRef<any>(null);
   const fabricModuleRef = useRef<any>(null);
   const bgImageRef = useRef<any>(null);
-  const [activeTool, setActiveTool] = useState<Tool>("arrow");
-  const [activeColor, setActiveColor] = useState("#F59E0B");
-  const [saving, setSaving] = useState(false);
-  const [canvasReady, setCanvasReady] = useState(false);
-  const [showAdjustments, setShowAdjustments] = useState(false);
-  const [brightness, setBrightness] = useState(0);
-  const [contrast, setContrast] = useState(0);
-  const [saturation, setSaturation] = useState(0);
-  const [isCropping, setIsCropping] = useState(false);
-  const [hasOriginalBackup, setHasOriginalBackup] = useState(false);
-  const [arrowToolbar, setArrowToolbar] = useState<{
-    x: number;
-    y: number;
-    handle: any;
-  } | null>(null);
-  const isDrawingShape = useRef(false);
-  const shapeStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const currentShape = useRef<any>(null);
-  const activeToolRef = useRef<Tool>(activeTool);
-  const activeColorRef = useRef(activeColor);
-  const cropRectRef = useRef<any>(null);
-  const cropRenderCallbackRef = useRef<any>(null);
-  const hiddenObjectsRef = useRef<any[]>([]);
   const imgDimensionsRef = useRef<{
     width: number;
     height: number;
     scale: number;
   }>({ width: 800, height: 600, scale: 1 });
 
+  // ── Tool state ──
+  const [activeTool, setActiveTool] = useState<Tool>("arrow");
+  const [activeColor, setActiveColor] = useState("#F59E0B");
+  const [activeThickness, setActiveThickness] = useState(4);
+  const [canvasReady, setCanvasReady] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // ── Crop state ──
+  const [isCropping, setIsCropping] = useState(false);
+  const [hasOriginalBackup, setHasOriginalBackup] = useState(false);
+  const cropRectRef = useRef<any>(null);
+  const cropRenderCallbackRef = useRef<any>(null);
+  const hiddenObjectsRef = useRef<any[]>([]);
+
+  // ── Arrow toolbar ──
+  const [arrowToolbar, setArrowToolbar] = useState<{
+    x: number;
+    y: number;
+    arrow: any;
+  } | null>(null);
+  const [labelInput, setLabelInput] = useState<{
+    arrow: any;
+    text: string;
+  } | null>(null);
+
+  // ── Photo navigation ──
+  const [navPrompt, setNavPrompt] = useState<number | null>(null);
+  const isDirtyRef = useRef(false);
+
+  // ── Polyline drawing ──
+  const polyDrawingRef = useRef<{ points: { x: number; y: number }[] } | null>(
+    null
+  );
+  const polyPreviewRef = useRef<{ x: number; y: number } | null>(null);
+
+  // ── Shape drawing ──
+  const isDrawingShape = useRef(false);
+  const shapeStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const currentShape = useRef<any>(null);
+
+  // ── Refs that sync with state ──
+  const activeToolRef = useRef<Tool>(activeTool);
+  const activeColorRef = useRef(activeColor);
+  const activeThicknessRef = useRef(activeThickness);
   useEffect(() => {
     activeToolRef.current = activeTool;
   }, [activeTool]);
   useEffect(() => {
     activeColorRef.current = activeColor;
   }, [activeColor]);
-
-  // Show/hide arrow handles and toolbar on selection
   useEffect(() => {
-    const canvas = fabricRef.current;
-    if (!canvas || !canvasReady) return;
+    activeThicknessRef.current = activeThickness;
+  }, [activeThickness]);
 
-    let activeArrowPath: any = null;
-
-    function getArrowPath(target: any): any {
-      if (target?._isArrow) return target;
-      if (target?._arrowRole) return target._arrowPath;
-      return null;
+  // Reset index when annotator opens
+  useEffect(() => {
+    if (open) {
+      setCurrentIndex(Math.max(0, initialPhotoIndex));
     }
+  }, [open, initialPhotoIndex]);
 
-    function showHandlesFor(ap: any) {
-      if (ap._startHandle) { ap._startHandle.visible = true; ap._startHandle.setCoords(); }
-      if (ap._endHandle) { ap._endHandle.visible = true; ap._endHandle.setCoords(); }
-    }
-
-    function hideHandlesFor(ap: any) {
-      if (ap._startHandle) ap._startHandle.visible = false;
-      if (ap._endHandle) ap._endHandle.visible = false;
-    }
-
-    function showToolbarForArrow(ap: any, handle?: any) {
-      const canvasEl = canvas.getElement();
-      const rect = canvasEl.getBoundingClientRect();
-      const sh = ap._startHandle;
-      const eh = ap._endHandle;
-      if (!sh || !eh) return;
-      const ref = handle && handle._arrowRole ? handle : sh;
-      // Position at midpoint of arrow so it doesn't block either handle
-      const midX = (sh.left + eh.left) / 2;
-      const midY = Math.min(sh.top, eh.top);
-      setArrowToolbar({
-        x: rect.left + midX - 56,
-        y: rect.top + midY,
-        handle: ref,
-      });
-    }
-
-    function onSelected(e: any) {
-      const target = e.selected?.[0] || e.target;
-      const ap = getArrowPath(target);
-
-      if (ap) {
-        // If selecting a handle of the already-active arrow, just let it be dragged
-        if (target._arrowRole && ap === activeArrowPath) {
-          return;
-        }
-
-        // Hide handles of previously active arrow
-        if (activeArrowPath && activeArrowPath !== ap) {
-          hideHandlesFor(activeArrowPath);
-        }
-
-        activeArrowPath = ap;
-        showHandlesFor(ap);
-        showToolbarForArrow(ap, target);
-        canvas.renderAll();
-      } else {
-        // Non-arrow selected — hide active arrow handles
-        if (activeArrowPath) {
-          hideHandlesFor(activeArrowPath);
-          activeArrowPath = null;
-          canvas.renderAll();
-        }
-        setArrowToolbar(null);
-      }
-    }
-
-    function onDeselected() {
-      setTimeout(() => {
-        // Don't hide if an arrow-related object is active
-        const active = canvas.getActiveObject();
-        if (active && (active._isArrow || active._arrowRole || active._parentArrow)) return;
-        // Don't hide if handles are currently visible (onSelected just showed them)
-        const anyHandleVisible = canvas.getObjects().some((obj: any) => obj._arrowRole && obj.visible);
-        if (anyHandleVisible) return;
-        // Safe to hide
-        if (activeArrowPath) {
-          hideHandlesFor(activeArrowPath);
-          activeArrowPath = null;
-          canvas.renderAll();
-        }
-        setArrowToolbar(null);
-      }, 250);
-    }
-
-    function onMoving() {
-      setArrowToolbar(null);
-    }
-
-    canvas.on("selection:created", onSelected);
-    canvas.on("selection:updated", onSelected);
-    canvas.on("selection:cleared", onDeselected);
-    canvas.on("object:moving", onMoving);
-
-    return () => {
-      canvas.off("selection:created", onSelected);
-      canvas.off("selection:updated", onSelected);
-      canvas.off("selection:cleared", onDeselected);
-      canvas.off("object:moving", onMoving);
-    };
-  }, [canvasReady]);
+  // ─── Canvas Initialization ─────────────────────────────────────────────────
 
   const initCanvas = useCallback(async () => {
-    if (!canvasRef.current || !photo) return;
+    if (!canvasRef.current || !currentPhoto) return;
 
     const fabric = await import("fabric");
     fabricModuleRef.current = fabric;
+    initFabricClasses(fabric);
 
     if (fabricRef.current) {
       fabricRef.current.dispose();
@@ -229,6 +412,9 @@ export default function PhotoAnnotator({
     }
 
     try {
+      // Load the ORIGINAL image (not annotated) to avoid double-rendering
+      const photoUrl = `${supabaseUrl}/storage/v1/object/public/photos/${currentPhoto.storage_path}`;
+
       const img = await new Promise<HTMLImageElement>((resolve, reject) => {
         const el = document.createElement("img");
         el.crossOrigin = "anonymous";
@@ -239,19 +425,13 @@ export default function PhotoAnnotator({
 
       const imgWidth = img.naturalWidth || 800;
       const imgHeight = img.naturalHeight || 600;
-
-      // Use full viewport minus sidebar
       const maxWidth = window.innerWidth - 72;
       const maxHeight = window.innerHeight;
       const scale = Math.min(maxWidth / imgWidth, maxHeight / imgHeight, 1);
       const canvasWidth = Math.round(imgWidth * scale);
       const canvasHeight = Math.round(imgHeight * scale);
 
-      imgDimensionsRef.current = {
-        width: imgWidth,
-        height: imgHeight,
-        scale,
-      };
+      imgDimensionsRef.current = { width: imgWidth, height: imgHeight, scale };
 
       const canvas = new fabric.Canvas(canvasRef.current!, {
         width: canvasWidth,
@@ -275,22 +455,27 @@ export default function PhotoAnnotator({
       bgImageRef.current = fabricImg;
       canvas.backgroundImage = fabricImg;
       canvas.renderAll();
-
       fabricRef.current = canvas;
-      setCanvasReady(true);
 
-      // Default to arrow tool
       canvas.isDrawingMode = false;
       canvas.selection = false;
 
-      loadAnnotations(canvas, photo.id);
+      // Load annotations BEFORE setting canvasReady
+      await loadAnnotations(canvas, currentPhoto.id);
+      setCanvasReady(true);
+      isDirtyRef.current = false;
 
-      // Check if an original backup exists
+      // Check for original backup
       const supabase = createClient();
-      const backupPath = photo.storage_path.replace(/\.[^.]+$/, "-original$&");
+      const backupPath = currentPhoto.storage_path.replace(
+        /\.[^.]+$/,
+        "-original$&"
+      );
       const { data: backupData } = await supabase.storage.from("photos").list(
         backupPath.substring(0, backupPath.lastIndexOf("/")),
-        { search: backupPath.substring(backupPath.lastIndexOf("/") + 1) }
+        {
+          search: backupPath.substring(backupPath.lastIndexOf("/") + 1),
+        }
       );
       setHasOriginalBackup(
         !!backupData && backupData.some((f) => backupPath.endsWith(f.name))
@@ -299,9 +484,14 @@ export default function PhotoAnnotator({
       console.error("Failed to load image for annotation:", err);
       toast.error("Failed to load image.");
     }
-  }, [photo, photoUrl]);
+  }, [currentPhoto, supabaseUrl]);
+
+  // ─── Load Annotations (with v2/v1 migration) ──────────────────────────────
 
   async function loadAnnotations(canvas: any, photoId: string) {
+    const fabric = fabricModuleRef.current;
+    if (!fabric) return;
+
     const supabase = createClient();
     const { data } = await supabase
       .from("photo_annotations")
@@ -311,26 +501,147 @@ export default function PhotoAnnotator({
       .limit(1)
       .single();
 
-    if (data?.annotation_data && typeof data.annotation_data === "object") {
-      const bg = canvas.backgroundImage;
-      canvas.loadFromJSON(data.annotation_data).then(() => {
-        canvas.backgroundImage = bg;
-        canvas.renderAll();
-      });
+    if (!data?.annotation_data || typeof data.annotation_data !== "object")
+      return;
+
+    const saved = data.annotation_data;
+
+    // ── Format 3: native Fabric JSON (new format from this rewrite) ──
+    if (saved.format === 3 && saved.canvas) {
+      await canvas.loadFromJSON(saved.canvas);
+      attachPolyControls(canvas, fabric);
+      canvas.renderAll();
+      return;
     }
+
+    // ── Version 2: old custom format with explicit arrow data ──
+    if (saved.version === 2) {
+      const fabricObjects: any[] = [];
+
+      // Convert v2 arrows → FabricArrow serialized objects
+      if (saved.arrows && Array.isArray(saved.arrows)) {
+        for (const a of saved.arrows) {
+          fabricObjects.push({
+            type: "FabricArrow",
+            x1: a.x1,
+            y1: a.y1,
+            x2: a.x2,
+            y2: a.y2,
+            arrowColor: a.color || "#F59E0B",
+            labelText: a.label?.text || null,
+            labelFontSize: a.label?.fontSize || 20,
+            arrowThickness: 6,
+          });
+        }
+      }
+
+      // Add non-arrow objects as-is
+      if (saved.objects && Array.isArray(saved.objects)) {
+        fabricObjects.push(...saved.objects);
+      }
+
+      const syntheticJson = { version: "7.2.0", objects: fabricObjects };
+      const bg = canvas.backgroundImage;
+      await canvas.loadFromJSON(syntheticJson);
+      canvas.backgroundImage = bg;
+      attachPolyControls(canvas, fabric);
+      canvas.renderAll();
+      return;
+    }
+
+    // ── Version 1: raw canvas.toJSON with Path+Circle arrow triples ──
+    const bg = canvas.backgroundImage;
+    await canvas.loadFromJSON(saved);
+    canvas.backgroundImage = bg;
+
+    // Scan for arrow-like objects (Path + 2 Circle handles)
+    const objects = canvas.getObjects().slice();
+    const toRemove: any[] = [];
+    const arrowsToCreate: any[] = [];
+
+    for (let i = 0; i < objects.length; i++) {
+      const obj = objects[i];
+      if (
+        obj.type === "path" &&
+        obj.strokeWidth === 6 &&
+        obj.strokeLineCap === "round" &&
+        (obj.fill === "transparent" || obj.fill === "" || !obj.fill)
+      ) {
+        const n1 = objects[i + 1];
+        const n2 = objects[i + 2];
+        if (
+          n1?.type === "circle" &&
+          n2?.type === "circle" &&
+          n1.radius === 8 &&
+          n2.radius === 8 &&
+          n1.fill === "#FFFFFF" &&
+          n2.fill === "#FFFFFF"
+        ) {
+          arrowsToCreate.push({
+            x1: n1.left,
+            y1: n1.top,
+            x2: n2.left,
+            y2: n2.top,
+            color: obj.stroke || "#F59E0B",
+          });
+          toRemove.push(obj, n1, n2);
+          i += 2;
+        }
+      }
+    }
+
+    toRemove.forEach((obj) => canvas.remove(obj));
+
+    // Recreate as FabricArrow objects
+    for (const ad of arrowsToCreate) {
+      const arrow = new (fabric.classRegistry.getClass("FabricArrow"))({
+        x1: ad.x1,
+        y1: ad.y1,
+        x2: ad.x2,
+        y2: ad.y2,
+        arrowColor: ad.color,
+        arrowThickness: 6,
+      });
+      canvas.add(arrow);
+    }
+
+    attachPolyControls(canvas, fabric);
+    canvas.renderAll();
   }
 
+  /** After loading from JSON, add vertex controls to Polyline/Polygon objects */
+  function attachPolyControls(canvas: any, fabric: any) {
+    canvas.getObjects().forEach((obj: any) => {
+      if (obj.type === "Polyline" || obj.type === "Polygon") {
+        if (fabric.createPolyControls) {
+          obj.controls = fabric.createPolyControls(obj);
+        }
+        obj.hasBorders = false;
+        obj.objectCaching = false;
+        obj.cornerStyle = "circle";
+        obj.cornerColor = "#FFFFFF";
+        obj.cornerStrokeColor = obj.stroke || "#F59E0B";
+        obj.cornerSize = 14;
+        obj.transparentCorners = false;
+      }
+    });
+  }
+
+  // ─── Main open/photo/index effect ──────────────────────────────────────────
+
   useEffect(() => {
-    if (open && photo) {
+    if (open && currentPhoto) {
       setCanvasReady(false);
-      setBrightness(0);
-      setContrast(0);
-      setSaturation(0);
-      setShowAdjustments(false);
       setIsCropping(false);
+      setArrowToolbar(null);
+      setLabelInput(null);
+      setNavPrompt(null);
       cropRectRef.current = null;
       cropRenderCallbackRef.current = null;
       hiddenObjectsRef.current = [];
+      polyDrawingRef.current = null;
+      polyPreviewRef.current = null;
+      isDirtyRef.current = false;
       const timer = setTimeout(() => initCanvas(), 200);
       return () => clearTimeout(timer);
     }
@@ -341,419 +652,145 @@ export default function PhotoAnnotator({
         setCanvasReady(false);
       }
     };
-  }, [open, photo, initCanvas]);
+  }, [open, currentIndex, initCanvas]);
 
-  // Build arrow as line + arrowhead path + two draggable endpoint handles
-  function createArrow(
-    fabric: any,
-    canvas: any,
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
-    color: string
-  ) {
-    const strokeW = 6;
-    const headLen = 24;
+  // ─── Dirty tracking ────────────────────────────────────────────────────────
 
-    function buildArrowPath(ax1: number, ay1: number, ax2: number, ay2: number) {
-      const ang = Math.atan2(ay2 - ay1, ax2 - ax1);
-      const hx1 = ax2 - headLen * Math.cos(ang - Math.PI / 6);
-      const hy1 = ay2 - headLen * Math.sin(ang - Math.PI / 6);
-      const hx2 = ax2 - headLen * Math.cos(ang + Math.PI / 6);
-      const hy2 = ay2 - headLen * Math.sin(ang + Math.PI / 6);
-      return `M ${ax1} ${ay1} L ${ax2} ${ay2} M ${hx1} ${hy1} L ${ax2} ${ay2} L ${hx2} ${hy2}`;
-    }
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas || !canvasReady) return;
 
-    // Arrow shaft + head as a path — selectable for dragging but no bounding box
-    const arrowPath = new fabric.Path(buildArrowPath(x1, y1, x2, y2), {
-      stroke: color,
-      strokeWidth: strokeW,
-      strokeLineCap: "round",
-      strokeLineJoin: "round",
-      fill: "transparent",
-      selectable: true,
-      evented: true,
-      hasBorders: false,
-      hasControls: false,
-      perPixelTargetFind: true,
-      lockRotation: true,
-      objectCaching: false,
-    });
-
-    // Endpoint handles (draggable circles) — hidden by default
-    const handleRadius = 8;
-    const handleProps = {
-      radius: handleRadius,
-      fill: "#FFFFFF",
-      stroke: color,
-      strokeWidth: 2,
-      originX: "center" as const,
-      originY: "center" as const,
-      hasBorders: false,
-      hasControls: false,
-      selectable: true,
-      evented: true,
-      visible: false,
+    const markDirty = () => {
+      isDirtyRef.current = true;
     };
+    canvas.on("object:added", markDirty);
+    canvas.on("object:modified", markDirty);
+    canvas.on("object:removed", markDirty);
 
-    const startHandle = new fabric.Circle({ ...handleProps, left: x1, top: y1 });
-    const endHandle = new fabric.Circle({ ...handleProps, left: x2, top: y2 });
-
-    // Cross-reference all three objects
-    (arrowPath as any)._isArrow = true;
-    (arrowPath as any)._startHandle = startHandle;
-    (arrowPath as any)._endHandle = endHandle;
-    (arrowPath as any)._arrowColor = color;
-    (startHandle as any)._arrowRole = "start";
-    (endHandle as any)._arrowRole = "end";
-    (startHandle as any)._arrowPath = arrowPath;
-    (startHandle as any)._otherHandle = endHandle;
-    (startHandle as any)._arrowColor = color;
-    (endHandle as any)._arrowPath = arrowPath;
-    (endHandle as any)._otherHandle = startHandle;
-    (endHandle as any)._arrowColor = color;
-
-    // Cleanup function defined early so it can be referenced in onHandleMove
-    const cleanup = () => {
-      canvas.off("object:moving", onHandleMove);
-      canvas.off("mouse:up", onDragEnd);
+    return () => {
+      canvas.off("object:added", markDirty);
+      canvas.off("object:modified", markDirty);
+      canvas.off("object:removed", markDirty);
     };
+  }, [canvasReady]);
 
-    // Label position: centered below the start handle
-    function getLabelPos() {
-      const above = endHandle.top > startHandle.top;
-      return {
-        left: startHandle.left,
-        top: above ? startHandle.top - 20 : startHandle.top + 20,
-        originY: above ? "bottom" : "top",
-      };
-    }
+  // ─── Arrow selection / toolbar / movement sync ─────────────────────────────
 
-    // Store cleanup on all parts
-    (arrowPath as any)._arrowCleanup = cleanup;
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas || !canvasReady) return;
 
-    // Rebuild the arrow path from current handle positions
-    function rebuildPath(sh: any, eh: any) {
-      const path = sh._arrowPath;
-      canvas.remove(path);
-      const newPath = new fabric.Path(buildArrowPath(sh.left, sh.top, eh.left, eh.top), {
-        stroke: color,
-        strokeWidth: strokeW,
-        strokeLineCap: "round",
-        strokeLineJoin: "round",
-        fill: "transparent",
-        selectable: true,
-        evented: true,
-        hasBorders: false,
-        hasControls: false,
-        perPixelTargetFind: true,
-        lockRotation: true,
-        objectCaching: false,
-      });
-      (newPath as any)._isArrow = true;
-      (newPath as any)._startHandle = sh;
-      (newPath as any)._endHandle = eh;
-      (newPath as any)._arrowColor = color;
-      (newPath as any)._arrowCleanup = cleanup;
-
-      const existingLabel = path._arrowLabel;
-      (newPath as any)._arrowLabel = existingLabel;
-      if (existingLabel) existingLabel._parentArrow = newPath;
-      sh._arrowPath = newPath;
-      eh._arrowPath = newPath;
-      canvas.insertAt(canvas.getObjects().indexOf(sh), newPath);
-      // Keep label on top so it's clickable above the path
-      if (existingLabel) {
-        const objs = canvas.getObjects();
-        canvas.moveObjectTo(existingLabel, objs.length - 1);
-      }
-      return newPath;
-    }
-
-    // Path drag state — tracks previous position per drag operation
-    let pathDragActive = false;
-    let prevPathLeft = 0;
-    let prevPathTop = 0;
-
-    // Get the current path for this arrow (may change via rebuildPath)
-    function isMyObject(target: any): boolean {
-      if (target === startHandle || target === endHandle) return true;
-      // Check if target is the current path for this arrow
-      if (target === startHandle._arrowPath) return true;
-      return false;
-    }
-
-    // Track whether a handle is being dragged
-    let handleDragActive = false;
-    let previewPath: any = null;
-
-    // Update arrow when a handle or the path itself moves
-    function onHandleMove(e: any) {
-      const target = e.target;
-      if (!target || !isMyObject(target)) return;
-
-      // Handle endpoint drag — show real-time preview path
-      if (target === startHandle || target === endHandle) {
-        pathDragActive = false;
-
-        // First move: hide the real path
-        if (!handleDragActive) {
-          handleDragActive = true;
-          const currentPath = startHandle._arrowPath;
-          if (currentPath) currentPath.visible = false;
-        }
-
-        // Remove old preview
-        if (previewPath) canvas.remove(previewPath);
-
-        // Create new preview at current handle positions
-        previewPath = new fabric.Path(buildArrowPath(startHandle.left, startHandle.top, endHandle.left, endHandle.top), {
-          stroke: color,
-          strokeWidth: strokeW,
-          strokeLineCap: "round",
-          strokeLineJoin: "round",
-          fill: "transparent",
-          selectable: false,
-          evented: false,
+    function onSelected(e: any) {
+      const target = e.selected?.[0] || e.target;
+      if (target?.type === "FabricArrow") {
+        const canvasEl = canvas.getElement();
+        const rect = canvasEl.getBoundingClientRect();
+        const midX = (target.x1 + target.x2) / 2;
+        const midY = Math.min(target.y1, target.y2);
+        setArrowToolbar({
+          x: rect.left + midX - 56,
+          y: rect.top + midY,
+          arrow: target,
         });
-        canvas.add(previewPath);
-        // Keep label on top so it stays clickable
-        const lbl = startHandle._arrowPath?._arrowLabel;
-        if (lbl) canvas.moveObjectTo(lbl, canvas.getObjects().length - 1);
-
-        // Move label to follow the start handle
-        const currentPath = startHandle._arrowPath;
-        const label = currentPath?._arrowLabel;
-        if (label) label.set(getLabelPos());
-        canvas.renderAll();
-        return;
-      }
-
-      // Arrow path drag — move everything together
-      if (target._isArrow) {
-        handleDragActive = false;
-        // First move of this drag — initialize tracking
-        if (!pathDragActive) {
-          pathDragActive = true;
-          prevPathLeft = target.left;
-          prevPathTop = target.top;
-          return;
-        }
-        const dx = target.left - prevPathLeft;
-        const dy = target.top - prevPathTop;
-        prevPathLeft = target.left;
-        prevPathTop = target.top;
-        if (dx === 0 && dy === 0) return;
-        startHandle.set({ left: startHandle.left + dx, top: startHandle.top + dy });
-        startHandle.setCoords();
-        endHandle.set({ left: endHandle.left + dx, top: endHandle.top + dy });
-        endHandle.setCoords();
-        const label = target._arrowLabel;
-        if (label) label.set({ left: label.left + dx, top: label.top + dy });
-        canvas.renderAll();
-        return;
+      } else {
+        setArrowToolbar(null);
       }
     }
 
-    // When drag ends, rebuild path to sync with final handle positions
-    function onDragEnd(e: any) {
+    function onDeselected() {
+      setArrowToolbar(null);
+    }
+
+    function onMoving(e: any) {
       const target = e.target;
-      if (!target || !isMyObject(target)) return;
-
-      // Handle drag ended — remove preview, rebuild final path
-      if (handleDragActive && (target === startHandle || target === endHandle)) {
-        handleDragActive = false;
-        if (previewPath) { canvas.remove(previewPath); previewPath = null; }
-        const newPath = rebuildPath(startHandle, endHandle);
-        const label = newPath?._arrowLabel;
-        if (label) {
-          label.set(getLabelPos());
-          canvas.moveObjectTo(label, canvas.getObjects().length - 1);
-        }
-        canvas.renderAll();
-        return;
+      // Sync FabricArrow endpoints when the body is dragged
+      if (target?.type === "FabricArrow") {
+        target._syncEndpointsToPosition();
       }
+      // Hide toolbar during movement
+      setArrowToolbar(null);
+    }
 
-      // Shaft drag ended — rebuild path to eliminate drift
-      if (target._isArrow && pathDragActive) {
-        pathDragActive = false;
-        const newPath = rebuildPath(startHandle, endHandle);
-        const label = newPath?._arrowLabel;
-        if (label) {
-          label.set(getLabelPos());
-          canvas.moveObjectTo(label, canvas.getObjects().length - 1);
-        }
-        canvas.renderAll();
+    function onModified(e: any) {
+      const target = e.target;
+      if (target?.type === "FabricArrow") {
+        target._syncEndpointsToPosition();
+        const canvasEl = canvas.getElement();
+        const rect = canvasEl.getBoundingClientRect();
+        const midX = (target.x1 + target.x2) / 2;
+        const midY = Math.min(target.y1, target.y2);
+        setArrowToolbar({ x: rect.left + midX - 56, y: rect.top + midY, arrow: target });
       }
     }
 
-    canvas.on("object:moving", onHandleMove);
-    canvas.on("mouse:up", onDragEnd);
+    canvas.on("selection:created", onSelected);
+    canvas.on("selection:updated", onSelected);
+    canvas.on("selection:cleared", onDeselected);
+    canvas.on("object:moving", onMoving);
+    canvas.on("object:modified", onModified);
 
-    // Store cleanup on handles too
-    (startHandle as any)._arrowCleanup = cleanup;
-    (endHandle as any)._arrowCleanup = cleanup;
+    return () => {
+      canvas.off("selection:created", onSelected);
+      canvas.off("selection:updated", onSelected);
+      canvas.off("selection:cleared", onDeselected);
+      canvas.off("object:moving", onMoving);
+      canvas.off("object:modified", onModified);
+    };
+  }, [canvasReady]);
 
-    return { arrowPath, startHandle, endHandle, rebuildPath };
-  }
+  // ─── Tool Behavior ─────────────────────────────────────────────────────────
 
-  function handleArrowAddText(handle: any) {
-    const canvas = fabricRef.current;
-    const fabric = fabricModuleRef.current;
-    if (!canvas || !fabric || !handle) return;
-
-    // Place text centered above or below the tail depending on arrow direction
-    const startH = handle._arrowRole === "start" ? handle : handle._otherHandle;
-    const endH = handle._arrowRole === "end" ? handle : handle._otherHandle;
-    const arrowPath = startH._arrowPath;
-    const above = endH.top > startH.top;
-    const label = new fabric.IText("Label", {
-      left: startH.left,
-      top: above ? startH.top - 20 : startH.top + 20,
-      fontSize: 20,
-      fill: handle._arrowColor || "#F59E0B",
-      fontFamily: "Arial",
-      fontWeight: "bold",
-      stroke: "#000000",
-      strokeWidth: 0.5,
-      padding: 4,
-      originX: "center",
-      originY: above ? "bottom" : "top",
-      selectable: true,
-      evented: true,
-      editable: true,
-      lockMovementX: true,
-      lockMovementY: true,
-      hasControls: false,
-      hasBorders: false,
-    });
-    // Attach label to the arrow so it moves with the tail
-    if (arrowPath) {
-      (arrowPath as any)._arrowLabel = label;
-      (label as any)._parentArrow = arrowPath;
-    }
-    canvas.add(label);
-    // Ensure label is on top of the arrow path so it's clickable
-    const objs = canvas.getObjects();
-    canvas.moveObjectTo(label, objs.length - 1);
-    canvas.setActiveObject(label);
-    label.enterEditing();
-    label.selectAll();
-    canvas.renderAll();
-    setArrowToolbar(null);
-  }
-
-  function handleArrowCopy(handle: any) {
-    const canvas = fabricRef.current;
-    const fabric = fabricModuleRef.current;
-    if (!canvas || !fabric || !handle) return;
-
-    const startH = handle._arrowRole === "start" ? handle : handle._otherHandle;
-    const endH = handle._arrowRole === "end" ? handle : handle._otherHandle;
-    const color = handle._arrowColor || "#F59E0B";
-
-    // Create a duplicate arrow offset by 30px
-    const { arrowPath, startHandle, endHandle } = createArrow(
-      fabric, canvas,
-      startH.left + 30, startH.top + 30,
-      endH.left + 30, endH.top + 30,
-      color
-    );
-    canvas.add(arrowPath);
-    canvas.add(startHandle);
-    canvas.add(endHandle);
-    canvas.renderAll();
-    setArrowToolbar(null);
-  }
-
-  function handleArrowDelete(handle: any) {
-    const canvas = fabricRef.current;
-    if (!canvas || !handle) return;
-
-    const other = handle._otherHandle;
-    const path = handle._arrowPath;
-
-    // Cleanup listener
-    if (handle._arrowCleanup) handle._arrowCleanup();
-
-    // Remove all three objects
-    if (path) canvas.remove(path);
-    if (other) canvas.remove(other);
-    canvas.remove(handle);
-    canvas.renderAll();
-    setArrowToolbar(null);
-  }
-
-  // Tool behavior
   useEffect(() => {
     const canvas = fabricRef.current;
     const fabric = fabricModuleRef.current;
     if (!canvas || !canvasReady || !fabric) return;
 
+    // Remove previous mouse handlers
     canvas.off("mouse:down");
     canvas.off("mouse:move");
     canvas.off("mouse:up");
+    canvas.off("mouse:dblclick");
+
+    // Finalize any in-progress polyline when switching tools
+    if (
+      polyDrawingRef.current &&
+      polyDrawingRef.current.points.length >= 2 &&
+      activeTool !== "polyline"
+    ) {
+      finalizePolyline(false);
+    } else if (activeTool !== "polyline") {
+      polyDrawingRef.current = null;
+      polyPreviewRef.current = null;
+    }
+
+    const makeShadow = () => new fabric.Shadow(SHADOW_CONFIG);
 
     if (activeTool === "freehand") {
       canvas.isDrawingMode = true;
       canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
       canvas.freeDrawingBrush.color = activeColor;
-      canvas.freeDrawingBrush.width = 4;
+      canvas.freeDrawingBrush.width = activeThickness;
+      canvas.freeDrawingBrush.shadow = makeShadow();
       canvas.selection = false;
     } else if (activeTool === "select") {
+      canvas.isDrawingMode = false;
+      canvas.selection = true;
+      // Ensure all objects are fully interactive in select mode
+      canvas.forEachObject((obj: any) => {
+        obj.selectable = true;
+        obj.evented = true;
+      });
+    } else if (activeTool === "text") {
       canvas.isDrawingMode = false;
       canvas.selection = true;
       canvas.forEachObject((obj: any) => {
         obj.selectable = true;
         obj.evented = true;
-        // Arrow paths: no bounding box but still draggable
-        if (obj._isArrow) {
-          obj.hasBorders = false;
-          obj.hasControls = false;
-        }
-        // Arrow labels: clickable for editing but not draggable
-        if (obj._parentArrow) {
-          obj.lockMovementX = true;
-          obj.lockMovementY = true;
-          obj.hasControls = false;
-          obj.hasBorders = false;
-        }
       });
-      // Detect arrow path clicks in select mode too
-      canvas.on("mouse:down", (opt: any) => {
-        const target = opt.target;
-        if (target?._isArrow) {
-          if (target._startHandle) { target._startHandle.visible = true; target._startHandle.setCoords(); }
-          if (target._endHandle) { target._endHandle.visible = true; target._endHandle.setCoords(); }
-          canvas.renderAll();
-          const canvasEl = canvas.getElement();
-          const rect = canvasEl.getBoundingClientRect();
-          const sh = target._startHandle;
-          const eh = target._endHandle;
-          if (sh && eh) {
-            const midX = (sh.left + eh.left) / 2;
-            const midY = Math.min(sh.top, eh.top);
-            setArrowToolbar({ x: rect.left + midX - 56, y: rect.top + midY, handle: sh });
-          }
-        } else if (target?._parentArrow) {
-          // Clicked an arrow label — select it for editing
-          canvas.setActiveObject(target);
-          return;
-        } else if (!target?._arrowRole) {
-          // Clicked something else or empty — hide arrow handles
-          canvas.getObjects().forEach((obj: any) => {
-            if (obj._arrowRole && obj.visible) obj.visible = false;
-          });
-          setArrowToolbar(null);
-          canvas.renderAll();
-        }
-      });
-    } else if (activeTool === "text") {
-      canvas.isDrawingMode = false;
-      canvas.selection = false;
       canvas.on("mouse:down", (opt: any) => {
         if (opt.target) return;
+        canvas.discardActiveObject();
+        canvas.renderAll();
         const pointer = canvas.getScenePoint(opt.e);
         const text = new fabric.IText("Text", {
           left: pointer.x,
@@ -765,54 +802,144 @@ export default function PhotoAnnotator({
           stroke: "#000000",
           strokeWidth: 0.5,
           padding: 4,
+          shadow: makeShadow(),
         });
         canvas.add(text);
         canvas.setActiveObject(text);
         text.enterEditing();
         canvas.renderAll();
       });
+    } else if (activeTool === "polyline") {
+      canvas.isDrawingMode = false;
+      canvas.selection = true;
+      canvas.forEachObject((obj: any) => {
+        obj.selectable = true;
+        obj.evented = true;
+      });
+
+      // ── Polyline drawing state machine ──
+      canvas.on("mouse:down", (opt: any) => {
+        if (opt.target) return;
+        const pointer = canvas.getScenePoint(opt.e);
+        const pt = { x: pointer.x, y: pointer.y };
+
+        if (!polyDrawingRef.current) {
+          // Start new polyline
+          polyDrawingRef.current = { points: [pt] };
+        } else {
+          const pts = polyDrawingRef.current.points;
+          // Check if clicking near the first point → close the shape
+          if (pts.length >= 3) {
+            const dx = pt.x - pts[0].x;
+            const dy = pt.y - pts[0].y;
+            if (Math.sqrt(dx * dx + dy * dy) < 20) {
+              finalizePolyline(true);
+              canvas.renderAll();
+              return;
+            }
+          }
+          pts.push(pt);
+        }
+        canvas.renderAll();
+      });
+
+      canvas.on("mouse:move", (opt: any) => {
+        if (!polyDrawingRef.current) return;
+        const pointer = canvas.getScenePoint(opt.e);
+        polyPreviewRef.current = { x: pointer.x, y: pointer.y };
+        canvas.renderAll();
+      });
+
+      canvas.on("mouse:dblclick", () => {
+        if (polyDrawingRef.current && polyDrawingRef.current.points.length >= 2) {
+          finalizePolyline(false);
+          canvas.renderAll();
+        }
+      });
+
+      // After:render overlay for in-progress polyline
+      const drawPolyOverlay = () => {
+        const drawing = polyDrawingRef.current;
+        if (!drawing || drawing.points.length === 0) return;
+        const ctx = canvas.getContext();
+        if (!ctx) return;
+
+        ctx.save();
+        const color = activeColorRef.current;
+        const thick = activeThicknessRef.current;
+
+        // Draw completed segments
+        ctx.strokeStyle = color;
+        ctx.lineWidth = thick;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(drawing.points[0].x, drawing.points[0].y);
+        for (let i = 1; i < drawing.points.length; i++) {
+          ctx.lineTo(drawing.points[i].x, drawing.points[i].y);
+        }
+        ctx.stroke();
+
+        // Preview line from last point to cursor
+        const preview = polyPreviewRef.current;
+        if (preview && drawing.points.length > 0) {
+          const last = drawing.points[drawing.points.length - 1];
+          ctx.setLineDash([5, 5]);
+          ctx.globalAlpha = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(last.x, last.y);
+          ctx.lineTo(preview.x, preview.y);
+          ctx.stroke();
+        }
+
+        // Draw vertex dots
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        drawing.points.forEach((p, i) => {
+          ctx.fillStyle = i === 0 ? "#FFFFFF" : color;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, i === 0 ? 6 : 4, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+        });
+
+        ctx.restore();
+      };
+
+      canvas.on("after:render", drawPolyOverlay);
+
+      return () => {
+        canvas.off("after:render", drawPolyOverlay);
+        canvas.off("mouse:down");
+        canvas.off("mouse:move");
+        canvas.off("mouse:up");
+        canvas.off("mouse:dblclick");
+      };
     } else if (activeTool === "crop") {
-      // Crop mode handled separately
       canvas.isDrawingMode = false;
       canvas.selection = false;
     } else {
-      // Shape tools: circle, rectangle, arrow
+      // ── Shape tools: circle, rectangle, arrow ──
       canvas.isDrawingMode = false;
-      canvas.selection = false;
+      canvas.selection = true;
+
+      // Make all objects interactive
+      canvas.forEachObject((obj: any) => {
+        obj.selectable = true;
+        obj.evented = true;
+      });
 
       canvas.on("mouse:down", (opt: any) => {
-        const target = opt.target;
-        // If clicking an arrow path or handle, activate it for editing
-        if (target?._isArrow || target?._arrowRole) {
-          if (target._arrowRole) return;
-          // Clicked the arrow path — select it for dragging, show handles and toolbar
-          const ap = target;
-          canvas.setActiveObject(ap);
-          if (ap._startHandle) { ap._startHandle.visible = true; ap._startHandle.setCoords(); }
-          if (ap._endHandle) { ap._endHandle.visible = true; ap._endHandle.setCoords(); }
-          canvas.renderAll();
-          const canvasEl = canvas.getElement();
-          const rect = canvasEl.getBoundingClientRect();
-          const sh = ap._startHandle;
-          const eh = ap._endHandle;
-          if (sh && eh) {
-            const midX = (sh.left + eh.left) / 2;
-            const midY = Math.min(sh.top, eh.top);
-            setArrowToolbar({ x: rect.left + midX - 56, y: rect.top + midY, handle: sh });
-          }
+        if (opt.target) {
+          // Clicked on an existing object — let Fabric handle selection natively
+          // Don't start drawing a new shape
           return;
         }
-        // Let IText labels (including arrow labels) be clicked/edited naturally
-        if (target instanceof fabric.IText) {
-          canvas.setActiveObject(target);
-          return;
-        }
-        if (target) return;
-        // Clicked empty space — hide any visible arrow handles
-        canvas.getObjects().forEach((obj: any) => {
-          if (obj._arrowRole && obj.visible) obj.visible = false;
-        });
-        setArrowToolbar(null);
+        // Clicked on empty canvas — start drawing a new shape
+        canvas.discardActiveObject();
         canvas.renderAll();
         const pointer = canvas.getScenePoint(opt.e);
         isDrawingShape.current = true;
@@ -825,16 +952,14 @@ export default function PhotoAnnotator({
         const pointer = canvas.getScenePoint(opt.e);
         const tool = activeToolRef.current;
         const color = activeColorRef.current;
+        const thick = activeThicknessRef.current;
         const { x: sx, y: sy } = shapeStart.current;
         const dx = pointer.x - sx;
         const dy = pointer.y - sy;
 
-        if (currentShape.current) {
-          canvas.remove(currentShape.current);
-        }
+        if (currentShape.current) canvas.remove(currentShape.current);
 
         let shape: any;
-
         if (tool === "circle") {
           shape = new fabric.Ellipse({
             left: Math.min(sx, pointer.x),
@@ -843,8 +968,9 @@ export default function PhotoAnnotator({
             ry: Math.abs(dy) / 2,
             fill: "transparent",
             stroke: color,
-            strokeWidth: 3,
+            strokeWidth: thick,
             selectable: false,
+            shadow: new fabric.Shadow(SHADOW_CONFIG),
           });
         } else if (tool === "rectangle") {
           shape = new fabric.Rect({
@@ -854,13 +980,14 @@ export default function PhotoAnnotator({
             height: Math.abs(dy),
             fill: "transparent",
             stroke: color,
-            strokeWidth: 3,
+            strokeWidth: thick,
             selectable: false,
+            shadow: new fabric.Shadow(SHADOW_CONFIG),
           });
         } else if (tool === "arrow") {
-          // Preview arrow as a simple temporary path (no handles yet)
-          const ang = Math.atan2(pointer.y - sy, pointer.x - sx);
-          const hl = 24;
+          // Preview arrow as temporary path
+          const ang = Math.atan2(dy, dx);
+          const hl = thick * 4;
           const hx1 = pointer.x - hl * Math.cos(ang - Math.PI / 6);
           const hy1 = pointer.y - hl * Math.sin(ang - Math.PI / 6);
           const hx2 = pointer.x - hl * Math.cos(ang + Math.PI / 6);
@@ -869,7 +996,7 @@ export default function PhotoAnnotator({
             `M ${sx} ${sy} L ${pointer.x} ${pointer.y} M ${hx1} ${hy1} L ${pointer.x} ${pointer.y} L ${hx2} ${hy2}`,
             {
               stroke: color,
-              strokeWidth: 6,
+              strokeWidth: thick,
               strokeLineCap: "round",
               strokeLineJoin: "round",
               fill: "transparent",
@@ -890,112 +1017,150 @@ export default function PhotoAnnotator({
         if (!isDrawingShape.current) return;
         isDrawingShape.current = false;
 
-        // For arrows, remove the preview and create the real arrow with handles
         if (activeToolRef.current === "arrow" && currentShape.current) {
           canvas.remove(currentShape.current);
           const pointer = canvas.getScenePoint(opt.e);
           const { x: sx, y: sy } = shapeStart.current;
-
-          // Only create if dragged a meaningful distance
           const dist = Math.sqrt((pointer.x - sx) ** 2 + (pointer.y - sy) ** 2);
+
           if (dist > 10) {
-            const { arrowPath, startHandle, endHandle } = createArrow(
-              fabric, canvas, sx, sy, pointer.x, pointer.y, activeColorRef.current
-            );
-            canvas.add(arrowPath);
-            canvas.add(startHandle);
-            canvas.add(endHandle);
+            const ArrowClass = fabric.classRegistry.getClass("FabricArrow");
+            const arrow = new ArrowClass({
+              x1: sx,
+              y1: sy,
+              x2: pointer.x,
+              y2: pointer.y,
+              arrowColor: activeColorRef.current,
+              arrowThickness: activeThicknessRef.current,
+            });
+            canvas.add(arrow);
             canvas.renderAll();
           }
+        } else if (currentShape.current) {
+          // Finalize circle/rectangle — make selectable
+          currentShape.current.set({ selectable: true, evented: true });
+          currentShape.current.setCoords();
+          canvas.renderAll();
         }
-
         currentShape.current = null;
       });
     }
-  }, [activeTool, activeColor, canvasReady]);
 
-  // Apply image adjustments (brightness, contrast, saturation)
-  useEffect(() => {
-    const fabric = fabricModuleRef.current;
-    const bgImg = bgImageRef.current;
-    const canvas = fabricRef.current;
-    if (!fabric || !bgImg || !canvas || !canvasReady) return;
-
-    const filters: any[] = [];
-    if (brightness !== 0) {
-      filters.push(new fabric.filters.Brightness({ brightness }));
-    }
-    if (contrast !== 0) {
-      filters.push(new fabric.filters.Contrast({ contrast }));
-    }
-    if (saturation !== 0) {
-      filters.push(new fabric.filters.Saturation({ saturation }));
-    }
-
-    bgImg.filters = filters;
-    bgImg.applyFilters();
-    canvas.renderAll();
-  }, [brightness, contrast, saturation, canvasReady]);
-
-  function handleRotate() {
-    const canvas = fabricRef.current;
-    const bgImg = bgImageRef.current;
-    if (!canvas || !bgImg) return;
-
-    const { width, height, scale } = imgDimensionsRef.current;
-
-    // Swap dimensions
-    const newImgWidth = height;
-    const newImgHeight = width;
-
-    const maxWidth = window.innerWidth - 72;
-    const maxHeight = window.innerHeight;
-    const newScale = Math.min(
-      maxWidth / newImgWidth,
-      maxHeight / newImgHeight,
-      1
-    );
-    const canvasWidth = Math.round(newImgWidth * newScale);
-    const canvasHeight = Math.round(newImgHeight * newScale);
-
-    imgDimensionsRef.current = {
-      width: newImgWidth,
-      height: newImgHeight,
-      scale: newScale,
+    // Cleanup for non-polyline tools (polyline returns its own cleanup above)
+    return () => {
+      canvas.off("mouse:down");
+      canvas.off("mouse:move");
+      canvas.off("mouse:up");
+      canvas.off("mouse:dblclick");
     };
+  }, [activeTool, activeColor, activeThickness, canvasReady]);
 
-    // Rotate the background image by 90 degrees
-    const currentAngle = bgImg.angle || 0;
-    const newAngle = currentAngle + 90;
+  // ─── Finalize Polyline ─────────────────────────────────────────────────────
 
-    bgImg.set({
-      angle: newAngle,
-      scaleX: newScale,
-      scaleY: newScale,
-      left: canvasWidth / 2,
-      top: canvasHeight / 2,
-      originX: "center",
-      originY: "center",
-    });
+  function finalizePolyline(closed: boolean) {
+    const pts = polyDrawingRef.current?.points;
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!pts || pts.length < 2 || !canvas || !fabric) {
+      polyDrawingRef.current = null;
+      polyPreviewRef.current = null;
+      return;
+    }
 
-    canvas.setDimensions({ width: canvasWidth, height: canvasHeight });
+    const PolyClass = closed ? fabric.Polygon : fabric.Polyline;
+    const poly = new PolyClass(
+      pts.map((p: any) => ({ x: p.x, y: p.y })),
+      {
+        stroke: activeColorRef.current,
+        strokeWidth: activeThicknessRef.current,
+        fill: "transparent",
+        selectable: true,
+        evented: true,
+        objectCaching: false,
+        shadow: new fabric.Shadow(SHADOW_CONFIG),
+      }
+    );
+
+    // Add vertex controls
+    if (fabric.createPolyControls) {
+      poly.controls = fabric.createPolyControls(poly);
+    }
+    poly.hasBorders = false;
+    poly.cornerStyle = "circle";
+    poly.cornerColor = "#FFFFFF";
+    poly.cornerStrokeColor = activeColorRef.current;
+    poly.cornerSize = 14;
+    poly.transparentCorners = false;
+
+    canvas.add(poly);
     canvas.renderAll();
+
+    polyDrawingRef.current = null;
+    polyPreviewRef.current = null;
   }
+
+  // ─── Arrow Toolbar Handlers ────────────────────────────────────────────────
+
+  function handleArrowAddText(arrow: any) {
+    if (!arrow) return;
+    setLabelInput({
+      arrow,
+      text: arrow.labelText || "Label",
+    });
+    setArrowToolbar(null);
+  }
+
+  function handleArrowLabelSubmit() {
+    if (!labelInput) return;
+    const canvas = fabricRef.current;
+    labelInput.arrow.labelText = labelInput.text || null;
+    labelInput.arrow.set("dirty", true);
+    canvas?.renderAll();
+    setLabelInput(null);
+  }
+
+  function handleArrowCopy(arrow: any) {
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!canvas || !fabric || !arrow) return;
+
+    const ArrowClass = fabric.classRegistry.getClass("FabricArrow");
+    const copy = new ArrowClass({
+      x1: arrow.x1 + 30,
+      y1: arrow.y1 + 30,
+      x2: arrow.x2 + 30,
+      y2: arrow.y2 + 30,
+      arrowColor: arrow.arrowColor,
+      arrowThickness: arrow.arrowThickness,
+      labelText: arrow.labelText,
+      labelFontSize: arrow.labelFontSize,
+    });
+    canvas.add(copy);
+    canvas.renderAll();
+    setArrowToolbar(null);
+  }
+
+  function handleArrowDelete(arrow: any) {
+    const canvas = fabricRef.current;
+    if (!canvas || !arrow) return;
+    canvas.remove(arrow);
+    canvas.renderAll();
+    setArrowToolbar(null);
+  }
+
+  // ─── Crop System ───────────────────────────────────────────────────────────
 
   function drawCropOverlay(canvas: any) {
     const cropRect = cropRectRef.current;
     if (!cropRect || !canvas.getObjects().includes(cropRect)) return;
-
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext();
     const cw = canvas.width!;
     const ch = canvas.height!;
-
     const left = cropRect.left!;
     const top = cropRect.top!;
     const w = cropRect.width! * (cropRect.scaleX || 1);
     const h = cropRect.height! * (cropRect.scaleY || 1);
 
-    // Draw dark overlay with hole using evenodd fill rule
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, cw, ch);
@@ -1007,44 +1172,36 @@ export default function PhotoAnnotator({
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
     ctx.fill("evenodd");
 
-    // Draw rule-of-thirds grid lines
     const thirdW = w / 3;
     const thirdH = h / 3;
     ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    // Vertical lines
     ctx.moveTo(left + thirdW, top);
     ctx.lineTo(left + thirdW, top + h);
     ctx.moveTo(left + 2 * thirdW, top);
     ctx.lineTo(left + 2 * thirdW, top + h);
-    // Horizontal lines
     ctx.moveTo(left, top + thirdH);
     ctx.lineTo(left + w, top + thirdH);
     ctx.moveTo(left, top + 2 * thirdH);
     ctx.lineTo(left + w, top + 2 * thirdH);
     ctx.stroke();
-
     ctx.restore();
   }
 
   function cleanupCropObjects(canvas: any) {
-    // Remove after:render callback for overlay
     if (cropRenderCallbackRef.current) {
       canvas.off("after:render", cropRenderCallbackRef.current);
       cropRenderCallbackRef.current = null;
     }
-    // Remove crop rect
     if (cropRectRef.current) {
       canvas.remove(cropRectRef.current);
       cropRectRef.current = null;
     }
-    // Restore hidden annotation objects
     hiddenObjectsRef.current.forEach((obj) => {
       obj.visible = true;
     });
     hiddenObjectsRef.current = [];
-    // Remove event listeners
     canvas.off("object:moving", handleCropObjMove);
     canvas.off("object:scaling", handleCropObjScale);
   }
@@ -1053,18 +1210,14 @@ export default function PhotoAnnotator({
     const canvas = fabricRef.current;
     const cropRect = cropRectRef.current;
     if (!canvas || !cropRect || e.target !== cropRect) return;
-
     const cw = canvas.width!;
     const ch = canvas.height!;
     const w = cropRect.width! * (cropRect.scaleX || 1);
     const h = cropRect.height! * (cropRect.scaleY || 1);
-
-    // Clamp position within canvas
     cropRect.set({
       left: Math.max(0, Math.min(cropRect.left!, cw - w)),
       top: Math.max(0, Math.min(cropRect.top!, ch - h)),
     });
-
     canvas.renderAll();
   }
 
@@ -1072,25 +1225,24 @@ export default function PhotoAnnotator({
     const canvas = fabricRef.current;
     const cropRect = cropRectRef.current;
     if (!canvas || !cropRect || e.target !== cropRect) return;
-
     const cw = canvas.width!;
     const ch = canvas.height!;
-
     let w = cropRect.width! * (cropRect.scaleX || 1);
     let h = cropRect.height! * (cropRect.scaleY || 1);
-    let left = cropRect.left!;
-    let top = cropRect.top!;
-
-    // Enforce min size
-    if (w < 50) { cropRect.set({ scaleX: 50 / cropRect.width! }); w = 50; }
-    if (h < 50) { cropRect.set({ scaleY: 50 / cropRect.height! }); h = 50; }
-
-    // Clamp to canvas bounds
-    if (left < 0) cropRect.set({ left: 0 });
-    if (top < 0) cropRect.set({ top: 0 });
-    if (left + w > cw) cropRect.set({ scaleX: (cw - cropRect.left!) / cropRect.width! });
-    if (top + h > ch) cropRect.set({ scaleY: (ch - cropRect.top!) / cropRect.height! });
-
+    if (w < 50) {
+      cropRect.set({ scaleX: 50 / cropRect.width! });
+      w = 50;
+    }
+    if (h < 50) {
+      cropRect.set({ scaleY: 50 / cropRect.height! });
+      h = 50;
+    }
+    if (cropRect.left! < 0) cropRect.set({ left: 0 });
+    if (cropRect.top! < 0) cropRect.set({ top: 0 });
+    if (cropRect.left! + w > cw)
+      cropRect.set({ scaleX: (cw - cropRect.left!) / cropRect.width! });
+    if (cropRect.top! + h > ch)
+      cropRect.set({ scaleY: (ch - cropRect.top!) / cropRect.height! });
     canvas.renderAll();
   }
 
@@ -1102,7 +1254,6 @@ export default function PhotoAnnotator({
     setIsCropping(true);
     setActiveTool("crop");
 
-    // Hide existing annotation objects
     const existingObjects = canvas.getObjects().slice();
     existingObjects.forEach((obj: any) => {
       obj.visible = false;
@@ -1111,8 +1262,6 @@ export default function PhotoAnnotator({
 
     const cw = canvas.width!;
     const ch = canvas.height!;
-
-    // Create crop rectangle — inset by strokeWidth so border is fully visible
     const sw = 2;
     const cropRect = new fabric.Rect({
       left: sw,
@@ -1138,17 +1287,12 @@ export default function PhotoAnnotator({
     });
     cropRectRef.current = cropRect;
 
-    // Register after:render callback to draw overlay + grid natively
     const renderCallback = () => drawCropOverlay(canvas);
     cropRenderCallbackRef.current = renderCallback;
     canvas.on("after:render", renderCallback);
-
-    // Add crop rect to canvas
     canvas.add(cropRect);
     canvas.setActiveObject(cropRect);
     canvas.renderAll();
-
-    // Listen for crop rect movement/scaling
     canvas.on("object:moving", handleCropObjMove);
     canvas.on("object:scaling", handleCropObjScale);
   }
@@ -1157,11 +1301,9 @@ export default function PhotoAnnotator({
     const canvas = fabricRef.current;
     const cropRect = cropRectRef.current;
     if (!canvas || !cropRect) return;
-
     const cw = canvas.width!;
     const ch = canvas.height!;
     const sw = 2;
-
     cropRect.set({
       left: sw,
       top: sw,
@@ -1180,61 +1322,69 @@ export default function PhotoAnnotator({
     const fabric = fabricModuleRef.current;
     const cropRect = cropRectRef.current;
     const bgImg = bgImageRef.current;
-    if (!canvas || !fabric || !cropRect || !bgImg || !photo) return;
+    if (!canvas || !fabric || !cropRect || !bgImg || !currentPhoto) return;
 
-    // Get crop rectangle bounds (in canvas/screen coordinates)
     const left = cropRect.left!;
     const top = cropRect.top!;
     const cWidth = cropRect.width! * (cropRect.scaleX || 1);
     const cHeight = cropRect.height! * (cropRect.scaleY || 1);
 
-    // Remove all crop UI objects before rendering
     cleanupCropObjects(canvas);
 
-    // Render the full canvas at original resolution (bakes in filters + rotation)
     const { scale } = imgDimensionsRef.current;
     const multiplier = 1 / scale;
     const fullResCanvas = canvas.toCanvasElement(multiplier);
-
-    // Calculate crop region in full-res coordinates
     const srcLeft = Math.round(left * multiplier);
     const srcTop = Math.round(top * multiplier);
     const srcWidth = Math.round(cWidth * multiplier);
     const srcHeight = Math.round(cHeight * multiplier);
 
-    // Extract the cropped region
     const tempCanvas = document.createElement("canvas");
     tempCanvas.width = srcWidth;
     tempCanvas.height = srcHeight;
     const ctx = tempCanvas.getContext("2d")!;
-    ctx.drawImage(fullResCanvas, srcLeft, srcTop, srcWidth, srcHeight, 0, 0, srcWidth, srcHeight);
+    ctx.drawImage(
+      fullResCanvas,
+      srcLeft,
+      srcTop,
+      srcWidth,
+      srcHeight,
+      0,
+      0,
+      srcWidth,
+      srcHeight
+    );
 
-    // Save backup of original before first crop
     const supabase = createClient();
-    const backupPath = photo.storage_path.replace(/\.[^.]+$/, "-original$&");
+    const backupPath = currentPhoto.storage_path.replace(
+      /\.[^.]+$/,
+      "-original$&"
+    );
     if (!hasOriginalBackup) {
       try {
-        await supabase.storage.from("photos").copy(photo.storage_path, backupPath);
+        await supabase.storage
+          .from("photos")
+          .copy(currentPhoto.storage_path, backupPath);
         setHasOriginalBackup(true);
       } catch (err) {
         console.error("Failed to backup original:", err);
       }
     }
 
-    // Upload cropped image to Supabase Storage, replacing the current
     try {
       const blob = await new Promise<Blob>((resolve) => {
         tempCanvas.toBlob((b) => resolve(b!), "image/jpeg", 0.92);
       });
-      await supabase.storage.from("photos").upload(photo.storage_path, blob, {
-        upsert: true,
-        contentType: "image/jpeg",
-      });
+      await supabase.storage
+        .from("photos")
+        .upload(currentPhoto.storage_path, blob, {
+          upsert: true,
+          contentType: "image/jpeg",
+        });
     } catch (err) {
       console.error("Failed to upload cropped image:", err);
     }
 
-    // Load the cropped image as new background in the editor
     const croppedDataUrl = tempCanvas.toDataURL("image/jpeg", 0.92);
     const croppedImg = await new Promise<HTMLImageElement>((resolve) => {
       const el = document.createElement("img");
@@ -1242,7 +1392,6 @@ export default function PhotoAnnotator({
       el.src = croppedDataUrl;
     });
 
-    // Recalculate scale for the new dimensions
     const maxWidth = window.innerWidth - 72;
     const maxHeight = window.innerHeight;
     const newScale = Math.min(maxWidth / srcWidth, maxHeight / srcHeight, 1);
@@ -1263,19 +1412,17 @@ export default function PhotoAnnotator({
       originY: "top",
     });
 
-    // Clear all objects and set new background
     canvas.getObjects().forEach((obj: any) => canvas.remove(obj));
     canvas.setDimensions({ width: newCanvasWidth, height: newCanvasHeight });
     bgImageRef.current = newFabricImg;
     canvas.backgroundImage = newFabricImg;
     canvas.renderAll();
 
-    imgDimensionsRef.current = { width: srcWidth, height: srcHeight, scale: newScale };
-
-    // Reset adjustments since they're now baked into the cropped image
-    setBrightness(0);
-    setContrast(0);
-    setSaturation(0);
+    imgDimensionsRef.current = {
+      width: srcWidth,
+      height: srcHeight,
+      scale: newScale,
+    };
 
     setIsCropping(false);
     setActiveTool("arrow");
@@ -1283,27 +1430,30 @@ export default function PhotoAnnotator({
   }
 
   async function handleRestoreOriginal() {
-    if (!photo || !hasOriginalBackup) return;
+    if (!currentPhoto || !hasOriginalBackup) return;
 
     const supabase = createClient();
-    const backupPath = photo.storage_path.replace(/\.[^.]+$/, "-original$&");
+    const backupPath = currentPhoto.storage_path.replace(
+      /\.[^.]+$/,
+      "-original$&"
+    );
 
     try {
-      // Download the backup
-      const { data: backupBlob } = await supabase.storage.from("photos").download(backupPath);
+      const { data: backupBlob } = await supabase.storage
+        .from("photos")
+        .download(backupPath);
       if (!backupBlob) throw new Error("Backup not found");
 
-      // Overwrite current with the original backup
-      await supabase.storage.from("photos").upload(photo.storage_path, backupBlob, {
-        upsert: true,
-        contentType: backupBlob.type,
-      });
+      await supabase.storage
+        .from("photos")
+        .upload(currentPhoto.storage_path, backupBlob, {
+          upsert: true,
+          contentType: backupBlob.type,
+        });
 
-      // Remove the backup file
       await supabase.storage.from("photos").remove([backupPath]);
       setHasOriginalBackup(false);
 
-      // Reload the editor with the restored image
       toast.success("Original image restored.");
       onOpenChange(false);
       onSaved();
@@ -1323,33 +1473,72 @@ export default function PhotoAnnotator({
     setActiveTool("arrow");
   }
 
+  // ─── Rotate ────────────────────────────────────────────────────────────────
+
+  function handleRotate() {
+    const canvas = fabricRef.current;
+    const bgImg = bgImageRef.current;
+    if (!canvas || !bgImg) return;
+
+    const { width, height } = imgDimensionsRef.current;
+    const newImgWidth = height;
+    const newImgHeight = width;
+    const maxWidth = window.innerWidth - 72;
+    const maxHeight = window.innerHeight;
+    const newScale = Math.min(
+      maxWidth / newImgWidth,
+      maxHeight / newImgHeight,
+      1
+    );
+    const canvasWidth = Math.round(newImgWidth * newScale);
+    const canvasHeight = Math.round(newImgHeight * newScale);
+
+    imgDimensionsRef.current = {
+      width: newImgWidth,
+      height: newImgHeight,
+      scale: newScale,
+    };
+
+    const currentAngle = bgImg.angle || 0;
+    bgImg.set({
+      angle: currentAngle + 90,
+      scaleX: newScale,
+      scaleY: newScale,
+      left: canvasWidth / 2,
+      top: canvasHeight / 2,
+      originX: "center",
+      originY: "center",
+    });
+
+    canvas.setDimensions({ width: canvasWidth, height: canvasHeight });
+    canvas.renderAll();
+  }
+
+  // ─── Undo & Clear ─────────────────────────────────────────────────────────
+
   function handleUndo() {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    const objects = canvas.getObjects();
-    if (objects.length === 0) return;
 
-    const last = objects[objects.length - 1];
-
-    // If it's part of an arrow, remove all 3 parts (path + 2 handles)
-    if (last._isArrow) {
-      const sh = last._startHandle;
-      const eh = last._endHandle;
-      if (last._arrowCleanup) last._arrowCleanup();
-      if (sh) canvas.remove(sh);
-      if (eh) canvas.remove(eh);
-      canvas.remove(last);
-    } else if (last._arrowRole) {
-      const path = last._arrowPath;
-      const other = last._otherHandle;
-      if (path?._arrowCleanup) path._arrowCleanup();
-      if (path) canvas.remove(path);
-      if (other) canvas.remove(other);
-      canvas.remove(last);
-    } else {
-      canvas.remove(last);
+    // If actively drawing a polyline, undo the last placed point
+    if (polyDrawingRef.current) {
+      const pts = polyDrawingRef.current.points;
+      if (pts.length > 1) {
+        pts.pop();
+        canvas.renderAll();
+        return;
+      } else {
+        polyDrawingRef.current = null;
+        polyPreviewRef.current = null;
+        canvas.renderAll();
+        return;
+      }
     }
 
+    const objects = canvas.getObjects();
+    if (objects.length === 0) return;
+    const last = objects[objects.length - 1];
+    canvas.remove(last);
     setArrowToolbar(null);
     canvas.renderAll();
   }
@@ -1357,24 +1546,41 @@ export default function PhotoAnnotator({
   function handleClear() {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    canvas.getObjects().forEach((obj: any) => canvas.remove(obj));
+    canvas.getObjects().slice().forEach((obj: any) => canvas.remove(obj));
+    polyDrawingRef.current = null;
+    polyPreviewRef.current = null;
+    setArrowToolbar(null);
     canvas.renderAll();
   }
 
-  async function handleSave() {
+  // ─── Save ──────────────────────────────────────────────────────────────────
+
+  async function handleSave(closeAfter = true) {
     const canvas = fabricRef.current;
-    if (!canvas || !photo) return;
+    if (!canvas || !currentPhoto) return;
 
     setSaving(true);
     const supabase = createClient();
 
     try {
-      const annotationData = canvas.toJSON();
+      // Serialize using native Fabric JSON with custom properties
+      const json = canvas.toJSON([
+        "x1",
+        "y1",
+        "x2",
+        "y2",
+        "arrowColor",
+        "labelText",
+        "labelFontSize",
+        "arrowThickness",
+      ]);
+      const annotationData = { format: 3, canvas: json };
 
+      // Upsert annotation record
       const { data: existing } = await supabase
         .from("photo_annotations")
         .select("id")
-        .eq("photo_id", photo.id)
+        .eq("photo_id", currentPhoto.id)
         .limit(1)
         .single();
 
@@ -1385,17 +1591,21 @@ export default function PhotoAnnotator({
           .eq("id", existing.id);
       } else {
         await supabase.from("photo_annotations").insert({
-          photo_id: photo.id,
+          photo_id: currentPhoto.id,
           annotation_data: annotationData,
           created_by: "Eric",
         });
       }
 
+      // Export flattened annotated PNG
       try {
+        canvas.discardActiveObject();
+        canvas.renderAll();
+
         const dataUrl = canvas.toDataURL({ format: "png", multiplier: 2 });
         const res = await fetch(dataUrl);
         const blob = await res.blob();
-        const annotatedPath = photo.storage_path.replace(
+        const annotatedPath = currentPhoto.storage_path.replace(
           /\.[^.]+$/,
           "-annotated.png"
         );
@@ -1406,16 +1616,18 @@ export default function PhotoAnnotator({
         await supabase
           .from("photos")
           .update({ annotated_path: annotatedPath })
-          .eq("id", photo.id);
+          .eq("id", currentPhoto.id);
       } catch {
-        console.log(
-          "Could not export annotated image (cross-origin). JSON annotations saved."
-        );
+        console.log("Could not export annotated image. JSON annotations saved.");
       }
 
       toast.success("Annotations saved.");
-      onOpenChange(false);
+      isDirtyRef.current = false;
       onSaved();
+
+      if (closeAfter) {
+        onOpenChange(false);
+      }
     } catch (err) {
       console.error("Save annotation error:", err);
       toast.error("Failed to save annotations.");
@@ -1428,7 +1640,61 @@ export default function PhotoAnnotator({
     onOpenChange(false);
   }
 
-  if (!open || !photo) return null;
+  // ─── Photo Navigation ─────────────────────────────────────────────────────
+
+  function requestNav(targetIndex: number) {
+    if (targetIndex < 0 || targetIndex >= photos.length) return;
+    if (isDirtyRef.current) {
+      setNavPrompt(targetIndex);
+    } else {
+      setCurrentIndex(targetIndex);
+    }
+  }
+
+  async function handleNavSave() {
+    if (navPrompt === null) return;
+    const target = navPrompt;
+    setNavPrompt(null);
+    await handleSave(false);
+    setCurrentIndex(target);
+  }
+
+  function handleNavDiscard() {
+    if (navPrompt === null) return;
+    const target = navPrompt;
+    setNavPrompt(null);
+    isDirtyRef.current = false;
+    setCurrentIndex(target);
+  }
+
+  // ─── Keyboard Navigation ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!open || !canvasReady) return;
+
+    function onKeyDown(e: KeyboardEvent) {
+      // Don't navigate when editing text
+      const active = fabricRef.current?.getActiveObject();
+      if (active?.isEditing) return;
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        requestNav(currentIndex - 1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        requestNav(currentIndex + 1);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, canvasReady, currentIndex, photos.length]);
+
+  // ─── Guard ─────────────────────────────────────────────────────────────────
+
+  if (!open || photos.length === 0) return null;
+
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="fixed inset-0 z-[100] flex bg-[#1a1a1a]">
@@ -1487,6 +1753,32 @@ export default function PhotoAnnotator({
 
         <div className="w-8 h-px bg-[#333] my-1" />
 
+        {/* Line Thickness */}
+        {THICKNESSES.map((t) => (
+          <button
+            key={t.value}
+            onClick={() => setActiveThickness(t.value)}
+            title={t.label}
+            className={cn(
+              "w-10 h-8 rounded-lg flex items-center justify-center transition-all",
+              activeThickness === t.value
+                ? "border border-white scale-110"
+                : "border border-transparent hover:border-[#555]"
+            )}
+          >
+            <div
+              className="rounded-full"
+              style={{
+                width: 20,
+                height: t.value,
+                backgroundColor: activeColor,
+              }}
+            />
+          </button>
+        ))}
+
+        <div className="w-8 h-px bg-[#333] my-1" />
+
         {/* Rotate */}
         <button
           onClick={handleRotate}
@@ -1511,20 +1803,6 @@ export default function PhotoAnnotator({
           <Crop size={18} />
         </button>
 
-        {/* Adjustments toggle */}
-        <button
-          onClick={() => setShowAdjustments(!showAdjustments)}
-          title="Adjustments"
-          className={cn(
-            "w-10 h-10 rounded-lg flex items-center justify-center transition-colors",
-            showAdjustments
-              ? "bg-[#2B5EA7] text-white"
-              : "text-[#999] hover:text-white hover:bg-[#333]"
-          )}
-        >
-          <SlidersHorizontal size={18} />
-        </button>
-
         {/* Spacer */}
         <div className="flex-1" />
 
@@ -1547,67 +1825,10 @@ export default function PhotoAnnotator({
 
       {/* Main canvas area */}
       <div className="flex-1 flex flex-col relative">
-        {/* Top bar - adjustments panel (if open) */}
-        {showAdjustments && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 bg-[#222] border border-[#444] rounded-xl px-5 py-3 flex items-center gap-6 shadow-xl">
-            <div className="flex items-center gap-2">
-              <Sun size={14} className="text-[#999]" />
-              <span className="text-xs text-[#999] w-16">Brightness</span>
-              <input
-                type="range"
-                min="-0.5"
-                max="0.5"
-                step="0.05"
-                value={brightness}
-                onChange={(e) => setBrightness(parseFloat(e.target.value))}
-                className="w-28 accent-[#2B5EA7]"
-              />
-              <span className="text-xs text-[#ccc] w-8 text-right">
-                {Math.round(brightness * 100)}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <ContrastIcon size={14} className="text-[#999]" />
-              <span className="text-xs text-[#999] w-14">Contrast</span>
-              <input
-                type="range"
-                min="-0.5"
-                max="0.5"
-                step="0.05"
-                value={contrast}
-                onChange={(e) => setContrast(parseFloat(e.target.value))}
-                className="w-28 accent-[#2B5EA7]"
-              />
-              <span className="text-xs text-[#ccc] w-8 text-right">
-                {Math.round(contrast * 100)}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Droplets size={14} className="text-[#999]" />
-              <span className="text-xs text-[#999] w-16">Saturation</span>
-              <input
-                type="range"
-                min="-1"
-                max="1"
-                step="0.05"
-                value={saturation}
-                onChange={(e) => setSaturation(parseFloat(e.target.value))}
-                className="w-28 accent-[#2B5EA7]"
-              />
-              <span className="text-xs text-[#ccc] w-8 text-right">
-                {Math.round(saturation * 100)}
-              </span>
-            </div>
-            <button
-              onClick={() => {
-                setBrightness(0);
-                setContrast(0);
-                setSaturation(0);
-              }}
-              className="text-xs text-[#999] hover:text-white ml-2"
-            >
-              Reset
-            </button>
+        {/* Photo counter */}
+        {photos.length > 1 && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 bg-black/60 text-white text-xs px-3 py-1 rounded-full">
+            {currentIndex + 1} / {photos.length}
           </div>
         )}
 
@@ -1615,7 +1836,9 @@ export default function PhotoAnnotator({
         {isCropping && (
           <div className="absolute top-4 left-2 z-10 bg-white rounded-xl shadow-2xl w-[170px] overflow-hidden">
             <div className="px-4 pt-3 pb-2">
-              <h3 className="text-sm font-semibold text-[#1a1a1a]">Crop Image</h3>
+              <h3 className="text-sm font-semibold text-[#1a1a1a]">
+                Crop Image
+              </h3>
             </div>
             <div className="h-px bg-[#e5e5e5]" />
             <div className="p-3 flex flex-col gap-2">
@@ -1655,7 +1878,7 @@ export default function PhotoAnnotator({
           </div>
         )}
 
-        {/* Arrow action toolbar — positioned above the midpoint of the arrow */}
+        {/* Arrow action toolbar */}
         {arrowToolbar && (
           <div
             className="absolute z-20 flex items-center gap-0.5 bg-[#333] rounded-lg shadow-xl p-1"
@@ -1666,26 +1889,112 @@ export default function PhotoAnnotator({
             }}
           >
             <button
-              onClick={() => handleArrowAddText(arrowToolbar.handle)}
-              title="Add Text"
+              onClick={() => handleArrowAddText(arrowToolbar.arrow)}
+              title={arrowToolbar.arrow?.labelText ? "Edit Label" : "Add Text"}
               className="w-9 h-9 rounded-md flex items-center justify-center text-white hover:bg-[#555] transition-colors"
             >
               <Type size={18} />
             </button>
             <button
-              onClick={() => handleArrowCopy(arrowToolbar.handle)}
+              onClick={() => handleArrowCopy(arrowToolbar.arrow)}
               title="Duplicate"
               className="w-9 h-9 rounded-md flex items-center justify-center text-white hover:bg-[#555] transition-colors"
             >
               <Copy size={18} />
             </button>
             <button
-              onClick={() => handleArrowDelete(arrowToolbar.handle)}
+              onClick={() => handleArrowDelete(arrowToolbar.arrow)}
               title="Delete"
               className="w-9 h-9 rounded-md flex items-center justify-center text-white hover:bg-[#C41E2A] transition-colors"
             >
               <Trash2 size={18} />
             </button>
+          </div>
+        )}
+
+        {/* Arrow label input */}
+        {labelInput && (
+          <div
+            className="absolute z-30 bg-[#333] rounded-lg shadow-xl p-2 flex items-center gap-2"
+            style={{
+              left: ((labelInput.arrow.x1 + labelInput.arrow.x2) / 2) - 28,
+              top: Math.min(labelInput.arrow.y1, labelInput.arrow.y2) - 80,
+            }}
+          >
+            <input
+              autoFocus
+              value={labelInput.text}
+              onChange={(e) =>
+                setLabelInput({ ...labelInput, text: e.target.value })
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleArrowLabelSubmit();
+                if (e.key === "Escape") setLabelInput(null);
+              }}
+              className="bg-[#222] text-white text-sm px-2 py-1 rounded border border-[#555] outline-none focus:border-[#2B5EA7] w-32"
+              placeholder="Label text..."
+            />
+            <button
+              onClick={handleArrowLabelSubmit}
+              className="w-7 h-7 rounded bg-[#0F6E56] text-white flex items-center justify-center hover:bg-[#0a5a46]"
+            >
+              <Check size={14} />
+            </button>
+            <button
+              onClick={() => setLabelInput(null)}
+              className="w-7 h-7 rounded bg-[#555] text-white flex items-center justify-center hover:bg-[#666]"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {/* Navigation arrows */}
+        {photos.length > 1 && currentIndex > 0 && (
+          <button
+            onClick={() => requestNav(currentIndex - 1)}
+            className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition-colors"
+          >
+            <ChevronLeft size={24} />
+          </button>
+        )}
+        {photos.length > 1 && currentIndex < photos.length - 1 && (
+          <button
+            onClick={() => requestNav(currentIndex + 1)}
+            className="absolute right-14 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition-colors"
+          >
+            <ChevronRight size={24} />
+          </button>
+        )}
+
+        {/* Unsaved changes prompt */}
+        {navPrompt !== null && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60">
+            <div className="bg-white rounded-xl p-5 shadow-2xl max-w-sm">
+              <p className="text-sm text-gray-700 mb-4">
+                You have unsaved changes. Save before switching photos?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleNavSave}
+                  className="px-4 py-2 bg-[#0F6E56] text-white text-sm font-medium rounded-lg hover:bg-[#0a5a46] transition-colors"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={handleNavDiscard}
+                  className="px-4 py-2 bg-[#C41E2A] text-white text-sm font-medium rounded-lg hover:bg-[#A3171F] transition-colors"
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={() => setNavPrompt(null)}
+                  className="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1705,7 +2014,7 @@ export default function PhotoAnnotator({
         {/* Save / Discard - top right */}
         <div className="absolute top-3 right-4 flex items-center gap-2">
           <button
-            onClick={handleSave}
+            onClick={() => handleSave(true)}
             disabled={saving}
             title="Save & Close"
             className="w-10 h-10 rounded-full bg-[#0F6E56] hover:bg-[#0a5a46] text-white flex items-center justify-center transition-colors disabled:opacity-50 shadow-lg"

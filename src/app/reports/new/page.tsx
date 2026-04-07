@@ -1,0 +1,783 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
+import { createClient } from "@/lib/supabase";
+import {
+  Photo,
+  Job,
+  PhotoTag,
+  PhotoReportTemplate,
+} from "@/lib/types";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  FileText,
+  ImageIcon,
+  GripVertical,
+  Trash2,
+  Plus,
+  ChevronUp,
+  ChevronDown,
+  Filter,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import Link from "next/link";
+
+interface ReportSection {
+  title: string;
+  description: string;
+  photo_ids: string[];
+}
+
+type Step = 1 | 2 | 3;
+
+export default function NewReportPage() {
+  const searchParams = useSearchParams();
+  const jobIdParam = searchParams.get("jobId");
+
+  // Data
+  const [jobs, setJobs] = useState<Pick<Job, "id" | "job_number" | "property_address" | "claim_number" | "insurance_company">[]>([]);
+  const [templates, setTemplates] = useState<PhotoReportTemplate[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [tags, setTags] = useState<PhotoTag[]>([]);
+  const [photoTags, setPhotoTags] = useState<Record<string, string[]>>({});
+  const [loading, setLoading] = useState(true);
+
+  // Form state
+  const [step, setStep] = useState<Step>(1);
+  const [selectedJobId, setSelectedJobId] = useState<string>(jobIdParam ?? "");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [reportTitle, setReportTitle] = useState("");
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
+  const [sections, setSections] = useState<ReportSection[]>([]);
+  const [photosPerPage, setPhotosPerPage] = useState(2);
+  const [saving, setSaving] = useState(false);
+
+  // Filters for photo selection
+  const [photoSearch, setPhotoSearch] = useState("");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [roleFilter, setRoleFilter] = useState<string | null>(null);
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+
+  // Fetch jobs + templates on mount
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const [jobsRes, templatesRes, tagsRes] = await Promise.all([
+        supabase
+          .from("jobs")
+          .select("id, job_number, property_address, claim_number, insurance_company")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("photo_report_templates")
+          .select("*")
+          .order("name"),
+        supabase.from("photo_tags").select("*").order("name"),
+      ]);
+      if (jobsRes.data) setJobs(jobsRes.data);
+      if (templatesRes.data) setTemplates(templatesRes.data as PhotoReportTemplate[]);
+      if (tagsRes.data) setTags(tagsRes.data as PhotoTag[]);
+      setLoading(false);
+    })();
+  }, []);
+
+  // Fetch photos when job changes
+  const fetchPhotos = useCallback(async () => {
+    if (!selectedJobId) {
+      setPhotos([]);
+      setPhotoTags({});
+      return;
+    }
+    const supabase = createClient();
+    const [photosRes, assignmentsRes] = await Promise.all([
+      supabase
+        .from("photos")
+        .select("*")
+        .eq("job_id", selectedJobId)
+        .eq("media_type", "photo")
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("photo_tag_assignments")
+        .select("photo_id, tag_id"),
+    ]);
+
+    if (photosRes.data) setPhotos(photosRes.data as Photo[]);
+
+    // Build photo->tag lookup
+    if (assignmentsRes.data) {
+      const lookup: Record<string, string[]> = {};
+      for (const a of assignmentsRes.data) {
+        if (!lookup[a.photo_id]) lookup[a.photo_id] = [];
+        lookup[a.photo_id].push(a.tag_id);
+      }
+      setPhotoTags(lookup);
+    }
+  }, [selectedJobId]);
+
+  useEffect(() => {
+    fetchPhotos();
+  }, [fetchPhotos]);
+
+  // When template changes, populate sections
+  function applyTemplate(templateId: string) {
+    setSelectedTemplateId(templateId);
+    const tmpl = templates.find((t) => t.id === templateId);
+    if (tmpl) {
+      const tmplSections = tmpl.sections as { title: string; description: string }[];
+      setSections(
+        tmplSections.map((s) => ({
+          title: s.title,
+          description: s.description || "",
+          photo_ids: [],
+        }))
+      );
+      setPhotosPerPage(tmpl.photos_per_page);
+
+      // Auto-generate title
+      const job = jobs.find((j) => j.id === selectedJobId);
+      if (job) {
+        setReportTitle(`${tmpl.name} — ${job.job_number}`);
+      }
+    }
+  }
+
+  // When job changes and template already selected, update title
+  useEffect(() => {
+    if (selectedJobId && selectedTemplateId) {
+      const tmpl = templates.find((t) => t.id === selectedTemplateId);
+      const job = jobs.find((j) => j.id === selectedJobId);
+      if (tmpl && job) {
+        setReportTitle(`${tmpl.name} — ${job.job_number}`);
+      }
+    }
+  }, [selectedJobId, selectedTemplateId, templates, jobs]);
+
+  // Photo filtering
+  const filteredPhotos = photos.filter((p) => {
+    if (photoSearch) {
+      const q = photoSearch.toLowerCase();
+      if (!p.caption?.toLowerCase().includes(q)) return false;
+    }
+    if (roleFilter && p.before_after_role !== roleFilter) return false;
+    if (tagFilter && !photoTags[p.id]?.includes(tagFilter)) return false;
+    return true;
+  });
+
+  function togglePhoto(id: string) {
+    setSelectedPhotoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAll() {
+    setSelectedPhotoIds(new Set(filteredPhotos.map((p) => p.id)));
+  }
+
+  function selectNone() {
+    setSelectedPhotoIds(new Set());
+  }
+
+  // Section management
+  function addPhotoToSection(sectionIndex: number, photoId: string) {
+    setSections((prev) => {
+      const updated = [...prev];
+      // Remove from any other section first
+      updated.forEach((s, i) => {
+        if (i !== sectionIndex) {
+          s.photo_ids = s.photo_ids.filter((id) => id !== photoId);
+        }
+      });
+      // Add to target section if not already there
+      if (!updated[sectionIndex].photo_ids.includes(photoId)) {
+        updated[sectionIndex] = {
+          ...updated[sectionIndex],
+          photo_ids: [...updated[sectionIndex].photo_ids, photoId],
+        };
+      }
+      return updated;
+    });
+  }
+
+  function removePhotoFromSection(sectionIndex: number, photoId: string) {
+    setSections((prev) => {
+      const updated = [...prev];
+      updated[sectionIndex] = {
+        ...updated[sectionIndex],
+        photo_ids: updated[sectionIndex].photo_ids.filter((id) => id !== photoId),
+      };
+      return updated;
+    });
+  }
+
+  function autoAssign() {
+    // Distribute selected photos evenly across sections
+    const ids = Array.from(selectedPhotoIds);
+    if (ids.length === 0 || sections.length === 0) return;
+
+    const perSection = Math.ceil(ids.length / sections.length);
+    setSections((prev) =>
+      prev.map((s, i) => ({
+        ...s,
+        photo_ids: ids.slice(i * perSection, (i + 1) * perSection),
+      }))
+    );
+    toast.success("Photos distributed across sections");
+  }
+
+  // Save as draft
+  async function handleSave() {
+    if (!selectedJobId) {
+      toast.error("Select a job");
+      return;
+    }
+    if (!reportTitle.trim()) {
+      toast.error("Enter a report title");
+      return;
+    }
+    if (sections.length === 0) {
+      toast.error("Add at least one section");
+      return;
+    }
+
+    setSaving(true);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("photo_reports")
+      .insert({
+        job_id: selectedJobId,
+        template_id: selectedTemplateId || null,
+        title: reportTitle.trim(),
+        sections: sections,
+        status: "draft",
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      toast.error("Failed to save report");
+      console.error(error);
+    } else {
+      toast.success("Report saved as draft");
+      window.location.href = `/reports`;
+    }
+    setSaving(false);
+  }
+
+  function getPublicUrl(storagePath: string) {
+    return `${supabaseUrl}/storage/v1/object/public/photos/${storagePath}`;
+  }
+
+  // Step validation
+  function canProceedToStep2() {
+    return selectedJobId && selectedTemplateId;
+  }
+
+  function canProceedToStep3() {
+    return selectedPhotoIds.size > 0;
+  }
+
+  if (loading) {
+    return (
+      <div className="text-center py-12 text-[#999999]">Loading...</div>
+    );
+  }
+
+  return (
+    <div className="max-w-6xl">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-6">
+        <Link
+          href="/reports"
+          className="text-[#999999] hover:text-[#1A1A1A] transition-colors"
+        >
+          <ArrowLeft size={20} />
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold text-[#1A1A1A]">
+            Generate Photo Report
+          </h1>
+          <p className="text-sm text-[#999999] mt-0.5">
+            Step {step} of 3
+          </p>
+        </div>
+      </div>
+
+      {/* Step indicator */}
+      <div className="flex items-center gap-2 mb-6">
+        {[
+          { num: 1 as Step, label: "Setup" },
+          { num: 2 as Step, label: "Select Photos" },
+          { num: 3 as Step, label: "Assign to Sections" },
+        ].map((s, i) => (
+          <div key={s.num} className="flex items-center gap-2">
+            {i > 0 && (
+              <div
+                className={cn(
+                  "w-8 h-px",
+                  step >= s.num ? "bg-[#2B5EA7]" : "bg-gray-200"
+                )}
+              />
+            )}
+            <button
+              onClick={() => {
+                if (s.num === 1) setStep(1);
+                else if (s.num === 2 && canProceedToStep2()) setStep(2);
+                else if (s.num === 3 && canProceedToStep2() && canProceedToStep3()) setStep(3);
+              }}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+                step === s.num
+                  ? "bg-[#2B5EA7] text-white"
+                  : step > s.num
+                  ? "bg-[#E1F5EE] text-[#085041]"
+                  : "bg-gray-100 text-[#999999]"
+              )}
+            >
+              {step > s.num ? <Check size={12} /> : s.num}
+              {s.label}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* ═══ STEP 1: Setup ═══ */}
+      {step === 1 && (
+        <div className="space-y-4">
+          {/* Job selection */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
+              Select Job
+            </label>
+            <select
+              value={selectedJobId}
+              onChange={(e) => setSelectedJobId(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/20 focus:border-[#2B5EA7]"
+            >
+              <option value="">Choose a job...</option>
+              {jobs.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.job_number} — {j.property_address}
+                </option>
+              ))}
+            </select>
+            {selectedJobId && (
+              <p className="text-xs text-[#999999] mt-2">
+                {photos.length} photo{photos.length !== 1 ? "s" : ""} available
+              </p>
+            )}
+          </div>
+
+          {/* Template selection */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
+              Choose Template
+            </label>
+            {templates.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-sm text-[#999999]">No templates available.</p>
+                <Link
+                  href="/reports/templates"
+                  className="text-sm text-[#2B5EA7] hover:underline mt-1 inline-block"
+                >
+                  Create a template first
+                </Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {templates.map((tmpl) => (
+                  <button
+                    key={tmpl.id}
+                    onClick={() => applyTemplate(tmpl.id)}
+                    className={cn(
+                      "p-3 rounded-lg border text-left transition-all",
+                      selectedTemplateId === tmpl.id
+                        ? "border-[#2B5EA7] bg-[#E8F0FE] ring-1 ring-[#2B5EA7]"
+                        : "border-gray-200 hover:border-gray-300 bg-white"
+                    )}
+                  >
+                    <p className="text-sm font-medium text-[#1A1A1A]">
+                      {tmpl.name}
+                    </p>
+                    <p className="text-xs text-[#999999] mt-0.5 capitalize">
+                      {tmpl.audience} &middot;{" "}
+                      {(tmpl.sections as unknown[]).length} sections &middot;{" "}
+                      {tmpl.photos_per_page}/page
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Report title */}
+          {selectedTemplateId && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
+                Report Title
+              </label>
+              <Input
+                value={reportTitle}
+                onChange={(e) => setReportTitle(e.target.value)}
+                placeholder="Enter report title..."
+              />
+            </div>
+          )}
+
+          {/* Next button */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => setStep(2)}
+              disabled={!canProceedToStep2()}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[#2B5EA7] text-white hover:bg-[#244d8a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Select Photos
+              <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ STEP 2: Select Photos ═══ */}
+      {step === 2 && (
+        <div className="space-y-4">
+          {/* Filters */}
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="flex flex-col sm:flex-row gap-3 mb-3">
+              <div className="relative flex-1">
+                <Filter
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999999]"
+                />
+                <Input
+                  value={photoSearch}
+                  onChange={(e) => setPhotoSearch(e.target.value)}
+                  placeholder="Filter by caption..."
+                  className="pl-9"
+                />
+              </div>
+              <select
+                value={roleFilter || ""}
+                onChange={(e) => setRoleFilter(e.target.value || null)}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/20"
+              >
+                <option value="">All Roles</option>
+                <option value="before">Before</option>
+                <option value="after">After</option>
+              </select>
+            </div>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setTagFilter(null)}
+                  className={cn(
+                    "px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
+                    !tagFilter
+                      ? "bg-[#1B2434] text-white border-[#1B2434]"
+                      : "bg-white text-[#666666] border-gray-200"
+                  )}
+                >
+                  All
+                </button>
+                {tags.map((tag) => (
+                  <button
+                    key={tag.id}
+                    onClick={() =>
+                      setTagFilter(tagFilter === tag.id ? null : tag.id)
+                    }
+                    className={cn(
+                      "px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
+                      tagFilter === tag.id
+                        ? "text-white border-transparent"
+                        : "bg-white text-[#666666] border-gray-200"
+                    )}
+                    style={
+                      tagFilter === tag.id
+                        ? { backgroundColor: tag.color }
+                        : undefined
+                    }
+                  >
+                    {tag.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+              <span className="text-xs text-[#999999]">
+                {selectedPhotoIds.size} of {photos.length} selected
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={selectAll}
+                  className="text-xs text-[#2B5EA7] hover:underline font-medium"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={selectNone}
+                  className="text-xs text-[#999999] hover:underline"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Photo grid */}
+          {filteredPhotos.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <ImageIcon size={48} className="mx-auto text-[#CCCCCC] mb-3" />
+              <p className="text-[#999999]">No photos match your filters</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+              {filteredPhotos.map((photo) => {
+                const isSelected = selectedPhotoIds.has(photo.id);
+                return (
+                  <button
+                    key={photo.id}
+                    onClick={() => togglePhoto(photo.id)}
+                    className={cn(
+                      "aspect-square rounded-lg overflow-hidden relative group border-2 transition-all",
+                      isSelected
+                        ? "border-[#2B5EA7] ring-2 ring-[#2B5EA7]/30"
+                        : "border-transparent hover:border-gray-300"
+                    )}
+                  >
+                    <img
+                      src={getPublicUrl(
+                        photo.annotated_path || photo.storage_path
+                      )}
+                      alt={photo.caption || "Photo"}
+                      className="w-full h-full object-cover"
+                    />
+                    {/* Selection indicator */}
+                    <div
+                      className={cn(
+                        "absolute top-1.5 right-1.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
+                        isSelected
+                          ? "bg-[#2B5EA7] border-[#2B5EA7]"
+                          : "bg-white/80 border-white/80 group-hover:border-[#2B5EA7]/50"
+                      )}
+                    >
+                      {isSelected && <Check size={12} className="text-white" />}
+                    </div>
+                    {/* Caption */}
+                    {photo.caption && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5">
+                        <p className="text-[9px] text-white truncate">
+                          {photo.caption}
+                        </p>
+                      </div>
+                    )}
+                    {/* Before/After badge */}
+                    {photo.before_after_role && (
+                      <Badge
+                        className={cn(
+                          "absolute top-1.5 left-1.5 text-[8px] px-1 py-0 rounded",
+                          photo.before_after_role === "before"
+                            ? "bg-[#FCEBEB] text-[#791F1F]"
+                            : "bg-[#E1F5EE] text-[#085041]"
+                        )}
+                      >
+                        {photo.before_after_role === "before"
+                          ? "Before"
+                          : "After"}
+                      </Badge>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Navigation */}
+          <div className="flex justify-between">
+            <button
+              onClick={() => setStep(1)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-[#666666] hover:bg-gray-50 transition-colors"
+            >
+              <ArrowLeft size={16} />
+              Back
+            </button>
+            <button
+              onClick={() => setStep(3)}
+              disabled={!canProceedToStep3()}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[#2B5EA7] text-white hover:bg-[#244d8a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Assign to Sections
+              <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ STEP 3: Assign Photos to Sections ═══ */}
+      {step === 3 && (
+        <div className="space-y-4">
+          {/* Auto-assign button */}
+          <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-[#1A1A1A]">
+                {selectedPhotoIds.size} photos selected &middot;{" "}
+                {sections.length} sections
+              </p>
+              <p className="text-xs text-[#999999] mt-0.5">
+                Drag photos into sections below, or auto-distribute evenly.
+              </p>
+            </div>
+            <button
+              onClick={autoAssign}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#6C5CE7] text-white hover:bg-[#5B4DB5] transition-colors"
+            >
+              Auto-Assign
+            </button>
+          </div>
+
+          {/* Sections with photo assignment */}
+          {sections.map((section, si) => {
+            const assignedPhotos = section.photo_ids
+              .map((id) => photos.find((p) => p.id === id))
+              .filter(Boolean) as Photo[];
+            const unassigned = Array.from(selectedPhotoIds).filter(
+              (id) => !sections.some((s) => s.photo_ids.includes(id))
+            );
+
+            return (
+              <div
+                key={si}
+                className="bg-white rounded-xl border border-gray-200 p-4"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-[#1A1A1A]">
+                      {si + 1}. {section.title}
+                    </h4>
+                    {section.description && (
+                      <p className="text-xs text-[#999999] mt-0.5">
+                        {section.description}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-xs text-[#BBBBBB]">
+                    {assignedPhotos.length} photo
+                    {assignedPhotos.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+
+                {/* Assigned photos */}
+                {assignedPhotos.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {assignedPhotos.map((photo) => (
+                      <div
+                        key={photo.id}
+                        className="relative w-20 h-20 rounded-lg overflow-hidden group"
+                      >
+                        <img
+                          src={getPublicUrl(
+                            photo.annotated_path || photo.storage_path
+                          )}
+                          alt={photo.caption || "Photo"}
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          onClick={() =>
+                            removePhotoFromSection(si, photo.id)
+                          }
+                          className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Trash2 size={8} />
+                        </button>
+                        {photo.caption && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5">
+                            <p className="text-[7px] text-white truncate">
+                              {photo.caption}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-gray-200 rounded-lg py-4 text-center mb-3">
+                    <p className="text-xs text-[#BBBBBB]">
+                      No photos assigned yet
+                    </p>
+                  </div>
+                )}
+
+                {/* Add from unassigned */}
+                {unassigned.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-medium text-[#999999] mb-1.5">
+                      Add unassigned photos:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {unassigned.slice(0, 12).map((id) => {
+                        const photo = photos.find((p) => p.id === id);
+                        if (!photo) return null;
+                        return (
+                          <button
+                            key={id}
+                            onClick={() => addPhotoToSection(si, id)}
+                            className="w-12 h-12 rounded overflow-hidden border border-gray-200 hover:border-[#2B5EA7] transition-colors relative"
+                          >
+                            <img
+                              src={getPublicUrl(
+                                photo.annotated_path || photo.storage_path
+                              )}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/0 hover:bg-black/20 flex items-center justify-center transition-colors">
+                              <Plus
+                                size={12}
+                                className="text-white opacity-0 group-hover:opacity-100"
+                              />
+                            </div>
+                          </button>
+                        );
+                      })}
+                      {unassigned.length > 12 && (
+                        <span className="text-[10px] text-[#999999] self-center ml-1">
+                          +{unassigned.length - 12} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Navigation + Save */}
+          <div className="flex justify-between">
+            <button
+              onClick={() => setStep(2)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-[#666666] hover:bg-gray-50 transition-colors"
+            >
+              <ArrowLeft size={16} />
+              Back
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium bg-[#0F6E56] text-white hover:bg-[#0B5A45] disabled:opacity-50 transition-colors"
+            >
+              <FileText size={16} />
+              {saving ? "Saving..." : "Save Draft Report"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -12,7 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Trash2, Save, Loader2, Check, Tag, Pencil } from "lucide-react";
+import { Trash2, Save, Loader2, Check, Tag, Pencil, RotateCcw } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -39,6 +39,8 @@ export default function PhotoDetailModal({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [hasOriginalBackup, setHasOriginalBackup] = useState(false);
 
   useEffect(() => {
     if (photo) {
@@ -47,8 +49,67 @@ export default function PhotoDetailModal({
       setConfirmDelete(false);
       // Fetch tag assignments for this photo
       fetchTags(photo.id);
+      // Check if an original backup or annotations exist
+      checkOriginalBackup(photo);
     }
   }, [photo]);
+
+  async function checkOriginalBackup(p: Photo) {
+    const supabase = createClient();
+    // Check for crop backup
+    const backupPath = p.storage_path.replace(/\.[^.]+$/, "-original$&");
+    const { data: backupData } = await supabase.storage.from("photos").list(
+      backupPath.substring(0, backupPath.lastIndexOf("/")),
+      { search: backupPath.substring(backupPath.lastIndexOf("/") + 1) }
+    );
+    const hasCropBackup = !!backupData && backupData.some((f) => backupPath.endsWith(f.name));
+    setHasOriginalBackup(hasCropBackup || !!p.annotated_path);
+  }
+
+  async function handleRestoreOriginal() {
+    if (!photo) return;
+    setRestoring(true);
+    const supabase = createClient();
+
+    try {
+      // Restore crop backup if it exists
+      const backupPath = photo.storage_path.replace(/\.[^.]+$/, "-original$&");
+      const { data: backupData } = await supabase.storage.from("photos").list(
+        backupPath.substring(0, backupPath.lastIndexOf("/")),
+        { search: backupPath.substring(backupPath.lastIndexOf("/") + 1) }
+      );
+      const hasCropBackup = !!backupData && backupData.some((f) => backupPath.endsWith(f.name));
+
+      if (hasCropBackup) {
+        const { data: backupBlob } = await supabase.storage.from("photos").download(backupPath);
+        if (backupBlob) {
+          await supabase.storage.from("photos").upload(photo.storage_path, backupBlob, {
+            upsert: true,
+            contentType: backupBlob.type,
+          });
+          await supabase.storage.from("photos").remove([backupPath]);
+        }
+      }
+
+      // Delete annotated image if it exists
+      if (photo.annotated_path) {
+        await supabase.storage.from("photos").remove([photo.annotated_path]);
+        await supabase.from("photos").update({ annotated_path: null }).eq("id", photo.id);
+      }
+
+      // Delete annotation records
+      await supabase.from("photo_annotations").delete().eq("photo_id", photo.id);
+
+      toast.success("Photo restored to original.");
+      setHasOriginalBackup(false);
+      onOpenChange(false);
+      onUpdated();
+    } catch (err) {
+      console.error("Failed to restore original:", err);
+      toast.error("Failed to restore original photo.");
+    }
+    setRestoring(false);
+  }
 
   async function fetchTags(photoId: string) {
     const supabase = createClient();
@@ -165,6 +226,20 @@ export default function PhotoDetailModal({
               <span className="ml-3 text-xs text-[#0F6E56]">
                 Has annotations
               </span>
+            )}
+            {hasOriginalBackup && (
+              <button
+                onClick={handleRestoreOriginal}
+                disabled={restoring}
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-[#791F1F] hover:text-[#C41E2A] transition-colors disabled:opacity-50"
+              >
+                {restoring ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <RotateCcw size={12} />
+                )}
+                Restore Original Photo
+              </button>
             )}
           </div>
 
