@@ -1,0 +1,125 @@
+import { NextResponse } from "next/server";
+import { createApiClient } from "@/lib/supabase-api";
+
+// GET /api/settings/damage-types
+export async function GET() {
+  const supabase = createApiClient();
+  const { data, error } = await supabase
+    .from("damage_types")
+    .select("*")
+    .order("sort_order");
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
+}
+
+// POST /api/settings/damage-types — create new type
+export async function POST(request: Request) {
+  const body = await request.json();
+  const { name, display_label, bg_color, text_color, icon } = body;
+
+  if (!name || !display_label) {
+    return NextResponse.json({ error: "name and display_label are required" }, { status: 400 });
+  }
+
+  const supabase = createApiClient();
+
+  const { data: existing } = await supabase
+    .from("damage_types")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1);
+
+  const nextOrder = (existing?.[0]?.sort_order ?? 0) + 1;
+
+  const { data, error } = await supabase
+    .from("damage_types")
+    .insert({
+      name: name.toLowerCase().replace(/\s+/g, "_"),
+      display_label,
+      bg_color: bg_color || "#F1EFE8",
+      text_color: text_color || "#5F5E5A",
+      icon: icon || null,
+      sort_order: nextOrder,
+      is_default: false,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    if (error.message.includes("duplicate")) {
+      return NextResponse.json({ error: "A damage type with that name already exists" }, { status: 409 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json(data, { status: 201 });
+}
+
+// PUT /api/settings/damage-types — bulk update
+export async function PUT(request: Request) {
+  const body = await request.json();
+  const supabase = createApiClient();
+
+  if (Array.isArray(body)) {
+    for (const item of body) {
+      const { error } = await supabase
+        .from("damage_types")
+        .update({
+          display_label: item.display_label,
+          bg_color: item.bg_color,
+          text_color: item.text_color,
+          icon: item.icon,
+          sort_order: item.sort_order,
+        })
+        .eq("id", item.id);
+
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ success: true });
+  }
+
+  const { id, display_label, bg_color, text_color, icon, sort_order } = body;
+  const { error } = await supabase
+    .from("damage_types")
+    .update({ display_label, bg_color, text_color, icon, sort_order })
+    .eq("id", id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}
+
+// DELETE /api/settings/damage-types?id=xxx
+export async function DELETE(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+  const supabase = createApiClient();
+
+  const { data: dtype } = await supabase
+    .from("damage_types")
+    .select("is_default, name")
+    .eq("id", id)
+    .single();
+
+  if (dtype?.is_default) {
+    return NextResponse.json({ error: "Default damage types cannot be deleted" }, { status: 403 });
+  }
+
+  const { count } = await supabase
+    .from("jobs")
+    .select("*", { count: "exact", head: true })
+    .eq("damage_type", dtype?.name || "");
+
+  if (count && count > 0) {
+    return NextResponse.json(
+      { error: `Cannot delete — ${count} job(s) use this damage type` },
+      { status: 409 }
+    );
+  }
+
+  const { error } = await supabase.from("damage_types").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}

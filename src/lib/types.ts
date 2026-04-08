@@ -15,9 +15,9 @@ export interface Job {
   id: string;
   job_number: string;
   contact_id: string;
-  status: "new" | "in_progress" | "pending_invoice" | "completed" | "cancelled";
+  status: string;
   urgency: "emergency" | "urgent" | "scheduled";
-  damage_type: "water" | "fire" | "mold" | "storm" | "biohazard" | "contents" | "rebuild" | "other";
+  damage_type: string;
   damage_source: string | null;
   property_address: string;
   property_type: "single_family" | "multi_family" | "commercial" | "condo";
@@ -217,6 +217,31 @@ export interface EmailAccount {
   is_default: boolean;
   last_synced_at: string | null;
   last_synced_uid: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JobStatus {
+  id: string;
+  name: string;
+  display_label: string;
+  bg_color: string;
+  text_color: string;
+  sort_order: number;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DamageType {
+  id: string;
+  name: string;
+  display_label: string;
+  bg_color: string;
+  text_color: string;
+  icon: string | null;
+  sort_order: number;
+  is_default: boolean;
   created_at: string;
   updated_at: string;
 }

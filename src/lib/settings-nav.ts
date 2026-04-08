@@ -23,8 +23,8 @@ export interface SettingsNavItem {
 export const settingsNavItems: SettingsNavItem[] = [
   { href: "/settings/company", label: "Company Profile", icon: Building2 },
   { href: "/settings/appearance", label: "Appearance", icon: Palette },
-  { href: "/settings/statuses", label: "Job Statuses", icon: ListChecks, disabled: true },
-  { href: "/settings/damage-types", label: "Damage Types", icon: Flame, disabled: true },
+  { href: "/settings/statuses", label: "Job Statuses", icon: ListChecks },
+  { href: "/settings/damage-types", label: "Damage Types", icon: Flame },
   { href: "/settings/users", label: "Users & Crew", icon: Users, disabled: true },
   { href: "/settings/email", label: "Email Accounts", icon: Mail },
   { href: "/settings/signatures", label: "Email Signatures", icon: FileSignature, disabled: true },

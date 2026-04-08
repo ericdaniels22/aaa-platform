@@ -1,19 +1,16 @@
+"use client";
+
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, User, Shield, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { Job } from "@/lib/types";
-import {
-  statusColors,
-  statusLabels,
-  urgencyColors,
-  urgencyLabels,
-  damageTypeColors,
-  damageTypeLabels,
-} from "@/lib/badge-colors";
+import { urgencyColors, urgencyLabels } from "@/lib/badge-colors";
+import { useConfig } from "@/lib/config-context";
 import { cn } from "@/lib/utils";
 
 export default function JobCard({ job }: { job: Job }) {
+  const { getStatusColor, getStatusLabel, getDamageTypeColor, getDamageTypeLabel } = useConfig();
   const isCompleted = job.status === "completed" || job.status === "cancelled";
   const contactName = job.contact
     ? `${job.contact.first_name} ${job.contact.last_name}`
@@ -23,15 +20,15 @@ export default function JobCard({ job }: { job: Job }) {
     <Link
       href={`/jobs/${job.id}`}
       className={cn(
-        "block bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all",
+        "block bg-card rounded-xl border border-border p-5 hover:shadow-sm transition-all",
         isCompleted && "opacity-60"
       )}
     >
       {/* Top row: job number + badges */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
-          <p className="text-xs font-mono text-[#999999]">{job.job_number}</p>
-          <p className="text-base font-semibold text-[#1A1A1A] mt-0.5">
+          <p className="text-xs font-mono text-muted-foreground">{job.job_number}</p>
+          <p className="text-base font-semibold text-foreground mt-0.5">
             {contactName}
           </p>
         </div>
@@ -49,16 +46,16 @@ export default function JobCard({ job }: { job: Job }) {
             variant="secondary"
             className={cn(
               "text-[11px] font-medium px-2 py-0.5 rounded-md",
-              damageTypeColors[job.damage_type]
+              getDamageTypeColor(job.damage_type)
             )}
           >
-            {damageTypeLabels[job.damage_type]}
+            {getDamageTypeLabel(job.damage_type)}
           </Badge>
         </div>
       </div>
 
       {/* Details */}
-      <div className="space-y-1.5 text-sm text-[#666666]">
+      <div className="space-y-1.5 text-sm text-muted-foreground">
         <div className="flex items-center gap-2">
           <MapPin size={14} className="flex-shrink-0" />
           <span className="truncate">{job.property_address}</span>
@@ -79,8 +76,8 @@ export default function JobCard({ job }: { job: Job }) {
       </div>
 
       {/* Bottom row: date + status */}
-      <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
-        <div className="flex items-center gap-1.5 text-xs text-[#999999]">
+      <div className="flex items-center justify-between mt-4 pt-3 border-t border-border">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Calendar size={12} />
           <span>{format(new Date(job.created_at), "MMM d, yyyy")}</span>
         </div>
@@ -88,10 +85,10 @@ export default function JobCard({ job }: { job: Job }) {
           variant="secondary"
           className={cn(
             "text-[11px] font-medium px-2 py-0.5 rounded-md",
-            statusColors[job.status]
+            getStatusColor(job.status)
           )}
         >
-          {statusLabels[job.status]}
+          {getStatusLabel(job.status)}
         </Badge>
       </div>
     </Link>

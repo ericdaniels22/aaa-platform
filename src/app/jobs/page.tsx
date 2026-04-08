@@ -6,16 +6,18 @@ import { Job } from "@/lib/types";
 import JobCard from "@/components/job-card";
 import { Briefcase, FileText, CalendarDays, Flame } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const filterOptions = [
-  { value: "all", label: "All" },
-  { value: "emergency", label: "Emergency" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "pending_invoice", label: "Pending Invoice" },
-  { value: "completed", label: "Completed" },
-];
+import { useConfig } from "@/lib/config-context";
 
 export default function JobsPage() {
+  const { statuses } = useConfig();
+
+  const filterOptions = [
+    { value: "all", label: "All" },
+    { value: "emergency", label: "Emergency" },
+    ...statuses
+      .filter((s) => !["new", "cancelled"].includes(s.name))
+      .map((s) => ({ value: s.name, label: s.display_label })),
+  ];
   const [jobs, setJobs] = useState<Job[]>([]);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);

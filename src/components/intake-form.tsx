@@ -9,19 +9,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
-// ── Pill selector options ──────────────────────────
-
-const damageTypes = [
-  { value: "water", label: "Water", color: "bg-[#E6F1FB] text-[#0C447C] border-[#0C447C]/20" },
-  { value: "fire", label: "Fire", color: "bg-[#FAECE7] text-[#712B13] border-[#712B13]/20" },
-  { value: "mold", label: "Mold", color: "bg-[#EAF3DE] text-[#27500A] border-[#27500A]/20" },
-  { value: "storm", label: "Storm", color: "bg-[#EEEDFE] text-[#3C3489] border-[#3C3489]/20" },
-  { value: "biohazard", label: "Biohazard", color: "bg-[#FCEBEB] text-[#791F1F] border-[#791F1F]/20" },
-  { value: "contents", label: "Contents", color: "bg-[#FFF8E6] text-[#7A5E00] border-[#7A5E00]/20" },
-  { value: "rebuild", label: "Rebuild", color: "bg-[#F1EFE8] text-[#5F5E5A] border-[#5F5E5A]/20" },
-  { value: "other", label: "Other", color: "bg-[#F1EFE8] text-[#5F5E5A] border-[#5F5E5A]/20" },
-];
+import { useConfig } from "@/lib/config-context";
 
 const relationships = [
   { value: "homeowner", label: "Homeowner" },
@@ -54,6 +42,7 @@ const insuranceOptions = [
 
 export default function IntakeForm() {
   const router = useRouter();
+  const { damageTypes: configDamageTypes } = useConfig();
   const [submitting, setSubmitting] = useState(false);
 
   // Section 1: Name
@@ -208,7 +197,11 @@ export default function IntakeForm() {
       {/* ── Section 2: Damage Type ── */}
       <FormSection number={2} title="Type of Damage">
         <PillSelector
-          options={damageTypes}
+          options={configDamageTypes.map((dt) => ({
+            value: dt.name,
+            label: dt.display_label,
+            color: `bg-[${dt.bg_color}] text-[${dt.text_color}] border-[${dt.text_color}]/20`,
+          }))}
           value={damageType}
           onChange={setDamageType}
         />
