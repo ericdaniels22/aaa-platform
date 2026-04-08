@@ -149,8 +149,12 @@ export default function ComposeEmailModal({
 
       // Fetch accounts
       fetch("/api/email/accounts")
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) return null;
+          return res.json();
+        })
         .then((data) => {
+          if (!data) return;
           if (!Array.isArray(data)) return;
           const active = data.filter((a: EmailAccountData) => a.is_active);
           setAccounts(active);
@@ -310,7 +314,15 @@ export default function ComposeEmailModal({
         }),
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        toast.error(`Server error (${res.status}). Check email settings and try again.`);
+        setSending(false);
+        return;
+      }
+
       if (res.ok) {
         toast.success("Email sent successfully.");
         onOpenChange(false);

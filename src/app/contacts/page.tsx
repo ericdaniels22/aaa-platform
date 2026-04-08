@@ -1,10 +1,581 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { createClient } from "@/lib/supabase";
+import { Contact } from "@/lib/types";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import {
+  Users,
+  Plus,
+  Search,
+  Phone,
+  Mail,
+  Building2,
+  Pencil,
+  Trash2,
+  Briefcase,
+  Loader2,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import Link from "next/link";
+import { format } from "date-fns";
+
+const roleOptions = [
+  { value: "homeowner", label: "Homeowner" },
+  { value: "tenant", label: "Tenant" },
+  { value: "property_manager", label: "Prop Manager" },
+  { value: "adjuster", label: "Adjuster" },
+  { value: "insurance", label: "Insurance" },
+];
+
+const roleColors: Record<string, string> = {
+  homeowner: "bg-[#E6F1FB] text-[#0C447C]",
+  tenant: "bg-[#EEEDFE] text-[#3C3489]",
+  property_manager: "bg-[#FAEEDA] text-[#633806]",
+  adjuster: "bg-[#E1F5EE] text-[#085041]",
+  insurance: "bg-[#FFF8E6] text-[#7A5E00]",
+};
+
+const roleLabels: Record<string, string> = {
+  homeowner: "Homeowner",
+  tenant: "Tenant",
+  property_manager: "Prop Manager",
+  adjuster: "Adjuster",
+  insurance: "Insurance",
+};
+
+type ContactWithJobs = Contact & {
+  job_count?: number;
+};
+
+const emptyForm = {
+  first_name: "",
+  last_name: "",
+  phone: "",
+  email: "",
+  role: "homeowner" as Contact["role"],
+  company: "",
+  notes: "",
+};
+
 export default function ContactsPage() {
+  const [contacts, setContacts] = useState<ContactWithJobs[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+
+  // Delete confirmation
+  const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const fetchContacts = useCallback(async () => {
+    const supabase = createClient();
+
+    // Fetch contacts with job count
+    const { data: contactsData } = await supabase
+      .from("contacts")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!contactsData) {
+      setContacts([]);
+      setLoading(false);
+      return;
+    }
+
+    // Get job counts per contact
+    const { data: jobCounts } = await supabase
+      .from("jobs")
+      .select("contact_id");
+
+    const countMap: Record<string, number> = {};
+    if (jobCounts) {
+      for (const j of jobCounts) {
+        countMap[j.contact_id] = (countMap[j.contact_id] || 0) + 1;
+      }
+    }
+
+    setContacts(
+      contactsData.map((c) => ({
+        ...c,
+        job_count: countMap[c.id] || 0,
+      })) as ContactWithJobs[]
+    );
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchContacts();
+  }, [fetchContacts]);
+
+  // Filtered contacts
+  const filtered = contacts.filter((c) => {
+    if (roleFilter !== "all" && c.role !== roleFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const fullName = `${c.first_name} ${c.last_name}`.toLowerCase();
+      return (
+        fullName.includes(q) ||
+        c.email?.toLowerCase().includes(q) ||
+        c.phone?.toLowerCase().includes(q) ||
+        c.company?.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+
+  // Stats
+  const totalContacts = contacts.length;
+  const adjustersCount = contacts.filter((c) => c.role === "adjuster").length;
+  const homeownersCount = contacts.filter((c) => c.role === "homeowner").length;
+
+  function openAddDialog() {
+    setEditingContact(null);
+    setForm(emptyForm);
+    setDialogOpen(true);
+  }
+
+  function openEditDialog(contact: Contact) {
+    setEditingContact(contact);
+    setForm({
+      first_name: contact.first_name,
+      last_name: contact.last_name,
+      phone: contact.phone || "",
+      email: contact.email || "",
+      role: contact.role,
+      company: contact.company || "",
+      notes: contact.notes || "",
+    });
+    setDialogOpen(true);
+  }
+
+  async function handleSave() {
+    if (!form.first_name.trim() || !form.last_name.trim()) {
+      toast.error("First and last name are required");
+      return;
+    }
+
+    setSaving(true);
+    const supabase = createClient();
+
+    const payload = {
+      first_name: form.first_name.trim(),
+      last_name: form.last_name.trim(),
+      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
+      role: form.role,
+      company: form.company.trim() || null,
+      notes: form.notes.trim() || null,
+    };
+
+    if (editingContact) {
+      const { error } = await supabase
+        .from("contacts")
+        .update(payload)
+        .eq("id", editingContact.id);
+
+      if (error) {
+        toast.error("Failed to update contact");
+        console.error(error);
+      } else {
+        toast.success("Contact updated");
+        setDialogOpen(false);
+        fetchContacts();
+      }
+    } else {
+      const { error } = await supabase.from("contacts").insert(payload);
+
+      if (error) {
+        toast.error("Failed to create contact");
+        console.error(error);
+      } else {
+        toast.success("Contact created");
+        setDialogOpen(false);
+        fetchContacts();
+      }
+    }
+    setSaving(false);
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("contacts")
+      .delete()
+      .eq("id", deleteTarget.id);
+
+    if (error) {
+      toast.error(
+        error.message.includes("foreign key")
+          ? "Cannot delete — this contact is linked to jobs"
+          : "Failed to delete contact"
+      );
+    } else {
+      toast.success("Contact deleted");
+      fetchContacts();
+    }
+    setDeleteTarget(null);
+    setDeleting(false);
+  }
+
   return (
     <div className="max-w-6xl">
-      <h1 className="text-2xl font-bold text-[#1A1A1A] mb-2">Contacts</h1>
-      <p className="text-[#666666]">
-        Contacts directory coming in a future build.
-      </p>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-[#1A1A1A]">Contacts</h1>
+          <p className="text-[#666666] mt-1 text-sm">
+            {totalContacts} contact{totalContacts !== 1 ? "s" : ""} &middot;{" "}
+            {homeownersCount} homeowner{homeownersCount !== 1 ? "s" : ""} &middot;{" "}
+            {adjustersCount} adjuster{adjustersCount !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <button
+          onClick={openAddDialog}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-[#0F6E56] text-white hover:bg-[#0B5A45] transition-colors"
+        >
+          <Plus size={16} />
+          Add Contact
+        </button>
+      </div>
+
+      {/* Search + Filter */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <div className="relative flex-1">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999999]"
+          />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, email, phone, or company..."
+            className="pl-9"
+          />
+        </div>
+      </div>
+
+      {/* Role filter pills */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        <button
+          onClick={() => setRoleFilter("all")}
+          className={cn(
+            "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+            roleFilter === "all"
+              ? "bg-[#1B2434] text-white border-[#1B2434]"
+              : "bg-white text-[#666666] border-gray-200 hover:border-gray-300"
+          )}
+        >
+          All
+        </button>
+        {roleOptions.map((r) => (
+          <button
+            key={r.value}
+            onClick={() =>
+              setRoleFilter(roleFilter === r.value ? "all" : r.value)
+            }
+            className={cn(
+              "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+              roleFilter === r.value
+                ? "bg-[#1B2434] text-white border-[#1B2434]"
+                : "bg-white text-[#666666] border-gray-200 hover:border-gray-300"
+            )}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Contact list */}
+      {loading ? (
+        <div className="text-center py-12 text-[#999999]">Loading...</div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <Users size={48} className="mx-auto text-[#CCCCCC] mb-3" />
+          <p className="text-[#999999]">
+            {search || roleFilter !== "all"
+              ? "No contacts match your filters"
+              : "No contacts yet"}
+          </p>
+          {!search && roleFilter === "all" && (
+            <button
+              onClick={openAddDialog}
+              className="text-sm text-[#0F6E56] hover:underline font-medium mt-2 inline-block"
+            >
+              Add your first contact
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((contact) => (
+            <div
+              key={contact.id}
+              className="bg-white rounded-xl border border-gray-200 p-4 hover:border-gray-300 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-4">
+                {/* Left: name + details */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-sm font-semibold text-[#1A1A1A] truncate">
+                      {contact.first_name} {contact.last_name}
+                    </h3>
+                    <Badge
+                      className={cn(
+                        "text-[10px] px-1.5 py-0 rounded-full font-medium shrink-0",
+                        roleColors[contact.role] || "bg-gray-100 text-gray-600"
+                      )}
+                    >
+                      {roleLabels[contact.role] || contact.role}
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#666666]">
+                    {contact.phone && (
+                      <span className="inline-flex items-center gap-1">
+                        <Phone size={12} className="text-[#999999]" />
+                        {contact.phone}
+                      </span>
+                    )}
+                    {contact.email && (
+                      <span className="inline-flex items-center gap-1">
+                        <Mail size={12} className="text-[#999999]" />
+                        {contact.email}
+                      </span>
+                    )}
+                    {contact.company && (
+                      <span className="inline-flex items-center gap-1">
+                        <Building2 size={12} className="text-[#999999]" />
+                        {contact.company}
+                      </span>
+                    )}
+                    {(contact.job_count ?? 0) > 0 && (
+                      <Link
+                        href={`/jobs?contact=${contact.id}`}
+                        className="inline-flex items-center gap-1 text-[#2B5EA7] hover:underline"
+                      >
+                        <Briefcase size={12} />
+                        {contact.job_count} job{contact.job_count !== 1 ? "s" : ""}
+                      </Link>
+                    )}
+                  </div>
+                  {contact.notes && (
+                    <p className="text-xs text-[#999999] mt-1.5 line-clamp-1">
+                      {contact.notes}
+                    </p>
+                  )}
+                </div>
+
+                {/* Right: actions */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => openEditDialog(contact)}
+                    className="p-1.5 rounded-lg text-[#999999] hover:text-[#1A1A1A] hover:bg-gray-100 transition-colors"
+                    title="Edit"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(contact)}
+                    className="p-1.5 rounded-lg text-[#999999] hover:text-[#C41E2A] hover:bg-red-50 transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingContact ? "Edit Contact" : "New Contact"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Name row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[#666666] mb-1">
+                  First Name *
+                </label>
+                <Input
+                  value={form.first_name}
+                  onChange={(e) =>
+                    setForm({ ...form, first_name: e.target.value })
+                  }
+                  placeholder="First name"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#666666] mb-1">
+                  Last Name *
+                </label>
+                <Input
+                  value={form.last_name}
+                  onChange={(e) =>
+                    setForm({ ...form, last_name: e.target.value })
+                  }
+                  placeholder="Last name"
+                />
+              </div>
+            </div>
+
+            {/* Role pills */}
+            <div>
+              <label className="block text-xs font-medium text-[#666666] mb-1.5">
+                Role
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {roleOptions.map((r) => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    onClick={() =>
+                      setForm({ ...form, role: r.value as Contact["role"] })
+                    }
+                    className={cn(
+                      "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+                      form.role === r.value
+                        ? roleColors[r.value] + " border-current"
+                        : "bg-white text-[#666666] border-gray-200"
+                    )}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Phone + Email */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[#666666] mb-1">
+                  Phone
+                </label>
+                <Input
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  placeholder="(555) 123-4567"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#666666] mb-1">
+                  Email
+                </label>
+                <Input
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="email@example.com"
+                  type="email"
+                />
+              </div>
+            </div>
+
+            {/* Company */}
+            <div>
+              <label className="block text-xs font-medium text-[#666666] mb-1">
+                Company
+              </label>
+              <Input
+                value={form.company}
+                onChange={(e) => setForm({ ...form, company: e.target.value })}
+                placeholder="Company name"
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-xs font-medium text-[#666666] mb-1">
+                Notes
+              </label>
+              <Textarea
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Optional notes about this contact..."
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <DialogClose className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-[#666666] hover:bg-gray-50 transition-colors">
+              Cancel
+            </DialogClose>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[#0F6E56] text-white hover:bg-[#0B5A45] disabled:opacity-50 transition-colors"
+            >
+              {saving && <Loader2 size={14} className="animate-spin" />}
+              {editingContact ? "Save Changes" : "Create Contact"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Contact</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-[#666666] py-2">
+            Are you sure you want to delete{" "}
+            <span className="font-medium text-[#1A1A1A]">
+              {deleteTarget?.first_name} {deleteTarget?.last_name}
+            </span>
+            ? This cannot be undone.
+          </p>
+          {(deleteTarget as ContactWithJobs)?.job_count ? (
+            <p className="text-xs text-[#C41E2A] bg-[#FCEBEB] px-3 py-2 rounded-lg">
+              This contact is linked to{" "}
+              {(deleteTarget as ContactWithJobs).job_count} job(s) and cannot be
+              deleted until those jobs are reassigned.
+            </p>
+          ) : null}
+          <DialogFooter>
+            <DialogClose className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-[#666666] hover:bg-gray-50 transition-colors">
+              Cancel
+            </DialogClose>
+            <button
+              onClick={handleDelete}
+              disabled={deleting || !!(deleteTarget as ContactWithJobs)?.job_count}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[#C41E2A] text-white hover:bg-[#A3171F] disabled:opacity-50 transition-colors"
+            >
+              {deleting && <Loader2 size={14} className="animate-spin" />}
+              Delete
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

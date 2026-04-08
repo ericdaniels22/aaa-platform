@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import {
@@ -37,6 +37,14 @@ interface ReportSection {
 type Step = 1 | 2 | 3;
 
 export default function NewReportPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-12 text-[#999999]">Loading...</div>}>
+      <NewReportPageInner />
+    </Suspense>
+  );
+}
+
+function NewReportPageInner() {
   const searchParams = useSearchParams();
   const jobIdParam = searchParams.get("jobId");
 

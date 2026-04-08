@@ -11,6 +11,7 @@ import {
   Camera,
   FileText,
   Mail,
+  Settings,
   Menu,
   X,
 } from "lucide-react";
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: FileText },
   { href: "/contacts", label: "Contacts", icon: Users },
   { href: "/email", label: "Email", icon: Mail },
+  { href: "/settings/email", label: "Settings", icon: Settings },
 ];
 
 export default function Sidebar() {

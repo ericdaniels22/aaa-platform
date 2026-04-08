@@ -22,7 +22,16 @@ export async function POST(
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
-  const password = decrypt(account.encrypted_password);
+  let password: string;
+  try {
+    password = decrypt(account.encrypted_password);
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Failed to decrypt password: ${err instanceof Error ? err.message : "check ENCRYPTION_KEY"}` },
+      { status: 500 }
+    );
+  }
+
   const results = { imap: false, smtp: false, imapError: "", smtpError: "" };
 
   // Test IMAP
@@ -33,7 +42,7 @@ export async function POST(
       secure: account.imap_port === 993,
       auth: { user: account.username, pass: password },
       logger: false,
-      tls: { rejectUnauthorized: false },
+      tls: { rejectUnauthorized: process.env.EMAIL_TLS_REJECT_UNAUTHORIZED === "true" },
     });
     await client.connect();
     await client.logout();
@@ -49,7 +58,7 @@ export async function POST(
       port: account.smtp_port,
       secure: account.smtp_port === 465,
       auth: { user: account.username, pass: password },
-      tls: { rejectUnauthorized: false },
+      tls: { rejectUnauthorized: process.env.EMAIL_TLS_REJECT_UNAUTHORIZED === "true" },
     });
     await transporter.verify();
     transporter.close();

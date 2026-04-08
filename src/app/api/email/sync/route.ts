@@ -67,7 +67,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
-  const password = decrypt(account.encrypted_password);
+  let password: string;
+  try {
+    password = decrypt(account.encrypted_password);
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Failed to decrypt password: ${err instanceof Error ? err.message : "check ENCRYPTION_KEY"}` },
+      { status: 500 }
+    );
+  }
+
   const isFirstSync = !account.last_synced_uid || account.last_synced_uid === 0;
 
   let client: ImapFlow | null = null;
@@ -83,7 +92,7 @@ export async function POST(request: NextRequest) {
       secure: account.imap_port === 993,
       auth: { user: account.username, pass: password },
       logger: false,
-      tls: { rejectUnauthorized: false },
+      tls: { rejectUnauthorized: process.env.EMAIL_TLS_REJECT_UNAUTHORIZED === "true" },
     });
 
     await client.connect();

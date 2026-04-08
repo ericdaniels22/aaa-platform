@@ -87,13 +87,17 @@ export default function EmailInbox() {
   // Load accounts on mount
   useEffect(() => {
     fetch("/api/email/accounts")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) return null;
+        return res.json();
+      })
       .then((data) => {
         if (Array.isArray(data)) {
           const active = data.filter((a: EmailAccount) => a.is_active);
           setAccounts(active);
         }
-      });
+      })
+      .catch(() => {});
   }, []);
 
   // Debounce search

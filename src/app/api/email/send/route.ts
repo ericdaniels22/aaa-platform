@@ -40,7 +40,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email account not found" }, { status: 404 });
   }
 
-  const password = decrypt(account.encrypted_password);
+  let password: string;
+  try {
+    password = decrypt(account.encrypted_password);
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Failed to decrypt password: ${err instanceof Error ? err.message : "check ENCRYPTION_KEY"}` },
+      { status: 500 }
+    );
+  }
+
   const displayName = account.display_name || "AAA Disaster Recovery";
 
   // Build headers for reply threading
@@ -56,7 +65,7 @@ export async function POST(request: Request) {
       port: account.smtp_port,
       secure: account.smtp_port === 465,
       auth: { user: account.username, pass: password },
-      tls: { rejectUnauthorized: false },
+      tls: { rejectUnauthorized: process.env.EMAIL_TLS_REJECT_UNAUTHORIZED === "true" },
     });
 
     const mailOptions: Record<string, unknown> = {
