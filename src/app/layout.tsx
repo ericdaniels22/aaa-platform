@@ -3,6 +3,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/nav";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "next-themes";
+import BrandColorsProvider from "@/components/brand-colors-provider";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -20,14 +22,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full bg-[#F5F5F5]">
-        <Sidebar />
-        {/* Main content area offset by sidebar width */}
-        <main className="lg:ml-64 pt-14 lg:pt-0 min-h-screen">
-          <div className="p-6 lg:p-8">{children}</div>
-        </main>
-        <Toaster />
+    <html lang="en" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
+      <body className="min-h-full bg-background">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <BrandColorsProvider />
+          <Sidebar />
+          <main className="lg:ml-64 pt-14 lg:pt-0 min-h-screen">
+            <div className="p-6 lg:p-8">{children}</div>
+          </main>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

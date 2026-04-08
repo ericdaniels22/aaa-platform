@@ -22,7 +22,7 @@ export interface SettingsNavItem {
 
 export const settingsNavItems: SettingsNavItem[] = [
   { href: "/settings/company", label: "Company Profile", icon: Building2 },
-  { href: "/settings/appearance", label: "Appearance", icon: Palette, disabled: true },
+  { href: "/settings/appearance", label: "Appearance", icon: Palette },
   { href: "/settings/statuses", label: "Job Statuses", icon: ListChecks, disabled: true },
   { href: "/settings/damage-types", label: "Damage Types", icon: Flame, disabled: true },
   { href: "/settings/users", label: "Users & Crew", icon: Users, disabled: true },

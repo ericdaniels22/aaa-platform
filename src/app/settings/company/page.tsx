@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import {
-  Building2,
   Upload,
   Trash2,
   Loader2,
@@ -145,7 +144,7 @@ export default function CompanyProfilePage() {
 
   if (loading) {
     return (
-      <div className="text-center py-12 text-[#999999]">Loading...</div>
+      <div className="text-center py-12 text-muted-foreground">Loading...</div>
     );
   }
 
@@ -155,22 +154,22 @@ export default function CompanyProfilePage() {
     <div className="space-y-6">
       {/* Page header */}
       <div>
-        <h2 className="text-lg font-semibold text-[#1A1A1A]">
+        <h2 className="text-lg font-semibold text-foreground">
           Company Profile
         </h2>
-        <p className="text-sm text-[#666666] mt-0.5">
+        <p className="text-sm text-muted-foreground mt-0.5">
           Your company info appears on reports, invoices, and emails.
         </p>
       </div>
 
       {/* Logo */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <label className="block text-sm font-medium text-[#333] mb-3">
+      <div className="bg-card rounded-xl border border-border p-6">
+        <label className="block text-sm font-medium text-foreground mb-3">
           Company Logo
         </label>
         <div className="flex items-center gap-5">
           {displayLogo ? (
-            <div className="w-24 h-24 rounded-xl border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center">
+            <div className="w-24 h-24 rounded-xl border border-border overflow-hidden bg-muted flex items-center justify-center">
               <img
                 src={displayLogo}
                 alt="Company logo"
@@ -178,8 +177,8 @@ export default function CompanyProfilePage() {
               />
             </div>
           ) : (
-            <div className="w-24 h-24 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center bg-gray-50">
-              <ImageIcon size={28} className="text-[#CCCCCC]" />
+            <div className="w-24 h-24 rounded-xl border-2 border-dashed border-border flex items-center justify-center bg-muted">
+              <ImageIcon size={28} className="text-muted-foreground/50" />
             </div>
           )}
           <div>
@@ -187,7 +186,7 @@ export default function CompanyProfilePage() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 bg-white text-[#666666] hover:bg-gray-50 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-border bg-card text-muted-foreground hover:bg-accent transition-colors"
               >
                 <Upload size={14} />
                 Upload
@@ -196,14 +195,14 @@ export default function CompanyProfilePage() {
                 <button
                   type="button"
                   onClick={removeLogo}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 bg-white text-[#C41E2A] hover:bg-red-50 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-border bg-card text-destructive hover:bg-destructive/10 transition-colors"
                 >
                   <Trash2 size={14} />
                   Remove
                 </button>
               )}
             </div>
-            <p className="text-[10px] text-[#999999] mt-2">
+            <p className="text-[10px] text-muted-foreground mt-2">
               PNG, JPG, SVG, or WebP. Max 2MB. Recommended 400x400px.
             </p>
           </div>
@@ -218,13 +217,13 @@ export default function CompanyProfilePage() {
       </div>
 
       {/* Company Info */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <label className="block text-sm font-medium text-[#333] mb-4">
+      <div className="bg-card rounded-xl border border-border p-6">
+        <label className="block text-sm font-medium text-foreground mb-4">
           Company Information
         </label>
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#666666] mb-1">
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
               Company Name
             </label>
             <Input
@@ -235,7 +234,7 @@ export default function CompanyProfilePage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-[#666666] mb-1">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
                 Phone
               </label>
               <Input
@@ -246,7 +245,7 @@ export default function CompanyProfilePage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#666666] mb-1">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
                 Email
               </label>
               <Input
@@ -259,7 +258,7 @@ export default function CompanyProfilePage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-[#666666] mb-1">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
                 Website
               </label>
               <Input
@@ -270,7 +269,7 @@ export default function CompanyProfilePage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#666666] mb-1">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
                 License Number
               </label>
               <Input
@@ -284,13 +283,13 @@ export default function CompanyProfilePage() {
       </div>
 
       {/* Address */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <label className="block text-sm font-medium text-[#333] mb-4">
+      <div className="bg-card rounded-xl border border-border p-6">
+        <label className="block text-sm font-medium text-foreground mb-4">
           Business Address
         </label>
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#666666] mb-1">
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
               Street Address
             </label>
             <Input
@@ -301,7 +300,7 @@ export default function CompanyProfilePage() {
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-[#666666] mb-1">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
                 City
               </label>
               <Input
@@ -311,7 +310,7 @@ export default function CompanyProfilePage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#666666] mb-1">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
                 State
               </label>
               <Input
@@ -322,7 +321,7 @@ export default function CompanyProfilePage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#666666] mb-1">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
                 ZIP
               </label>
               <Input
@@ -340,7 +339,8 @@ export default function CompanyProfilePage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-[#0F6E56] text-white hover:bg-[#0B5A45] disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-colors"
+          style={{ backgroundColor: "var(--brand-primary)" }}
         >
           {saving && <Loader2 size={16} className="animate-spin" />}
           {uploadingLogo ? "Uploading Logo..." : saving ? "Saving..." : "Save Changes"}

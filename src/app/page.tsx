@@ -54,8 +54,8 @@ export default function DashboardPage() {
     <div className="max-w-6xl">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-[#1A1A1A]">Dashboard</h1>
-        <p className="text-[#666666] mt-1">
+        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <p className="text-muted-foreground mt-1">
           Welcome back, Eric. Here&apos;s your overview.
         </p>
       </div>
@@ -90,7 +90,7 @@ export default function DashboardPage() {
 
       {/* Recent jobs */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-[#1A1A1A]">Recent Jobs</h2>
+        <h2 className="text-lg font-semibold text-foreground">Recent Jobs</h2>
         <Link
           href="/jobs"
           className="text-sm text-[#2B5EA7] hover:underline font-medium"
@@ -99,11 +99,11 @@ export default function DashboardPage() {
         </Link>
       </div>
       {recentJobs.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-          <p className="text-[#999999]">No jobs yet.</p>
+        <div className="text-center py-12 bg-card rounded-xl border border-border">
+          <p className="text-muted-foreground">No jobs yet.</p>
           <Link
             href="/intake"
-            className="text-sm text-[#C41E2A] hover:underline font-medium mt-1 inline-block"
+            className="text-sm text-[var(--brand-accent)] hover:underline font-medium mt-1 inline-block"
           >
             Create your first intake
           </Link>
@@ -132,16 +132,16 @@ function StatCard({
 }) {
   return (
     <div
-      className={`bg-white rounded-xl border border-gray-200 p-5 border-l-4 ${accent}`}
+      className={`bg-card rounded-xl border border-border p-5 border-l-4 ${accent}`}
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium text-[#999999] uppercase tracking-wider">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             {label}
           </p>
-          <p className="text-2xl font-bold text-[#1A1A1A] mt-1">{value}</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{value}</p>
         </div>
-        <Icon size={20} className="text-[#CCCCCC]" />
+        <Icon size={20} className="text-muted-foreground/40" />
       </div>
     </div>
   );

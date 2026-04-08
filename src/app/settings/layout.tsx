@@ -22,8 +22,8 @@ export default function SettingsLayout({
     <div className="max-w-6xl">
       {/* Header */}
       <div className="flex items-center gap-2 mb-6">
-        <Settings size={22} className="text-[#0F6E56]" />
-        <h1 className="text-2xl font-bold text-[#1A1A1A]">Settings</h1>
+        <Settings size={22} className="text-[var(--brand-primary)]" />
+        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
       </div>
 
       {/* Mobile nav dropdown */}
@@ -32,7 +32,7 @@ export default function SettingsLayout({
           <select
             value={currentItem?.href || ""}
             onChange={(e) => router.push(e.target.value)}
-            className="w-full appearance-none bg-white border border-gray-200 rounded-lg px-4 py-2.5 pr-10 text-sm font-medium text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20 focus:border-[#0F6E56]"
+            className="w-full appearance-none bg-card border border-border rounded-lg px-4 py-2.5 pr-10 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20"
           >
             {settingsNavItems
               .filter((item) => !item.disabled)
@@ -44,7 +44,7 @@ export default function SettingsLayout({
           </select>
           <ChevronDown
             size={16}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#999999] pointer-events-none"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
           />
         </div>
       </div>
@@ -63,7 +63,7 @@ export default function SettingsLayout({
                 return (
                   <div
                     key={item.href}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#BBBBBB] cursor-not-allowed"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground/50 cursor-not-allowed"
                   >
                     <Icon size={16} />
                     <span>{item.label}</span>
@@ -78,8 +78,8 @@ export default function SettingsLayout({
                   className={cn(
                     "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                     isActive
-                      ? "bg-[#0F6E56]/10 text-[#0F6E56]"
-                      : "text-[#666666] hover:text-[#1A1A1A] hover:bg-gray-100"
+                      ? "bg-[var(--brand-primary)]/10 text-[var(--brand-primary)]"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
                   )}
                 >
                   <Icon size={16} />
