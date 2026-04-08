@@ -221,6 +221,19 @@ export interface EmailAccount {
   updated_at: string;
 }
 
+export interface CompanySettings {
+  company_name?: string;
+  logo_path?: string;
+  address_street?: string;
+  address_city?: string;
+  address_state?: string;
+  address_zip?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  license_number?: string;
+}
+
 export const EMAIL_PROVIDERS: Record<string, { label: string; imap_host: string; imap_port: number; smtp_host: string; smtp_port: number }> = {
   hostinger: { label: "Hostinger", imap_host: "imap.hostinger.com", imap_port: 993, smtp_host: "smtp.hostinger.com", smtp_port: 465 },
   network_solutions: { label: "Network Solutions", imap_host: "mail.aaacontracting.com", imap_port: 993, smtp_host: "smtp.aaacontracting.com", smtp_port: 587 },
