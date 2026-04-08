@@ -10,19 +10,24 @@ import { useConfig } from "@/lib/config-context";
 import { cn } from "@/lib/utils";
 
 export default function JobCard({ job }: { job: Job }) {
-  const { getStatusColor, getStatusLabel, getDamageTypeColor, getDamageTypeLabel } = useConfig();
+  const { getStatusColor, getStatusLabel, getDamageTypeColor, getDamageTypeLabel, damageTypes } = useConfig();
   const isCompleted = job.status === "completed" || job.status === "cancelled";
   const contactName = job.contact
     ? `${job.contact.first_name} ${job.contact.last_name}`
     : "Unknown";
 
+  // Get damage type color for shadow
+  const dtConfig = damageTypes.find((dt) => dt.name === job.damage_type);
+  const shadowColor = dtConfig?.text_color || "#666666";
+
   return (
     <Link
       href={`/jobs/${job.id}`}
       className={cn(
-        "block bg-card rounded-xl border border-border p-5 hover:shadow-sm transition-all",
+        "block bg-card rounded-xl border border-border p-5 transition-all hover:-translate-y-0.5",
         isCompleted && "opacity-60"
       )}
+      style={{ boxShadow: `0 4px 14px -2px ${shadowColor}30, 0 1px 3px ${shadowColor}20` }}
     >
       {/* Top row: job number + badges */}
       <div className="flex items-start justify-between gap-3 mb-3">
