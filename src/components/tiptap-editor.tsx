@@ -39,7 +39,7 @@ export default function TiptapEditor({
     editorProps: {
       attributes: {
         class:
-          "prose prose-sm max-w-none min-h-[160px] px-3 py-2 focus:outline-none text-[#333] [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1",
+          "prose prose-sm dark:prose-invert max-w-none min-h-[160px] px-3 py-2 focus:outline-none text-foreground [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1",
       },
     },
   });
@@ -59,9 +59,9 @@ export default function TiptapEditor({
   }
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[#2B5EA7]/30 focus-within:border-[#2B5EA7]">
+    <div className="border border-border rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[var(--brand-primary)]/30 focus-within:border-[var(--brand-primary)]">
       {/* Toolbar */}
-      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 bg-gray-50/50">
+      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-muted/50">
         <ToolbarButton
           active={editor.isActive("bold")}
           onClick={() => editor.chain().focus().toggleBold().run()}
@@ -76,7 +76,7 @@ export default function TiptapEditor({
         >
           <Italic size={15} />
         </ToolbarButton>
-        <div className="w-px h-4 bg-gray-200 mx-1" />
+        <div className="w-px h-4 bg-border mx-1" />
         <ToolbarButton
           active={editor.isActive("bulletList")}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
@@ -91,7 +91,7 @@ export default function TiptapEditor({
         >
           <ListOrdered size={15} />
         </ToolbarButton>
-        <div className="w-px h-4 bg-gray-200 mx-1" />
+        <div className="w-px h-4 bg-border mx-1" />
         <ToolbarButton
           active={editor.isActive("link")}
           onClick={toggleLink}
@@ -99,7 +99,7 @@ export default function TiptapEditor({
         >
           <LinkIcon size={15} />
         </ToolbarButton>
-        <div className="w-px h-4 bg-gray-200 mx-1" />
+        <div className="w-px h-4 bg-border mx-1" />
         <ToolbarButton
           active={false}
           onClick={() => editor.chain().focus().undo().run()}
@@ -140,8 +140,8 @@ function ToolbarButton({
       title={title}
       className={`p-1.5 rounded transition-colors ${
         active
-          ? "bg-[#2B5EA7]/10 text-[#2B5EA7]"
-          : "text-[#666] hover:bg-gray-100 hover:text-[#333]"
+          ? "bg-[var(--brand-primary)]/10 text-[var(--brand-primary)]"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground"
       }`}
     >
       {children}

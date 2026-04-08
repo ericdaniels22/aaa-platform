@@ -99,17 +99,25 @@ export default function ComposeEmailModal({
     [accounts, selectedAccountId]
   );
 
+  // Signature data from email_signatures table
+  const [signaturesMap, setSignaturesMap] = useState<Record<string, { signature_html: string; auto_insert: boolean }>>({});
+
   // Build initial body with signature
-  function buildInitialBody(account: EmailAccountData | undefined, quotedHtml: string) {
+  function buildInitialBody(account: EmailAccountData | undefined, quotedHtml: string, sigs?: typeof signaturesMap) {
     let html = "";
     if (quotedHtml) {
       html = quotedHtml;
     }
-    if (account?.signature) {
-      const sigHtml = account.signature.includes("<")
-        ? account.signature
-        : `<p>${account.signature.replace(/\n/g, "<br>")}</p>`;
-      html = `<p></p><br><div style="border-top: 1px solid #ccc; padding-top: 8px; margin-top: 16px; color: #666;">${sigHtml}</div>${html ? `<br>${html}` : ""}`;
+    const sigData = (sigs || signaturesMap)[account?.id || ""];
+    const sigHtml = sigData?.auto_insert !== false ? sigData?.signature_html : null;
+    const fallbackSig = account?.signature;
+    const effectiveSig = sigHtml || fallbackSig;
+
+    if (effectiveSig) {
+      const rendered = effectiveSig.includes("<")
+        ? effectiveSig
+        : `<p>${effectiveSig.replace(/\n/g, "<br>")}</p>`;
+      html = `<p></p><br><div style="border-top: 1px solid #ccc; padding-top: 8px; margin-top: 16px; color: #666;">${rendered}</div>${html ? `<br>${html}` : ""}`;
     }
     return html;
   }
@@ -147,28 +155,36 @@ export default function ComposeEmailModal({
         setBccRecipients([]);
       }
 
-      // Fetch accounts
-      fetch("/api/email/accounts")
-        .then((res) => {
-          if (!res.ok) return null;
-          return res.json();
-        })
-        .then((data) => {
-          if (!data) return;
-          if (!Array.isArray(data)) return;
-          const active = data.filter((a: EmailAccountData) => a.is_active);
-          setAccounts(active);
+      // Fetch accounts and signatures
+      Promise.all([
+        fetch("/api/email/accounts").then((r) => r.ok ? r.json() : null),
+        fetch("/api/settings/signatures").then((r) => r.ok ? r.json() : null),
+      ]).then(([accountsData, sigsData]) => {
+        if (!accountsData || !Array.isArray(accountsData)) return;
+        const active = accountsData.filter((a: EmailAccountData) => a.is_active);
+        setAccounts(active);
 
-          // Pick account: use defaultAccountId if provided, else default, else first
-          const defaultAcc = (defaultAccountId && active.find((a: EmailAccountData) => a.id === defaultAccountId))
-            || active.find((a: EmailAccountData) => a.is_default)
-            || active[0];
-          if (defaultAcc) {
-            setSelectedAccountId(defaultAcc.id);
-            setBodyHtml(buildInitialBody(defaultAcc, defaultBody));
-            setEditorKey((k) => k + 1);
+        // Build signatures map
+        const sigs: Record<string, { signature_html: string; auto_insert: boolean }> = {};
+        if (Array.isArray(sigsData)) {
+          for (const s of sigsData) {
+            if (s.signature) {
+              sigs[s.id] = { signature_html: s.signature.signature_html, auto_insert: s.signature.auto_insert };
+            }
           }
-        });
+        }
+        setSignaturesMap(sigs);
+
+        // Pick account
+        const defaultAcc = (defaultAccountId && active.find((a: EmailAccountData) => a.id === defaultAccountId))
+          || active.find((a: EmailAccountData) => a.is_default)
+          || active[0];
+        if (defaultAcc) {
+          setSelectedAccountId(defaultAcc.id);
+          setBodyHtml(buildInitialBody(defaultAcc, defaultBody, sigs));
+          setEditorKey((k) => k + 1);
+        }
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultTo, defaultCc, defaultBcc, defaultSubject, defaultBody, defaultAccountId, initialDraftId]);
