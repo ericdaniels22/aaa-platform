@@ -24,10 +24,10 @@ export default function JobCard({ job }: { job: Job }) {
     <Link
       href={`/jobs/${job.id}`}
       className={cn(
-        "block bg-card rounded-xl border border-border border-t-4 p-5 transition-all hover:-translate-y-0.5 hover:shadow-md",
+        "block bg-card rounded-xl border border-border border-t-4 border-l-4 p-5 transition-all hover:-translate-y-0.5 hover:shadow-md",
         isCompleted && "opacity-60"
       )}
-      style={{ borderTopColor: accentColor }}
+      style={{ borderTopColor: accentColor, borderLeftColor: accentColor }}
     >
       {/* Top row: job number + badges */}
       <div className="flex items-start justify-between gap-3 mb-3">
