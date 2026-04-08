@@ -25,7 +25,7 @@ export const settingsNavItems: SettingsNavItem[] = [
   { href: "/settings/appearance", label: "Appearance", icon: Palette },
   { href: "/settings/statuses", label: "Job Statuses", icon: ListChecks },
   { href: "/settings/damage-types", label: "Damage Types", icon: Flame },
-  { href: "/settings/users", label: "Users & Crew", icon: Users, disabled: true },
+  { href: "/settings/users", label: "Users & Crew", icon: Users },
   { href: "/settings/email", label: "Email Accounts", icon: Mail },
   { href: "/settings/signatures", label: "Email Signatures", icon: FileSignature, disabled: true },
   { href: "/settings/intake-form", label: "Intake Form", icon: ClipboardList, disabled: true },

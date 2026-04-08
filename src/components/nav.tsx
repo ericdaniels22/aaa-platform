@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   ClipboardPlus,
@@ -14,9 +14,11 @@ import {
   Settings,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -31,7 +33,21 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  async function handleSignOut() {
+    await signOut();
+    router.push("/login");
+  }
+
+  const initials = profile?.full_name
+    ?.split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2) || "?";
 
   return (
     <>
@@ -96,11 +112,28 @@ export default function Sidebar() {
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="px-5 py-4 border-t border-white/10">
-          <p className="text-white/30 text-xs">
-            AAA Platform v1.0
-          </p>
+        {/* User footer */}
+        <div className="px-3 py-3 border-t border-white/10">
+          {profile ? (
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                <span className="text-xs font-semibold text-white/80">{initials}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white/80 truncate">{profile.full_name}</p>
+                <p className="text-[10px] text-white/30 capitalize">{profile.role.replace("_", " ")}</p>
+              </div>
+              <button
+                onClick={handleSignOut}
+                className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition-colors"
+                title="Sign out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          ) : (
+            <p className="text-white/30 text-xs">AAA Platform v1.0</p>
+          )}
         </div>
       </aside>
     </>
