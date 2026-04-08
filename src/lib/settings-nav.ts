@@ -30,6 +30,6 @@ export const settingsNavItems: SettingsNavItem[] = [
   { href: "/settings/signatures", label: "Email Signatures", icon: FileSignature },
   { href: "/settings/intake-form", label: "Intake Form", icon: ClipboardList },
   { href: "/settings/notifications", label: "Notifications", icon: Bell },
-  { href: "/settings/reports", label: "Reports", icon: FileText, disabled: true },
-  { href: "/settings/export", label: "Data Export", icon: Download, disabled: true },
+  { href: "/settings/reports", label: "Reports", icon: FileText },
+  { href: "/settings/export", label: "Data Export", icon: Download },
 ];
