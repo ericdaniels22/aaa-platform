@@ -246,6 +246,49 @@ export interface DamageType {
   updated_at: string;
 }
 
+export interface FormFieldOption {
+  value: string;
+  label: string;
+  color?: string;
+}
+
+export interface FormField {
+  id: string;
+  type: "text" | "textarea" | "number" | "date" | "select" | "pill" | "checkbox" | "phone" | "email";
+  label: string;
+  placeholder?: string;
+  required?: boolean;
+  is_default?: boolean;
+  visible?: boolean;
+  maps_to?: string;
+  default_value?: string;
+  help_text?: string;
+  options?: FormFieldOption[];
+  options_source?: string;
+  show_when?: string;
+}
+
+export interface FormSection {
+  id: string;
+  title: string;
+  description?: string;
+  is_default?: boolean;
+  visible?: boolean;
+  fields: FormField[];
+}
+
+export interface FormConfig {
+  sections: FormSection[];
+}
+
+export interface JobCustomField {
+  id: string;
+  job_id: string;
+  field_key: string;
+  field_value: string | null;
+  created_at: string;
+}
+
 export interface CompanySettings {
   company_name?: string;
   logo_path?: string;

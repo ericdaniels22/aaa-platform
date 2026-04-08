@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
@@ -10,75 +10,69 @@ import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useConfig } from "@/lib/config-context";
-
-const relationships = [
-  { value: "homeowner", label: "Homeowner" },
-  { value: "tenant", label: "Tenant" },
-  { value: "property_manager", label: "Property Manager" },
-  { value: "adjuster", label: "Adjuster" },
-  { value: "insurance", label: "Insurance" },
-];
-
-const urgencyLevels = [
-  { value: "emergency", label: "Emergency", color: "bg-[#FCEBEB] text-[#791F1F] border-[#791F1F]/30" },
-  { value: "urgent", label: "Urgent", color: "bg-[#FAEEDA] text-[#633806] border-[#633806]/30" },
-  { value: "scheduled", label: "Scheduled", color: "bg-[#E6F1FB] text-[#0C447C] border-[#0C447C]/30" },
-];
-
-const propertyTypes = [
-  { value: "single_family", label: "Single Family" },
-  { value: "multi_family", label: "Multi Family" },
-  { value: "commercial", label: "Commercial" },
-  { value: "condo", label: "Condo" },
-];
-
-const insuranceOptions = [
-  { value: "yes", label: "Yes" },
-  { value: "no", label: "No" },
-  { value: "not_sure", label: "Not Sure" },
-];
-
-// ── Form component ─────────────────────────────────
+import type { FormConfig, FormSection, FormField } from "@/lib/types";
 
 export default function IntakeForm() {
   const router = useRouter();
-  const { damageTypes: configDamageTypes } = useConfig();
+  const { damageTypes } = useConfig();
   const [submitting, setSubmitting] = useState(false);
+  const [loadingConfig, setLoadingConfig] = useState(true);
+  const [formConfig, setFormConfig] = useState<FormConfig | null>(null);
+  const [values, setValues] = useState<Record<string, string>>({});
 
-  // Section 1: Name
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  // Load form config
+  useEffect(() => {
+    fetch("/api/settings/intake-form")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data?.config?.sections) {
+          setFormConfig(data.config);
+          // Set default values
+          const defaults: Record<string, string> = {};
+          for (const section of data.config.sections) {
+            for (const field of section.fields) {
+              if (field.default_value) defaults[field.id] = field.default_value;
+            }
+          }
+          setValues(defaults);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingConfig(false));
+  }, []);
 
-  // Section 2: Damage type
-  const [damageType, setDamageType] = useState("");
+  function setValue(fieldId: string, value: string) {
+    setValues((prev) => ({ ...prev, [fieldId]: value }));
+  }
 
-  // Section 3: Relationship
-  const [role, setRole] = useState("");
-
-  // Section 4: Everything else
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [propertyAddress, setPropertyAddress] = useState("");
-  const [propertyType, setPropertyType] = useState("");
-  const [sqft, setSqft] = useState("");
-  const [stories, setStories] = useState("");
-  const [damageSource, setDamageSource] = useState("");
-  const [whenHappened, setWhenHappened] = useState("");
-  const [affectedAreas, setAffectedAreas] = useState("");
-  const [urgency, setUrgency] = useState("scheduled");
-  const [hasInsurance, setHasInsurance] = useState("");
-  const [claimNumber, setClaimNumber] = useState("");
-  const [insuranceCompany, setInsuranceCompany] = useState("");
-  const [adjusterName, setAdjusterName] = useState("");
-  const [adjusterPhone, setAdjusterPhone] = useState("");
-  const [accessNotes, setAccessNotes] = useState("");
-  const [notes, setNotes] = useState("");
+  function getVal(id: string): string {
+    return values[id] || "";
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!firstName || !damageType || !role || !propertyAddress) {
-      toast.error("Please fill in required fields: Name, Damage Type, Relationship, and Property Address.");
+    // Validate required fields
+    if (formConfig) {
+      for (const section of formConfig.sections) {
+        if (section.visible === false) continue;
+        for (const field of section.fields) {
+          if (field.visible === false) continue;
+          if (field.required && !getVal(field.id)) {
+            toast.error(`Please fill in: ${field.label}`);
+            return;
+          }
+          // Check show_when condition
+          if (field.show_when) {
+            const [depId, depVal] = field.show_when.split("=");
+            if (getVal(depId) !== depVal) continue; // hidden, skip validation
+          }
+        }
+      }
+    }
+
+    if (!getVal("first_name") || !getVal("damage_type") || !getVal("property_address")) {
+      toast.error("Please fill in required fields: Name, Damage Type, and Property Address.");
       return;
     }
 
@@ -90,12 +84,12 @@ export default function IntakeForm() {
       const { data: contact, error: contactErr } = await supabase
         .from("contacts")
         .insert({
-          first_name: firstName,
-          last_name: lastName,
-          phone: phone || null,
-          email: email || null,
-          role,
-          notes: notes || null,
+          first_name: getVal("first_name"),
+          last_name: getVal("last_name"),
+          phone: getVal("phone") || null,
+          email: getVal("email") || null,
+          role: getVal("role") || "homeowner",
+          notes: getVal("notes") || null,
         })
         .select()
         .single();
@@ -104,14 +98,14 @@ export default function IntakeForm() {
 
       // 2. Create adjuster contact if provided
       let adjusterContactId: string | null = null;
-      if (adjusterName) {
-        const nameParts = adjusterName.trim().split(" ");
+      if (getVal("adjuster_name")) {
+        const nameParts = getVal("adjuster_name").trim().split(" ");
         const { data: adjuster, error: adjErr } = await supabase
           .from("contacts")
           .insert({
-            first_name: nameParts[0] || adjusterName,
+            first_name: nameParts[0] || getVal("adjuster_name"),
             last_name: nameParts.slice(1).join(" ") || "",
-            phone: adjusterPhone || null,
+            phone: getVal("adjuster_phone") || null,
             role: "adjuster",
           })
           .select()
@@ -126,29 +120,48 @@ export default function IntakeForm() {
         .from("jobs")
         .insert({
           contact_id: contact.id,
-          damage_type: damageType,
-          damage_source: damageSource || null,
-          property_address: propertyAddress,
-          property_type: propertyType || null,
-          property_sqft: sqft ? parseInt(sqft) : null,
-          property_stories: stories ? parseInt(stories) : null,
-          affected_areas: affectedAreas || null,
-          urgency,
-          insurance_company: insuranceCompany || null,
-          claim_number: claimNumber || null,
+          damage_type: getVal("damage_type"),
+          damage_source: getVal("damage_source") || null,
+          property_address: getVal("property_address"),
+          property_type: getVal("property_type") || null,
+          property_sqft: getVal("property_sqft") ? parseInt(getVal("property_sqft")) : null,
+          property_stories: getVal("property_stories") ? parseInt(getVal("property_stories")) : null,
+          affected_areas: getVal("affected_areas") || null,
+          urgency: getVal("urgency") || "scheduled",
+          insurance_company: getVal("insurance_company") || null,
+          claim_number: getVal("claim_number") || null,
           adjuster_contact_id: adjusterContactId,
-          access_notes: accessNotes || null,
+          access_notes: getVal("access_notes") || null,
         })
         .select()
         .single();
 
       if (jobErr) throw jobErr;
 
-      // 4. Add initial activity note if there's a damage source or when it happened
+      // 4. Save custom fields (fields without maps_to)
+      if (formConfig) {
+        const customFields: { job_id: string; field_key: string; field_value: string }[] = [];
+        for (const section of formConfig.sections) {
+          for (const field of section.fields) {
+            if (!field.maps_to && !field.is_default && getVal(field.id)) {
+              customFields.push({
+                job_id: job.id,
+                field_key: field.id,
+                field_value: getVal(field.id),
+              });
+            }
+          }
+        }
+        if (customFields.length > 0) {
+          await supabase.from("job_custom_fields").insert(customFields);
+        }
+      }
+
+      // 5. Add initial activity note
       const activityParts = [];
-      if (whenHappened) activityParts.push(`When it happened: ${whenHappened}`);
-      if (damageSource) activityParts.push(`Source: ${damageSource}`);
-      if (notes) activityParts.push(`Notes: ${notes}`);
+      if (getVal("when_happened")) activityParts.push(`When it happened: ${getVal("when_happened")}`);
+      if (getVal("damage_source")) activityParts.push(`Source: ${getVal("damage_source")}`);
+      if (getVal("notes")) activityParts.push(`Notes: ${getVal("notes")}`);
 
       if (activityParts.length > 0) {
         await supabase.from("job_activities").insert({
@@ -170,231 +183,57 @@ export default function IntakeForm() {
     }
   }
 
+  if (loadingConfig) {
+    return <div className="text-center py-12 text-muted-foreground">Loading form...</div>;
+  }
+
+  if (!formConfig || formConfig.sections.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <p>No form configuration found.</p>
+        <a href="/settings/intake-form" className="text-sm text-[var(--brand-primary)] hover:underline mt-1 inline-block">
+          Set up the intake form
+        </a>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
-      {/* ── Section 1: Name ── */}
-      <FormSection number={1} title="Customer Name">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <Label required>First Name</Label>
-            <Input
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              placeholder="First name"
-            />
-          </div>
-          <div>
-            <Label>Last Name</Label>
-            <Input
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              placeholder="Last name"
-            />
-          </div>
-        </div>
-      </FormSection>
-
-      {/* ── Section 2: Damage Type ── */}
-      <FormSection number={2} title="Type of Damage">
-        <PillSelector
-          options={configDamageTypes.map((dt) => ({
-            value: dt.name,
-            label: dt.display_label,
-            color: `bg-[${dt.bg_color}] text-[${dt.text_color}] border-[${dt.text_color}]/20`,
-          }))}
-          value={damageType}
-          onChange={setDamageType}
-        />
-      </FormSection>
-
-      {/* ── Section 3: Relationship ── */}
-      <FormSection number={3} title="Relationship to Property">
-        <PillSelector
-          options={relationships}
-          value={role}
-          onChange={setRole}
-        />
-      </FormSection>
-
-      {/* ── Section 4: Details ── */}
-      <FormSection number={4} title="Contact Information">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <Label>Phone</Label>
-            <Input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="(555) 123-4567"
-              type="tel"
-            />
-          </div>
-          <div>
-            <Label>Email</Label>
-            <Input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="customer@email.com"
-              type="email"
-            />
-          </div>
-        </div>
-      </FormSection>
-
-      <FormSection number={5} title="Property Details">
-        <div className="space-y-4">
-          <div>
-            <Label required>Property Address</Label>
-            <Input
-              value={propertyAddress}
-              onChange={(e) => setPropertyAddress(e.target.value)}
-              placeholder="123 Main St, Austin, TX 78701"
-            />
-          </div>
-          <div>
-            <Label>Property Type</Label>
-            <PillSelector
-              options={propertyTypes}
-              value={propertyType}
-              onChange={setPropertyType}
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Label>Sq Ft (approx)</Label>
-              <Input
-                value={sqft}
-                onChange={(e) => setSqft(e.target.value)}
-                placeholder="2,000"
-                type="number"
-              />
+      {formConfig.sections
+        .filter((s) => s.visible !== false)
+        .map((section, si) => (
+          <SectionCard key={section.id} number={si + 1} title={section.title}>
+            <div className="space-y-4">
+              {section.fields
+                .filter((f) => f.visible !== false)
+                .filter((f) => {
+                  // Check show_when condition
+                  if (f.show_when) {
+                    const [depId, depVal] = f.show_when.split("=");
+                    return getVal(depId) === depVal;
+                  }
+                  return true;
+                })
+                .map((field) => (
+                  <DynamicField
+                    key={field.id}
+                    field={field}
+                    value={getVal(field.id)}
+                    onChange={(v) => setValue(field.id, v)}
+                    damageTypes={damageTypes}
+                  />
+                ))}
             </div>
-            <div>
-              <Label>Stories</Label>
-              <Input
-                value={stories}
-                onChange={(e) => setStories(e.target.value)}
-                placeholder="1"
-                type="number"
-              />
-            </div>
-          </div>
-          <div>
-            <Label>Access Notes</Label>
-            <Input
-              value={accessNotes}
-              onChange={(e) => setAccessNotes(e.target.value)}
-              placeholder="Gate code, pets, special instructions..."
-            />
-          </div>
-        </div>
-      </FormSection>
-
-      <FormSection number={6} title="Damage Details">
-        <div className="space-y-4">
-          <div>
-            <Label>Source of Damage</Label>
-            <Input
-              value={damageSource}
-              onChange={(e) => setDamageSource(e.target.value)}
-              placeholder="Burst pipe, roof leak, kitchen fire..."
-            />
-          </div>
-          <div>
-            <Label>When Did It Happen?</Label>
-            <Input
-              value={whenHappened}
-              onChange={(e) => setWhenHappened(e.target.value)}
-              placeholder="Last night, 2 days ago, ongoing..."
-            />
-          </div>
-          <div>
-            <Label>Affected Areas</Label>
-            <Input
-              value={affectedAreas}
-              onChange={(e) => setAffectedAreas(e.target.value)}
-              placeholder="Kitchen, hallway, master bedroom..."
-            />
-          </div>
-        </div>
-      </FormSection>
-
-      <FormSection number={7} title="Urgency">
-        <PillSelector
-          options={urgencyLevels}
-          value={urgency}
-          onChange={setUrgency}
-        />
-      </FormSection>
-
-      <FormSection number={8} title="Insurance">
-        <div className="space-y-4">
-          <div>
-            <Label>Insurance Claim?</Label>
-            <PillSelector
-              options={insuranceOptions}
-              value={hasInsurance}
-              onChange={setHasInsurance}
-            />
-          </div>
-          {hasInsurance === "yes" && (
-            <div className="space-y-4 pt-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label>Insurance Company</Label>
-                  <Input
-                    value={insuranceCompany}
-                    onChange={(e) => setInsuranceCompany(e.target.value)}
-                    placeholder="State Farm, Allstate..."
-                  />
-                </div>
-                <div>
-                  <Label>Claim Number</Label>
-                  <Input
-                    value={claimNumber}
-                    onChange={(e) => setClaimNumber(e.target.value)}
-                    placeholder="CLM-123456"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label>Adjuster Name</Label>
-                  <Input
-                    value={adjusterName}
-                    onChange={(e) => setAdjusterName(e.target.value)}
-                    placeholder="John Smith"
-                  />
-                </div>
-                <div>
-                  <Label>Adjuster Phone</Label>
-                  <Input
-                    value={adjusterPhone}
-                    onChange={(e) => setAdjusterPhone(e.target.value)}
-                    placeholder="(555) 123-4567"
-                    type="tel"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </FormSection>
-
-      <FormSection number={9} title="Additional Notes">
-        <Textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Anything else relevant about this job..."
-          rows={4}
-        />
-      </FormSection>
+          </SectionCard>
+        ))}
 
       {/* Submit */}
-      <div className="flex justify-end pt-4">
+      <div className="flex justify-end">
         <Button
           type="submit"
           disabled={submitting}
-          className="bg-[#C41E2A] hover:bg-[#A3171F] text-white px-8 py-3 text-base"
+          className="px-6 py-2.5 bg-[var(--brand-primary)] text-white hover:opacity-90"
         >
           {submitting ? (
             <>
@@ -410,9 +249,131 @@ export default function IntakeForm() {
   );
 }
 
-// ── Reusable sub-components ────────────────────────
+// ── Dynamic field renderer ──────────────────────────
 
-function FormSection({
+function DynamicField({
+  field,
+  value,
+  onChange,
+  damageTypes,
+}: {
+  field: FormField;
+  value: string;
+  onChange: (v: string) => void;
+  damageTypes: { name: string; display_label: string; bg_color: string; text_color: string }[];
+}) {
+  // Get options — from damage_types config or field.options
+  let options = field.options || [];
+  if (field.options_source === "damage_types") {
+    options = damageTypes.map((dt) => ({
+      value: dt.name,
+      label: dt.display_label,
+      color: `bg-[${dt.bg_color}] text-[${dt.text_color}] border-[${dt.text_color}]/20`,
+    }));
+  }
+
+  return (
+    <div>
+      {field.type !== "checkbox" && (
+        <label className="block text-sm font-medium text-muted-foreground mb-1.5">
+          {field.label}
+          {field.required && <span className="text-destructive ml-0.5">*</span>}
+        </label>
+      )}
+
+      {field.help_text && (
+        <p className="text-xs text-muted-foreground/70 mb-1.5">{field.help_text}</p>
+      )}
+
+      {(field.type === "text" || field.type === "phone" || field.type === "email") && (
+        <Input
+          type={field.type === "phone" ? "tel" : field.type === "email" ? "email" : "text"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={field.placeholder}
+        />
+      )}
+
+      {field.type === "number" && (
+        <Input
+          type="number"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={field.placeholder}
+        />
+      )}
+
+      {field.type === "date" && (
+        <Input
+          type="date"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+
+      {field.type === "textarea" && (
+        <Textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={field.placeholder}
+          rows={4}
+        />
+      )}
+
+      {field.type === "select" && (
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20"
+        >
+          <option value="">Select...</option>
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      )}
+
+      {field.type === "pill" && (
+        <div className="flex flex-wrap gap-2">
+          {options.map((opt) => {
+            const isSelected = value === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => onChange(opt.value)}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-medium border transition-all",
+                  isSelected
+                    ? opt.color || "bg-[#1B2434] text-white border-[#1B2434]"
+                    : "bg-card text-muted-foreground border-border hover:border-foreground/20"
+                )}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {field.type === "checkbox" && (
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={value === "true"}
+            onChange={(e) => onChange(e.target.checked ? "true" : "false")}
+            className="w-4 h-4 rounded accent-[var(--brand-primary)]"
+          />
+          <span className="text-sm text-foreground">{field.label}</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
+// ── Section card wrapper ────────────────────────────
+
+function SectionCard({
   number,
   title,
   children,
@@ -422,62 +383,14 @@ function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
+    <div className="bg-card rounded-xl border border-border p-5 sm:p-6">
       <div className="flex items-center gap-3 mb-4">
         <span className="flex items-center justify-center w-7 h-7 rounded-full bg-[#1B2434] text-white text-xs font-bold">
           {number}
         </span>
-        <h2 className="text-base font-semibold text-[#1A1A1A]">{title}</h2>
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
       </div>
       {children}
-    </div>
-  );
-}
-
-function Label({
-  children,
-  required,
-}: {
-  children: React.ReactNode;
-  required?: boolean;
-}) {
-  return (
-    <label className="block text-sm font-medium text-[#666666] mb-1.5">
-      {children}
-      {required && <span className="text-[#C41E2A] ml-0.5">*</span>}
-    </label>
-  );
-}
-
-function PillSelector({
-  options,
-  value,
-  onChange,
-}: {
-  options: { value: string; label: string; color?: string }[];
-  value: string;
-  onChange: (val: string) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {options.map((opt) => {
-        const isSelected = value === opt.value;
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => onChange(opt.value)}
-            className={cn(
-              "px-4 py-2 rounded-lg text-sm font-medium border transition-all",
-              isSelected
-                ? opt.color || "bg-[#1B2434] text-white border-[#1B2434]"
-                : "bg-white text-[#666666] border-gray-200 hover:border-gray-300"
-            )}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
     </div>
   );
 }

@@ -58,6 +58,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
   const [tags, setTags] = useState<PhotoTag[]>([]);
   const [reports, setReports] = useState<PhotoReport[]>([]);
   const [emails, setEmails] = useState<Email[]>([]);
+  const [customFields, setCustomFields] = useState<{ field_key: string; field_value: string }[]>([]);
   const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeDefaults, setComposeDefaults] = useState({ to: "", subject: "", replyToMessageId: "" });
@@ -115,6 +116,14 @@ export default function JobDetail({ jobId }: { jobId: string }) {
     if (tagsRes.data) setTags(tagsRes.data as PhotoTag[]);
     if (reportsRes.data) setReports(reportsRes.data as PhotoReport[]);
     if (emailsRes.data) setEmails(emailsRes.data as Email[]);
+
+    // Fetch custom fields
+    const { data: cfData } = await supabase
+      .from("job_custom_fields")
+      .select("field_key, field_value")
+      .eq("job_id", jobId);
+    if (cfData) setCustomFields(cfData);
+
     setLoading(false);
   }, [jobId]);
 
@@ -683,6 +692,23 @@ export default function JobDetail({ jobId }: { jobId: string }) {
           </div>
         )}
       </div>
+
+      {/* Custom Fields */}
+      {customFields.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <h3 className="text-sm font-semibold text-[#1A1A1A] mb-3">Custom Fields</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {customFields.map((cf) => (
+              <div key={cf.field_key}>
+                <p className="text-xs font-medium text-[#999999] capitalize">
+                  {cf.field_key.replace(/_/g, " ").replace(/^custom /, "")}
+                </p>
+                <p className="text-sm text-[#1A1A1A]">{cf.field_value || "—"}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Activity Timeline */}
       <ActivityTimeline
