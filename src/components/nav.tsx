@@ -19,6 +19,7 @@ import {
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import NotificationBell from "@/components/notification-bell";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -56,12 +57,15 @@ export default function Sidebar() {
         <div className="flex items-center gap-3">
           <Image src="/logo.png" alt="AAA Logo" width={120} height={44} />
         </div>
-        <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="text-white/70 hover:text-white"
-        >
-          {mobileOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="text-white/70 hover:text-white"
+          >
+            {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile overlay */}
@@ -81,8 +85,11 @@ export default function Sidebar() {
         )}
       >
         {/* Logo area */}
-        <div className="px-4 py-1 border-b border-white/10 flex justify-center overflow-hidden">
+        <div className="px-4 py-1 border-b border-white/10 flex items-center justify-between overflow-hidden">
           <Image src="/logo.png" alt="AAA Disaster Recovery" width={160} height={58} className="-my-2" />
+          <div className="hidden lg:block">
+            <NotificationBell />
+          </div>
         </div>
 
         {/* Navigation */}

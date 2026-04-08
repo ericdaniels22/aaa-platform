@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import Sidebar from "@/components/nav";
 
-const AUTH_ROUTES = ["/login"];
+const AUTH_ROUTES = ["/login", "/logout"];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

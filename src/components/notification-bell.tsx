@@ -1,0 +1,195 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Bell, Check, Briefcase, CreditCard, Camera, Mail, AlertTriangle, Clock } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+import Link from "next/link";
+
+interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  is_read: boolean;
+  job_id: string | null;
+  created_at: string;
+}
+
+const TYPE_ICONS: Record<string, typeof Bell> = {
+  new_job: Briefcase,
+  status_change: Briefcase,
+  payment: CreditCard,
+  activity: Clock,
+  photo: Camera,
+  email: Mail,
+  overdue: AlertTriangle,
+  reminder: Clock,
+};
+
+const TYPE_COLORS: Record<string, string> = {
+  new_job: "text-[#0F6E56]",
+  status_change: "text-[#2B5EA7]",
+  payment: "text-[#0F6E56]",
+  activity: "text-[#666]",
+  photo: "text-[#6C5CE7]",
+  email: "text-[#2B5EA7]",
+  overdue: "text-[#C41E2A]",
+  reminder: "text-[#633806]",
+};
+
+export default function NotificationBell() {
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const fetchNotifications = useCallback(async () => {
+    if (!user) return;
+    const res = await fetch(`/api/notifications?userId=${user.id}&limit=15`);
+    if (res.ok) {
+      const data = await res.json();
+      setNotifications(data.notifications || []);
+      setUnreadCount(data.unread_count || 0);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchNotifications();
+    // Poll every 30 seconds
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
+  // Close on click outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  async function markAsRead(id: string) {
+    await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+    );
+    setUnreadCount((prev) => Math.max(0, prev - 1));
+  }
+
+  async function markAllRead() {
+    if (!user) return;
+    await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mark_all_read: true, user_id: user.id }),
+    });
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setUnreadCount(0);
+  }
+
+  if (!user) return null;
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="relative p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+      >
+        <Bell size={20} />
+        {unreadCount > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 min-w-[18px] flex items-center justify-center rounded-full bg-[#C41E2A] text-white text-[10px] font-bold leading-none px-1">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-80 bg-card border border-border rounded-xl shadow-lg z-50 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllRead}
+                className="text-xs text-[var(--brand-primary)] hover:underline font-medium flex items-center gap-1"
+              >
+                <Check size={12} />
+                Mark all read
+              </button>
+            )}
+          </div>
+
+          {/* Notifications list */}
+          <div className="max-h-80 overflow-y-auto">
+            {notifications.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <Bell size={24} className="mx-auto text-muted-foreground/30 mb-2" />
+                <p className="text-sm text-muted-foreground">No notifications</p>
+              </div>
+            ) : (
+              notifications.map((n) => {
+                const Icon = TYPE_ICONS[n.type] || Bell;
+                const color = TYPE_COLORS[n.type] || "text-muted-foreground";
+                const content = (
+                  <div
+                    className={cn(
+                      "flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer border-b border-border last:border-b-0",
+                      !n.is_read && "bg-[var(--brand-primary)]/5"
+                    )}
+                    onClick={() => {
+                      if (!n.is_read) markAsRead(n.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <Icon size={16} className={cn("mt-0.5 shrink-0", color)} />
+                    <div className="flex-1 min-w-0">
+                      <p className={cn("text-sm", n.is_read ? "text-muted-foreground" : "text-foreground font-medium")}>
+                        {n.title}
+                      </p>
+                      {n.body && (
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>
+                      )}
+                      <p className="text-[10px] text-muted-foreground/60 mt-1">
+                        {format(new Date(n.created_at), "MMM d, h:mm a")}
+                      </p>
+                    </div>
+                    {!n.is_read && (
+                      <div className="w-2 h-2 rounded-full bg-[var(--brand-primary)] shrink-0 mt-1.5" />
+                    )}
+                  </div>
+                );
+
+                return n.job_id ? (
+                  <Link key={n.id} href={`/jobs/${n.job_id}`}>{content}</Link>
+                ) : (
+                  <div key={n.id}>{content}</div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-4 py-2 border-t border-border">
+            <Link
+              href="/settings/notifications"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setOpen(false)}
+            >
+              Notification settings
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

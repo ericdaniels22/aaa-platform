@@ -74,8 +74,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const supabase = createClient();
 
-    // Get initial session
-    supabase.auth.getUser().then(({ data: { user: currentUser } }) => {
+    // Get initial session — use getSession() first (reads cookies), fall back to getUser()
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      let currentUser = session?.user ?? null;
+      if (!currentUser) {
+        // Fallback: try getUser() which verifies with Supabase server
+        const { data } = await supabase.auth.getUser();
+        currentUser = data.user;
+      }
       setUser(currentUser);
       if (currentUser) {
         loadProfile(currentUser.id).finally(() => setLoading(false));

@@ -46,8 +46,8 @@ export default function LoginPage() {
           <Image src="/logo.png" alt="AAA Disaster Recovery" width={200} height={73} />
         </div>
 
-        {/* Login card */}
-        <div className="bg-white rounded-2xl p-8 shadow-xl">
+        {/* Login card — force light mode for readability */}
+        <div className="bg-white rounded-2xl p-8 shadow-xl [&_input]:!text-[#1A1A1A] [&_input]:!bg-white [&_input]:!border-gray-200">
           <h1 className="text-xl font-bold text-[#1A1A1A] text-center mb-1">
             Sign In
           </h1>
