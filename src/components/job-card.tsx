@@ -16,18 +16,18 @@ export default function JobCard({ job }: { job: Job }) {
     ? `${job.contact.first_name} ${job.contact.last_name}`
     : "Unknown";
 
-  // Get damage type color for shadow
+  // Get damage type color for top border
   const dtConfig = damageTypes.find((dt) => dt.name === job.damage_type);
-  const shadowColor = dtConfig?.text_color || "#666666";
+  const accentColor = dtConfig?.text_color || "#666666";
 
   return (
     <Link
       href={`/jobs/${job.id}`}
       className={cn(
-        "block bg-card rounded-xl border border-border p-5 transition-all hover:-translate-y-0.5",
+        "block bg-card rounded-xl border border-border border-t-4 p-5 transition-all hover:-translate-y-0.5 hover:shadow-md",
         isCompleted && "opacity-60"
       )}
-      style={{ boxShadow: `0 4px 14px -2px ${shadowColor}30, 0 1px 3px ${shadowColor}20` }}
+      style={{ borderTopColor: accentColor }}
     >
       {/* Top row: job number + badges */}
       <div className="flex items-start justify-between gap-3 mb-3">
