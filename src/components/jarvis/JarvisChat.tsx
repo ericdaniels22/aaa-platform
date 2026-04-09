@@ -9,6 +9,7 @@ import JarvisInput from "./JarvisInput";
 import JarvisQuickActions from "./JarvisQuickActions";
 import JarvisTypingIndicator from "./JarvisTypingIndicator";
 import JarvisWelcome from "./JarvisWelcome";
+import type { BrainState } from "./neural-network/useNetworkAnimation";
 
 export interface JarvisChatProps {
   contextType: "general" | "job" | "rnd";
@@ -36,6 +37,7 @@ export default function JarvisChat({
   const [conversation, setConversation] = useState<JarvisConversation | null>(null);
   const [messages, setMessages] = useState<JarvisMessageType[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [brainState, setBrainState] = useState<BrainState>({ mode: "idle" });
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -162,6 +164,8 @@ export default function JarvisChat({
     setMessages(newMessages);
     setIsTyping(true);
     userScrolledUp.current = false;
+    setBrainState({ mode: "firing" });
+    setTimeout(() => setBrainState({ mode: "thinking" }), 300);
 
     let conv = conversation;
     let isNewConversation = false;
@@ -194,6 +198,10 @@ export default function JarvisChat({
       });
 
       const data = await response.json();
+
+      if (data.routed_to) {
+        setBrainState({ mode: "thinking", activeAgent: data.routed_to });
+      }
 
       let assistantContent: string;
       if (!response.ok) {
@@ -239,6 +247,7 @@ export default function JarvisChat({
       }
     } finally {
       setIsTyping(false);
+      setBrainState({ mode: "idle" });
       abortControllerRef.current = null;
     }
   }
@@ -281,7 +290,7 @@ export default function JarvisChat({
             contextType={contextType}
             jobContext={jobContext ? { customerName: jobContext.customerName, address: jobContext.address } : undefined}
             onQuickAction={handleQuickAction}
-            brainState={isTyping ? { mode: "thinking" } : { mode: "idle" }}
+            brainState={brainState}
           />
         ) : (
           <div className="py-4 space-y-4">
