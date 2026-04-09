@@ -469,7 +469,7 @@ export async function POST(request: NextRequest) {
     ];
 
     let response = await anthropic.messages.create({
-      model: "claude-opus-4-6-20250219",
+      model: "claude-opus-4-6",
       max_tokens: 4096,
       system: RND_SYSTEM_PROMPT,
       messages: claudeMessages,
@@ -511,7 +511,7 @@ export async function POST(request: NextRequest) {
       }
 
       response = await anthropic.messages.create({
-        model: "claude-opus-4-6-20250219",
+        model: "claude-opus-4-6",
         max_tokens: 4096,
         system: RND_SYSTEM_PROMPT,
         messages: claudeMessages,
