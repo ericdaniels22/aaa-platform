@@ -191,6 +191,7 @@ export async function POST(request: NextRequest) {
 
     // If direct R&D routing, call R&D then wrap through Jarvis personality
     let assistantContent: string;
+    let routedTo: string | null = null;
 
     if (isRndDirect) {
       // Call R&D directly
@@ -214,6 +215,7 @@ export async function POST(request: NextRequest) {
 
       const rndData = await rndResponse.json();
       const rndContent = rndData.content || "R&D wasn't able to process that one. Try rephrasing.";
+      routedTo = "rnd";
 
       // Light Jarvis personality pass on the R&D response
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -300,6 +302,9 @@ export async function POST(request: NextRequest) {
         // Execute each tool
         const toolResults: Anthropic.ToolResultBlockParam[] = [];
         for (const toolUse of toolUseBlocks) {
+          if (toolUse.name === "consult_rnd") {
+            routedTo = "rnd";
+          }
           const result = await executeJarvisTool(
             toolUse.name,
             toolUse.input as Record<string, unknown>,
@@ -406,6 +411,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       content: assistantContent,
       conversation_id: conversation_id || null,
+      routed_to: routedTo,
     });
   } catch (err) {
     console.error("Jarvis API error:", err);
