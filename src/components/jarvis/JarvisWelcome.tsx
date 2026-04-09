@@ -1,20 +1,39 @@
 "use client";
 
+import { useState } from "react";
 import { Sparkles, FlaskConical } from "lucide-react";
 import JarvisQuickActions from "./JarvisQuickActions";
 import NeuralNetwork3D from "./NeuralNetwork3D";
+import type { AgentConfig } from "@/lib/jarvis/agent-registry";
+import type { BrainState } from "./neural-network/useNetworkAnimation";
+import { JARVIS_CORE_STATIC_PROMPT } from "@/lib/jarvis/prompts/jarvis-core";
+import { RND_SYSTEM_PROMPT } from "@/lib/jarvis/prompts/rnd";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+} from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
+
+const PROMPT_MAP: Record<string, string> = {
+  "jarvis-core": JARVIS_CORE_STATIC_PROMPT,
+  "rnd": RND_SYSTEM_PROMPT,
+};
 
 interface JarvisWelcomeProps {
   contextType: "general" | "job" | "rnd";
-  jobContext?: {
-    customerName: string;
-    address: string;
-  };
+  jobContext?: { customerName: string; address: string };
   onQuickAction: (text: string) => void;
-  networkState?: "idle" | "thinking" | "firing";
+  brainState?: BrainState;
 }
 
-export default function JarvisWelcome({ contextType, jobContext, onQuickAction, networkState }: JarvisWelcomeProps) {
+export default function JarvisWelcome({ contextType, jobContext, onQuickAction, brainState }: JarvisWelcomeProps) {
+  const [selectedAgent, setSelectedAgent] = useState<AgentConfig | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const handleNodeClick = (agent: AgentConfig) => {
+    setSelectedAgent(agent);
+    setSheetOpen(true);
+  };
+
   if (contextType === "rnd") {
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
@@ -49,14 +68,111 @@ export default function JarvisWelcome({ contextType, jobContext, onQuickAction, 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
       <div className="mb-3">
-        <NeuralNetwork3D state={networkState ?? "idle"} />
+        <NeuralNetwork3D
+          brainState={brainState ?? { mode: "idle" }}
+          onNodeClick={handleNodeClick}
+        />
       </div>
       <h2 className="text-2xl font-bold gradient-text mb-2">Jarvis</h2>
       <p className="text-base text-muted-foreground mb-1">Your AI partner for AAA Disaster Recovery</p>
-      <p className="text-sm text-muted-foreground/60 max-w-md mb-8">
+      <p className="text-sm text-muted-foreground/60 max-w-md">
         Ask me about your jobs, business metrics, marketing ideas, or anything else. I&apos;m here to help.
       </p>
-      <JarvisQuickActions contextType="general" onSelect={onQuickAction} />
+
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent className="overflow-y-auto w-full sm:max-w-lg">
+          {selectedAgent && (
+            <>
+              <SheetHeader>
+                <SheetTitle>{selectedAgent.name}</SheetTitle>
+                <SheetDescription>{selectedAgent.role}</SheetDescription>
+              </SheetHeader>
+              <div className="space-y-6 mt-6">
+                {selectedAgent.status === "active" ? (
+                  <ActiveAgentDetails agent={selectedAgent} />
+                ) : (
+                  <PlannedAgentDetails agent={selectedAgent} />
+                )}
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
+  );
+}
+
+function ActiveAgentDetails({ agent }: { agent: AgentConfig }) {
+  const systemPrompt = PROMPT_MAP[agent.id];
+  return (
+    <>
+      <div><Badge variant="default">Active</Badge></div>
+      <div>
+        <h4 className="text-sm font-medium text-muted-foreground mb-1">Model</h4>
+        <p className="text-sm">{agent.model}</p>
+      </div>
+      {agent.endpoint && (
+        <div>
+          <h4 className="text-sm font-medium text-muted-foreground mb-1">Endpoint</h4>
+          <code className="text-sm bg-muted px-2 py-0.5 rounded">{agent.endpoint}</code>
+        </div>
+      )}
+      {agent.accessMethod && (
+        <div>
+          <h4 className="text-sm font-medium text-muted-foreground mb-1">Access</h4>
+          <p className="text-sm">{agent.accessMethod}</p>
+        </div>
+      )}
+      {agent.tools && agent.tools.length > 0 && (
+        <div>
+          <h4 className="text-sm font-medium text-muted-foreground mb-1">Tools</h4>
+          <div className="flex flex-wrap gap-1.5">
+            {agent.tools.map((tool) => (
+              <Badge key={tool} variant="secondary" className="text-xs">{tool}</Badge>
+            ))}
+          </div>
+        </div>
+      )}
+      {agent.config && (
+        <div>
+          <h4 className="text-sm font-medium text-muted-foreground mb-1">Config</h4>
+          <pre className="text-xs bg-muted p-3 rounded-md overflow-x-auto">
+            {JSON.stringify(agent.config, null, 2)}
+          </pre>
+        </div>
+      )}
+      {systemPrompt && (
+        <div>
+          <h4 className="text-sm font-medium text-muted-foreground mb-1">System Prompt (Static Template)</h4>
+          <p className="text-xs text-muted-foreground mb-2">
+            Dynamic context (job details, business snapshot) is injected at runtime.
+          </p>
+          <pre className="text-xs bg-muted p-3 rounded-md overflow-x-auto whitespace-pre-wrap max-h-[500px] overflow-y-auto">
+            {systemPrompt}
+          </pre>
+        </div>
+      )}
+    </>
+  );
+}
+
+function PlannedAgentDetails({ agent }: { agent: AgentConfig }) {
+  return (
+    <>
+      <Badge variant="outline">Planned — {agent.plannedBuild}</Badge>
+      <p className="text-sm text-muted-foreground">
+        This department hasn&apos;t been built yet. It&apos;s coming in {agent.plannedBuild}.
+      </p>
+      {agent.knowledgeSources && agent.knowledgeSources.length > 0 && (
+        <div>
+          <h4 className="text-sm font-medium text-muted-foreground mb-1">Planned Knowledge Sources</h4>
+          <ul className="text-sm text-muted-foreground list-disc list-inside">
+            {agent.knowledgeSources.map((src) => (
+              <li key={src}>{src}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
   );
 }

@@ -5,49 +5,42 @@ import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { useNetworkLayout } from "./useNetworkLayout";
-import { useNetworkAnimation } from "./useNetworkAnimation";
+import { useNetworkAnimation, type BrainState } from "./useNetworkAnimation";
 import NetworkNodes from "./NetworkNodes";
 import NetworkConnections from "./NetworkConnections";
 import NetworkPulses from "./NetworkPulses";
+import type { AgentConfig } from "@/lib/jarvis/agent-registry";
 
-// GPU cleanup component — disposes WebGL context on unmount
 function Cleanup() {
   const { gl } = useThree();
   useEffect(() => {
-    return () => {
-      gl.dispose();
-      gl.forceContextLoss();
-    };
+    return () => { gl.dispose(); gl.forceContextLoss(); };
   }, [gl]);
   return null;
 }
 
 interface NeuralNetworkSceneProps {
-  state: "idle" | "thinking" | "firing";
+  brainState: BrainState;
   reducedMotion: boolean;
+  onNodeClick: (agent: AgentConfig) => void;
   onCreated?: (gl: THREE.WebGLRenderer) => void;
 }
 
 export default function NeuralNetworkScene({
-  state,
+  brainState,
   reducedMotion,
+  onNodeClick,
   onCreated,
 }: NeuralNetworkSceneProps) {
   const layout = useNetworkLayout();
-  const animState = useNetworkAnimation(state);
+  const animState = useNetworkAnimation(brainState);
 
-  // Detect dark mode from Tailwind class
   const [isDarkMode, setIsDarkMode] = useState(true);
-
   useEffect(() => {
-    const checkDark = () =>
-      setIsDarkMode(document.documentElement.classList.contains("dark"));
+    const checkDark = () => setIsDarkMode(document.documentElement.classList.contains("dark"));
     checkDark();
     const observer = new MutationObserver(checkDark);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => observer.disconnect();
   }, []);
 
@@ -63,33 +56,11 @@ export default function NeuralNetworkScene({
       <pointLight position={[5, 5, 5]} intensity={0.5} />
       <pointLight position={[-5, -5, 5]} intensity={0.3} />
       <group>
-        <NetworkNodes
-          layout={layout}
-          animState={animState}
-          reducedMotion={reducedMotion}
-          isDarkMode={isDarkMode}
-        />
-        <NetworkConnections
-          layout={layout}
-          animState={animState}
-          reducedMotion={reducedMotion}
-        />
-        {!reducedMotion && (
-          <NetworkPulses
-            layout={layout}
-            animState={animState}
-            reducedMotion={reducedMotion}
-          />
-        )}
+        <NetworkNodes layout={layout} animState={animState} reducedMotion={reducedMotion} isDarkMode={isDarkMode} onNodeClick={onNodeClick} />
+        <NetworkConnections layout={layout} animState={animState} reducedMotion={reducedMotion} />
+        {!reducedMotion && <NetworkPulses layout={layout} animState={animState} reducedMotion={reducedMotion} />}
       </group>
-      <OrbitControls
-        enableZoom={false}
-        enablePan={false}
-        autoRotate={!reducedMotion}
-        autoRotateSpeed={0.5}
-        maxPolarAngle={Math.PI / 1.5}
-        minPolarAngle={Math.PI / 3}
-      />
+      <OrbitControls enableZoom={false} enablePan={false} autoRotate={!reducedMotion} autoRotateSpeed={0.5} maxPolarAngle={Math.PI / 1.5} minPolarAngle={Math.PI / 3} />
       <Cleanup />
     </Canvas>
   );

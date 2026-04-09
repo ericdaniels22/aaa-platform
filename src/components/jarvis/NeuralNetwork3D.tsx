@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, Component, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { Sparkles } from "lucide-react";
 import type * as THREE from "three";
+import type { AgentConfig } from "@/lib/jarvis/agent-registry";
+import type { BrainState } from "./neural-network/useNetworkAnimation";
 
 // Dynamic import — Three.js cannot run server-side
 const NeuralNetworkScene = dynamic(
@@ -47,12 +49,14 @@ class WebGLErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryStat
 // --- Main Wrapper ---
 
 interface NeuralNetwork3DProps {
-  state: "idle" | "thinking" | "firing";
+  brainState: BrainState;
+  onNodeClick: (agent: AgentConfig) => void;
   className?: string;
 }
 
 export default function NeuralNetwork3D({
-  state,
+  brainState,
+  onNodeClick,
   className = "",
 }: NeuralNetwork3DProps) {
   const [canvasReady, setCanvasReady] = useState(false);
@@ -114,8 +118,9 @@ export default function NeuralNetwork3D({
       >
         <WebGLErrorBoundary fallback={sparklesFallback}>
           <NeuralNetworkScene
-            state={state}
+            brainState={brainState}
             reducedMotion={reducedMotion}
+            onNodeClick={onNodeClick}
             onCreated={handleCreated}
           />
         </WebGLErrorBoundary>

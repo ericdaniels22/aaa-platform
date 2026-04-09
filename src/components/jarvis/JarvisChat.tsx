@@ -281,7 +281,7 @@ export default function JarvisChat({
             contextType={contextType}
             jobContext={jobContext ? { customerName: jobContext.customerName, address: jobContext.address } : undefined}
             onQuickAction={handleQuickAction}
-            networkState={isTyping ? "thinking" : "idle"}
+            brainState={isTyping ? { mode: "thinking" } : { mode: "idle" }}
           />
         ) : (
           <div className="py-4 space-y-4">
