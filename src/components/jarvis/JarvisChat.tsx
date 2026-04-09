@@ -11,7 +11,7 @@ import JarvisTypingIndicator from "./JarvisTypingIndicator";
 import JarvisWelcome from "./JarvisWelcome";
 
 export interface JarvisChatProps {
-  contextType: "general" | "job";
+  contextType: "general" | "job" | "rnd";
   jobId?: string;
   jobContext?: {
     customerName: string;
@@ -21,6 +21,7 @@ export interface JarvisChatProps {
   };
   conversationId?: string | null;
   onConversationCreated?: (id: string) => void;
+  directDepartment?: "rnd";
 }
 
 export default function JarvisChat({
@@ -29,6 +30,7 @@ export default function JarvisChat({
   jobContext,
   conversationId,
   onConversationCreated,
+  directDepartment,
 }: JarvisChatProps) {
   const { user } = useAuth();
   const [conversation, setConversation] = useState<JarvisConversation | null>(null);
@@ -186,6 +188,7 @@ export default function JarvisChat({
           job_id: jobId,
           message: content,
           conversation_id: conv?.id,
+          ...(directDepartment ? { direct_department: directDepartment } : {}),
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -292,7 +295,7 @@ export default function JarvisChat({
 
       {/* Quick actions */}
       {showQuickActions && !showWelcome && (
-        <JarvisQuickActions contextType={contextType} onSelect={handleQuickAction} />
+        <JarvisQuickActions contextType={contextType as "general" | "job" | "rnd"} onSelect={handleQuickAction} />
       )}
 
       {/* Input */}

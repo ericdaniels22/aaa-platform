@@ -130,6 +130,27 @@ export const jarvisToolDefinitions: Tool[] = [
       required: ["message", "due_date"],
     },
   },
+  {
+    name: "consult_rnd",
+    description:
+      "Route a question to the R&D department. Use when Eric asks about: improving the platform, adding new features, fixing bugs, how something in the app works, researching a technology or library, generating a build spec for Claude Code, checking if the system is healthy, or anything related to the software itself. Do NOT use for job-specific questions, business metrics, or field restoration guidance.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        question: {
+          type: "string",
+          description:
+            "The R&D question. Be specific about what's being asked.",
+        },
+        context: {
+          type: "string",
+          description:
+            "Additional context — what prompted this, any constraints or preferences mentioned.",
+        },
+      },
+      required: ["question"],
+    },
+  },
 ];
 
 // --- Activity type mapping ---
@@ -209,6 +230,11 @@ export async function executeJarvisTool(
             job_id?: string;
           },
           context
+        );
+        break;
+      case "consult_rnd":
+        result = await toolConsultRnd(
+          toolInput as { question: string; context?: string }
         );
         break;
       default:
@@ -596,6 +622,38 @@ async function toolLogActivity(
     activity_id: data.id,
     message: `Activity logged: "${input.title}" on job ${input.job_id}`,
   };
+}
+
+async function toolConsultRnd(
+  input: { question: string; context?: string }
+): Promise<{ content: string } | { error: string }> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || "http://localhost:3000";
+
+    const response = await fetch(`${baseUrl}/api/jarvis/rnd`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-service-key": process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+      },
+      body: JSON.stringify({
+        question: input.question,
+        context: input.context,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return { error: data.error || "R&D request failed" };
+    }
+    return { content: data.content };
+  } catch (err) {
+    return {
+      error: `Failed to reach R&D: ${err instanceof Error ? err.message : "Unknown error"}`,
+    };
+  }
 }
 
 async function toolCreateAlert(

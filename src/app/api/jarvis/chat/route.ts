@@ -21,11 +21,13 @@ export async function POST(request: NextRequest) {
       job_id,
       message,
       conversation_id,
+      direct_department,
     }: {
-      context_type: "general" | "job";
+      context_type: "general" | "job" | "rnd";
       job_id?: string;
       message: string;
       conversation_id?: string;
+      direct_department?: "rnd";
     } = body;
 
     if (!message || !context_type) {
@@ -180,16 +182,163 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // Build system prompt
-    const systemPrompt = buildSystemPrompt({
-      userName,
-      userRole,
-      contextType: context_type,
-      jobData,
-      businessSnapshot,
-    });
+    // Detect @rnd prefix or direct_department routing
+    const isRndDirect =
+      direct_department === "rnd" || message.trim().toLowerCase().startsWith("@rnd");
+    const cleanMessage = message.trim().replace(/^@rnd\s*/i, "");
 
-    // Load conversation history
+    // If direct R&D routing, call R&D then wrap through Jarvis personality
+    let assistantContent: string;
+
+    if (isRndDirect) {
+      // Call R&D directly
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+        || "http://localhost:3000";
+
+      const rndResponse = await fetch(`${baseUrl}/api/jarvis/rnd`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-service-key": process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+        },
+        body: JSON.stringify({
+          question: cleanMessage,
+          context: context_type === "job" && jobData
+            ? `Job context: ${jobData.customerName} at ${jobData.address}, ${jobData.damageType} damage, status: ${jobData.status}`
+            : undefined,
+        }),
+      });
+
+      const rndData = await rndResponse.json();
+      const rndContent = rndData.content || "R&D wasn't able to process that one. Try rephrasing.";
+
+      // Light Jarvis personality pass on the R&D response
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+      const personalityResponse = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2048,
+        system: `You are Jarvis, relaying a response from your R&D department. Keep the technical content intact but deliver it in your voice — warm, direct, and with your characteristic wit. Don't add fluff, just make it sound like you. If the R&D answer is already well-structured, you can keep it mostly as-is with light personality touches. The user is ${userName} (${userRole}).`,
+        messages: [
+          {
+            role: "user",
+            content: `The user asked: "${cleanMessage}"\n\nR&D department response:\n${rndContent}\n\nDeliver this in your voice.`,
+          },
+        ],
+      });
+
+      const personalityBlocks = personalityResponse.content.filter(
+        (block): block is Anthropic.TextBlock => block.type === "text"
+      );
+      assistantContent = personalityBlocks.map((b) => b.text).join("\n") || rndContent;
+    } else {
+      // Normal Jarvis flow
+      // Build system prompt
+      const systemPrompt = buildSystemPrompt({
+        userName,
+        userRole,
+        contextType: context_type === "rnd" ? "general" : context_type,
+        jobData,
+        businessSnapshot,
+      });
+
+      // Load conversation history
+      let conversationMessages_inner: JarvisMessage[] = [];
+      if (conversation_id) {
+        const { data: conv } = await supabase
+          .from("jarvis_conversations")
+          .select("messages")
+          .eq("id", conversation_id)
+          .single();
+
+        if (conv?.messages) {
+          conversationMessages_inner = conv.messages as JarvisMessage[];
+        }
+      }
+
+      // Build messages for Claude — truncate if needed
+      const historyMessages = conversationMessages_inner.slice(
+        -MAX_CONVERSATION_MESSAGES
+      );
+
+      const claudeMessages: Anthropic.MessageParam[] = historyMessages.map(
+        (m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })
+      );
+
+      // Add the new user message
+      claudeMessages.push({ role: "user", content: message });
+
+      // Call Claude API
+      const anthropic = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+      });
+
+      let response = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: claudeMessages,
+        tools: jarvisToolDefinitions,
+      });
+
+      // Tool use loop
+      let iterations = 0;
+      while (response.stop_reason === "tool_use" && iterations < MAX_TOOL_ITERATIONS) {
+        iterations++;
+
+        // Extract tool use blocks
+        const toolUseBlocks = response.content.filter(
+          (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
+        );
+
+        // Execute each tool
+        const toolResults: Anthropic.ToolResultBlockParam[] = [];
+        for (const toolUse of toolUseBlocks) {
+          const result = await executeJarvisTool(
+            toolUse.name,
+            toolUse.input as Record<string, unknown>,
+            {
+              userId: user.id,
+              userName,
+              userRole,
+              jobId: job_id,
+              supabase,
+            }
+          );
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: toolUse.id,
+            content: result,
+          });
+        }
+
+        // Continue conversation with tool results
+        claudeMessages.push({ role: "assistant", content: response.content });
+        claudeMessages.push({ role: "user", content: toolResults });
+
+        response = await anthropic.messages.create({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages: claudeMessages,
+          tools: jarvisToolDefinitions,
+        });
+      }
+
+      // Extract final text response
+      const textBlocks = response.content.filter(
+        (block): block is Anthropic.TextBlock => block.type === "text"
+      );
+      assistantContent =
+        textBlocks.map((b) => b.text).join("\n") ||
+        "I ran into an issue processing that. Could you try again?";
+    }
+
+    // Load conversation messages for saving (need to reload since direct R&D path skipped earlier load)
     let conversationMessages: JarvisMessage[] = [];
     if (conversation_id) {
       const { data: conv } = await supabase
@@ -202,86 +351,6 @@ export async function POST(request: NextRequest) {
         conversationMessages = conv.messages as JarvisMessage[];
       }
     }
-
-    // Build messages for Claude — truncate if needed
-    const historyMessages = conversationMessages.slice(
-      -MAX_CONVERSATION_MESSAGES
-    );
-
-    const claudeMessages: Anthropic.MessageParam[] = historyMessages.map(
-      (m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })
-    );
-
-    // Add the new user message
-    claudeMessages.push({ role: "user", content: message });
-
-    // Call Claude API
-    const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
-
-    let response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: claudeMessages,
-      tools: jarvisToolDefinitions,
-    });
-
-    // Tool use loop
-    let iterations = 0;
-    while (response.stop_reason === "tool_use" && iterations < MAX_TOOL_ITERATIONS) {
-      iterations++;
-
-      // Extract tool use blocks
-      const toolUseBlocks = response.content.filter(
-        (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
-      );
-
-      // Execute each tool
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-      for (const toolUse of toolUseBlocks) {
-        const result = await executeJarvisTool(
-          toolUse.name,
-          toolUse.input as Record<string, unknown>,
-          {
-            userId: user.id,
-            userName,
-            userRole,
-            jobId: job_id,
-            supabase,
-          }
-        );
-        toolResults.push({
-          type: "tool_result",
-          tool_use_id: toolUse.id,
-          content: result,
-        });
-      }
-
-      // Continue conversation with tool results
-      claudeMessages.push({ role: "assistant", content: response.content });
-      claudeMessages.push({ role: "user", content: toolResults });
-
-      response = await anthropic.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: claudeMessages,
-        tools: jarvisToolDefinitions,
-      });
-    }
-
-    // Extract final text response
-    const textBlocks = response.content.filter(
-      (block): block is Anthropic.TextBlock => block.type === "text"
-    );
-    const assistantContent =
-      textBlocks.map((b) => b.text).join("\n") ||
-      "I ran into an issue processing that. Could you try again?";
 
     // Save messages to conversation
     const now = new Date().toISOString();

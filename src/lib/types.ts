@@ -301,7 +301,7 @@ export interface JarvisConversation {
   job_id: string | null;
   user_id: string | null;
   title: string | null;
-  context_type: "general" | "job";
+  context_type: "general" | "job" | "rnd";
   messages: JarvisMessage[];
   is_active: boolean;
   created_at: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Plus, MessageSquare, Trash2 } from "lucide-react";
+import { Plus, MessageSquare, FlaskConical, Trash2 } from "lucide-react";
 import type { JarvisConversation } from "@/lib/types";
 
 interface JarvisConversationListProps {
@@ -94,7 +94,11 @@ export default function JarvisConversationList({
                   onClick={() => onSelect(conv.id)}
                   className="flex items-start gap-2.5 flex-1 min-w-0 text-left"
                 >
-                  <MessageSquare size={16} className="text-muted-foreground/60 flex-shrink-0 mt-0.5" />
+                  {conv.context_type === "rnd" ? (
+                    <FlaskConical size={16} className="text-violet-400/60 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <MessageSquare size={16} className="text-muted-foreground/60 flex-shrink-0 mt-0.5" />
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium text-foreground truncate">{title}</p>
