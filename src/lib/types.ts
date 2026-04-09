@@ -289,6 +289,37 @@ export interface JobCustomField {
   created_at: string;
 }
 
+// Jarvis
+export interface JarvisMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string;
+}
+
+export interface JarvisConversation {
+  id: string;
+  job_id: string | null;
+  user_id: string | null;
+  title: string | null;
+  context_type: "general" | "job";
+  messages: JarvisMessage[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JarvisAlert {
+  id: string;
+  job_id: string | null;
+  user_id: string | null;
+  message: string;
+  priority: "low" | "medium" | "high";
+  status: "active" | "resolved";
+  due_date: string;
+  created_at: string;
+  resolved_at: string | null;
+}
+
 export interface CompanySettings {
   company_name?: string;
   logo_path?: string;

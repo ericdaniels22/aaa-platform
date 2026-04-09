@@ -10,6 +10,7 @@ import PhotoUploadModal from "@/components/photo-upload";
 import PhotoDetailModal from "@/components/photo-detail";
 import PhotoAnnotator from "@/components/photo-annotator";
 import ComposeEmailModal from "@/components/compose-email";
+import JarvisJobPanel from "@/components/jarvis/JarvisJobPanel";
 import {
   MapPin,
   Home,
@@ -221,6 +222,15 @@ export default function JobDetail({ jobId }: { jobId: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <JarvisJobPanel
+            jobId={jobId}
+            jobContext={{
+              customerName: contactName,
+              address: job.property_address,
+              status: job.status,
+              damageType: job.damage_type,
+            }}
+          />
           <select
             value={job.status}
             onChange={(e) => updateStatus(e.target.value)}

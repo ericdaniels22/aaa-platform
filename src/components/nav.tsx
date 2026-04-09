@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   LogOut,
+  Sparkles,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,7 @@ import NotificationBell from "@/components/notification-bell";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/jarvis", label: "Jarvis", icon: Sparkles },
   { href: "/intake", label: "New Intake", icon: ClipboardPlus },
   { href: "/jobs", label: "Jobs", icon: Briefcase },
   { href: "/photos", label: "Photos", icon: Camera },
