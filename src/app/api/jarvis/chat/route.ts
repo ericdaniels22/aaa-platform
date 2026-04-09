@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
-import { buildSystemPrompt } from "@/lib/jarvis/system-prompt";
+import { buildSystemPrompt } from "@/lib/jarvis/prompts/jarvis-core";
 import {
   jarvisToolDefinitions,
   executeJarvisTool,
