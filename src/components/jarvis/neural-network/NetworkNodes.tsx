@@ -61,10 +61,13 @@ function AgentNode({
 
   const isActive = node.agent.status === "active";
   const isHub = index === 0;
+  const isRnd = node.agent.id === "rnd";
   const isRouted = animState.activeAgent === node.agent.id;
-  const baseColor = isActive
-    ? isDarkMode ? "#0F6E56" : "#0A5A46"
-    : isDarkMode ? "#2A4A40" : "#3A5A50";
+  const baseColor = isRnd
+    ? isDarkMode ? "#7C3AED" : "#6D28D9"
+    : isActive
+      ? isDarkMode ? "#0F6E56" : "#0A5A46"
+      : isDarkMode ? "#2A4A40" : "#3A5A50";
 
   useFrame((state) => {
     if (reducedMotion || !materialRef.current || !meshRef.current) return;
@@ -121,7 +124,7 @@ function AgentNode({
       </mesh>
       <Html position={[0, node.radius + 0.3, 0]} center distanceFactor={8}>
         <span className={`text-xs font-medium pointer-events-none select-none whitespace-nowrap ${
-          isActive ? "text-teal-400" : "text-teal-700"
+          isRnd ? "text-violet-400" : isActive ? "text-teal-400" : "text-teal-700"
         }`}>
           {node.agent.shortName}
         </span>
