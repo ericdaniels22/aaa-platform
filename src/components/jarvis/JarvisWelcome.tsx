@@ -2,6 +2,7 @@
 
 import { Sparkles, FlaskConical } from "lucide-react";
 import JarvisQuickActions from "./JarvisQuickActions";
+import NeuralNetwork3D from "./NeuralNetwork3D";
 
 interface JarvisWelcomeProps {
   contextType: "general" | "job" | "rnd";
@@ -10,9 +11,10 @@ interface JarvisWelcomeProps {
     address: string;
   };
   onQuickAction: (text: string) => void;
+  networkState?: "idle" | "thinking" | "firing";
 }
 
-export default function JarvisWelcome({ contextType, jobContext, onQuickAction }: JarvisWelcomeProps) {
+export default function JarvisWelcome({ contextType, jobContext, onQuickAction, networkState }: JarvisWelcomeProps) {
   if (contextType === "rnd") {
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
@@ -46,8 +48,8 @@ export default function JarvisWelcome({ contextType, jobContext, onQuickAction }
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-[image:var(--gradient-primary)] flex items-center justify-center mb-5">
-        <Sparkles size={32} className="text-white" />
+      <div className="mb-3">
+        <NeuralNetwork3D state={networkState ?? "idle"} />
       </div>
       <h2 className="text-2xl font-bold gradient-text mb-2">Jarvis</h2>
       <p className="text-base text-muted-foreground mb-1">Your AI partner for AAA Disaster Recovery</p>
