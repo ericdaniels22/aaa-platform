@@ -1,16 +1,19 @@
 "use client";
 
-import { useRef, useMemo, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
+import { Html } from "@react-three/drei";
 import * as THREE from "three";
-import type { NetworkLayout } from "./useNetworkLayout";
+import type { AgentNetworkLayout } from "./useNetworkLayout";
 import type { AnimationState } from "./useNetworkAnimation";
+import type { AgentConfig } from "@/lib/jarvis/agent-registry";
 
 interface NetworkNodesProps {
-  layout: NetworkLayout;
+  layout: AgentNetworkLayout;
   animState: AnimationState;
   reducedMotion: boolean;
   isDarkMode: boolean;
+  onNodeClick: (agent: AgentConfig) => void;
 }
 
 export default function NetworkNodes({
@@ -18,101 +21,111 @@ export default function NetworkNodes({
   animState,
   reducedMotion,
   isDarkMode,
+  onNodeClick,
 }: NetworkNodesProps) {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const dummy = useMemo(() => new THREE.Object3D(), []);
+  return (
+    <group>
+      {layout.nodes.map((node, i) => (
+        <AgentNode
+          key={node.agent.id}
+          node={node}
+          index={i}
+          animState={animState}
+          reducedMotion={reducedMotion}
+          isDarkMode={isDarkMode}
+          onClick={() => onNodeClick(node.agent)}
+        />
+      ))}
+    </group>
+  );
+}
 
-  // Build a lookup: nodeIndex → layerIndex
-  const layerLookup = useMemo(() => {
-    const lookup = new Uint8Array(layout.nodeCount);
-    for (let li = 0; li < layout.layerIndices.length; li++) {
-      for (const ni of layout.layerIndices[li]) {
-        lookup[ni] = li;
-      }
-    }
-    return lookup;
-  }, [layout]);
+function AgentNode({
+  node,
+  index,
+  animState,
+  reducedMotion,
+  isDarkMode,
+  onClick,
+}: {
+  node: AgentNetworkLayout["nodes"][number];
+  index: number;
+  animState: AnimationState;
+  reducedMotion: boolean;
+  isDarkMode: boolean;
+  onClick: () => void;
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const materialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const [hovered, setHovered] = useState(false);
 
-  // Set initial positions on mount
-  useEffect(() => {
-    if (!meshRef.current) return;
-    for (let i = 0; i < layout.nodeCount; i++) {
-      dummy.position.set(
-        layout.positions[i * 3],
-        layout.positions[i * 3 + 1],
-        layout.positions[i * 3 + 2]
-      );
-      dummy.scale.setScalar(1);
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
-    }
-    meshRef.current.instanceMatrix.needsUpdate = true;
-  }, [layout, dummy]);
+  const isActive = node.agent.status === "active";
+  const isHub = index === 0;
+  const isRouted = animState.activeAgent === node.agent.id;
+  const baseColor = isActive
+    ? isDarkMode ? "#0F6E56" : "#0A5A46"
+    : isDarkMode ? "#2A4A40" : "#3A5A50";
 
-  // Per-frame animation
   useFrame((state) => {
-    if (reducedMotion || !meshRef.current) return;
-
+    if (reducedMotion || !materialRef.current || !meshRef.current) return;
     const t = state.clock.elapsedTime;
-    const material = meshRef.current.material as THREE.MeshStandardMaterial;
 
-    for (let i = 0; i < layout.nodeCount; i++) {
-      const li = layerLookup[i];
-      let emissiveIntensity: number;
-      let scale: number;
+    let emissive: number;
+    let scale: number;
 
-      if (animState.state === "firing" && animState.fireStartTime !== null) {
-        const progress = Math.min((t - animState.fireStartTime) / 0.6, 1.0);
-        emissiveIntensity = 2.0 - progress * 1.5;
-        scale = 1.2 - progress * 0.2;
-      } else if (animState.state === "thinking") {
-        const layerOffset = li * 0.2;
-        emissiveIntensity =
-          Math.sin(t * 2.0 + i * 0.2 - layerOffset) * 0.4 + 0.8;
-        scale = 1 + Math.sin(t * 1.5 + i * 0.3) * 0.1;
-      } else {
-        // Idle
-        emissiveIntensity = Math.sin(t * 0.5 + i * 0.3) * 0.3 + 0.5;
-        scale = 1 + Math.sin(t * 0.3 + i * 0.5) * 0.05;
-      }
-
-      // Light mode boost
-      if (!isDarkMode) {
-        emissiveIntensity += 0.2;
-      }
-
-      dummy.position.set(
-        layout.positions[i * 3],
-        layout.positions[i * 3 + 1],
-        layout.positions[i * 3 + 2]
-      );
-      dummy.scale.setScalar(scale);
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
-
-      // Set emissive intensity on last iteration (applies globally)
-      if (i === layout.nodeCount - 1) {
-        material.emissiveIntensity = emissiveIntensity;
-      }
+    if (animState.mode === "firing" && animState.fireStartTime !== null) {
+      const progress = Math.min((t - animState.fireStartTime) / 0.6, 1.0);
+      emissive = isRouted || isHub ? 2.0 - progress * 1.5 : 0.5;
+      scale = isRouted || isHub ? 1.2 - progress * 0.2 : 1.0;
+    } else if (animState.mode === "thinking" && isRouted) {
+      emissive = Math.sin(t * 2.5) * 0.4 + 1.2;
+      scale = 1 + Math.sin(t * 1.5) * 0.08;
+    } else if (isActive) {
+      const speed = isHub ? 0.6 : 0.5;
+      emissive = Math.sin(t * speed + index * 0.5) * 0.3 + (isHub ? 0.7 : 0.5);
+      scale = 1 + Math.sin(t * 0.3 + index * 0.5) * 0.04;
+    } else {
+      emissive = Math.sin(t * 0.2 + index) * 0.1 + 0.15;
+      scale = 1.0;
     }
 
-    meshRef.current.instanceMatrix.needsUpdate = true;
+    if (hovered) {
+      emissive += 0.3;
+      scale *= 1.15;
+    }
+    if (!isDarkMode) emissive += 0.2;
+
+    materialRef.current.emissiveIntensity = emissive;
+    meshRef.current.scale.setScalar(scale);
   });
 
-  const color = isDarkMode ? "#0F6E56" : "#0A5A46";
-
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, layout.nodeCount]}>
-      <sphereGeometry args={[0.12, 16, 16]} />
-      <meshStandardMaterial
-        color={color}
-        emissive={color}
-        emissiveIntensity={reducedMotion ? 0.5 : 0.5}
-        transparent
-        opacity={0.85}
-        roughness={0.3}
-        metalness={0.7}
-      />
-    </instancedMesh>
+    <group position={node.position}>
+      <mesh
+        ref={meshRef}
+        onClick={(e) => { e.stopPropagation(); onClick(); }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = "pointer"; }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = "auto"; }}
+      >
+        <sphereGeometry args={[node.radius, 32, 32]} />
+        <meshStandardMaterial
+          ref={materialRef}
+          color={baseColor}
+          emissive={baseColor}
+          emissiveIntensity={reducedMotion ? (isActive ? 0.5 : 0.15) : 0.5}
+          transparent
+          opacity={isActive ? 0.9 : 0.4}
+          roughness={0.3}
+          metalness={0.7}
+        />
+      </mesh>
+      <Html position={[0, node.radius + 0.3, 0]} center distanceFactor={8}>
+        <span className={`text-xs font-medium pointer-events-none select-none whitespace-nowrap ${
+          isActive ? "text-teal-400" : "text-teal-700"
+        }`}>
+          {node.agent.shortName}
+        </span>
+      </Html>
+    </group>
   );
 }

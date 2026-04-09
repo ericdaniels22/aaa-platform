@@ -1,13 +1,13 @@
 "use client";
 
-import { useRef, useMemo } from "react";
+import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import * as THREE from "three";
-import type { NetworkLayout } from "./useNetworkLayout";
+import { Line } from "@react-three/drei";
+import type { AgentNetworkLayout } from "./useNetworkLayout";
 import type { AnimationState } from "./useNetworkAnimation";
 
 interface NetworkConnectionsProps {
-  layout: NetworkLayout;
+  layout: AgentNetworkLayout;
   animState: AnimationState;
   reducedMotion: boolean;
 }
@@ -17,54 +17,69 @@ export default function NetworkConnections({
   animState,
   reducedMotion,
 }: NetworkConnectionsProps) {
-  const materialRef = useRef<THREE.LineBasicMaterial>(null);
+  return (
+    <group>
+      {layout.connections.map((conn, i) => (
+        <ConnectionLine
+          key={i}
+          from={layout.nodes[conn.from].position}
+          to={layout.nodes[conn.to].position}
+          toAgentId={layout.nodes[conn.to].agent.id}
+          toAgentStatus={layout.nodes[conn.to].agent.status}
+          animState={animState}
+          reducedMotion={reducedMotion}
+        />
+      ))}
+    </group>
+  );
+}
 
-  // Build vertex positions from connections
-  const linePositions = useMemo(() => {
-    const arr = new Float32Array(layout.connections.length * 6); // 2 vertices × 3 coords per connection
-    for (let i = 0; i < layout.connections.length; i++) {
-      const { from, to } = layout.connections[i];
-      arr[i * 6] = layout.positions[from * 3];
-      arr[i * 6 + 1] = layout.positions[from * 3 + 1];
-      arr[i * 6 + 2] = layout.positions[from * 3 + 2];
-      arr[i * 6 + 3] = layout.positions[to * 3];
-      arr[i * 6 + 4] = layout.positions[to * 3 + 1];
-      arr[i * 6 + 5] = layout.positions[to * 3 + 2];
-    }
-    return arr;
-  }, [layout]);
+function ConnectionLine({
+  from,
+  to,
+  toAgentId,
+  toAgentStatus,
+  animState,
+  reducedMotion,
+}: {
+  from: [number, number, number];
+  to: [number, number, number];
+  toAgentId: string;
+  toAgentStatus: string;
+  animState: AnimationState;
+  reducedMotion: boolean;
+}) {
+  const lineRef = useRef<any>(null);
+  const isActive = toAgentStatus === "active";
+  const isRouted = animState.activeAgent === toAgentId;
 
-  // Animate opacity
   useFrame((state) => {
-    if (reducedMotion || !materialRef.current) return;
-
+    if (reducedMotion || !lineRef.current?.material) return;
     const t = state.clock.elapsedTime;
 
-    if (animState.state === "firing" && animState.fireStartTime !== null) {
+    let opacity: number;
+    if (animState.mode === "firing" && animState.fireStartTime !== null) {
       const progress = Math.min((t - animState.fireStartTime) / 0.6, 1.0);
-      materialRef.current.opacity = 0.4 - progress * 0.25; // 0.4 → 0.15
-    } else if (animState.state === "thinking") {
-      materialRef.current.opacity = 0.25;
+      opacity = isRouted ? 0.6 - progress * 0.3 : isActive ? 0.3 : 0.08;
+    } else if (animState.mode === "thinking" && isRouted) {
+      opacity = 0.6;
     } else {
-      materialRef.current.opacity = 0.15;
+      opacity = isActive ? 0.3 : 0.08;
     }
+
+    lineRef.current.material.opacity = opacity;
   });
 
+  const staticOpacity = isActive ? 0.3 : 0.08;
+
   return (
-    <lineSegments>
-      <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          args={[linePositions, 3]}
-        />
-      </bufferGeometry>
-      <lineBasicMaterial
-        ref={materialRef}
-        color="#0F6E56"
-        transparent
-        opacity={reducedMotion ? 0.2 : 0.15}
-        depthWrite={false}
-      />
-    </lineSegments>
+    <Line
+      ref={lineRef}
+      points={[from, to]}
+      color="#0F6E56"
+      lineWidth={1}
+      transparent
+      opacity={reducedMotion ? staticOpacity : staticOpacity}
+    />
   );
 }

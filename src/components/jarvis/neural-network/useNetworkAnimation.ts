@@ -1,18 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-export interface AnimationState {
-  state: "idle" | "thinking" | "firing";
-  fireStartTime: number | null;
-  thinkingStartTime: number | null;
+export interface BrainState {
+  mode: "idle" | "thinking" | "firing";
+  activeAgent?: string;
 }
 
-export function useNetworkAnimation(
-  externalState: "idle" | "thinking" | "firing"
-): AnimationState {
+export interface AnimationState {
+  mode: "idle" | "thinking" | "firing";
+  activeAgent?: string;
+  fireStartTime: number | null;
+}
+
+export function useNetworkAnimation(brainState: BrainState): AnimationState {
   const [animState, setAnimState] = useState<AnimationState>({
-    state: "idle",
+    mode: "idle",
+    activeAgent: undefined,
     fireStartTime: null,
-    thinkingStartTime: null,
   });
 
   const fireTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -27,39 +30,36 @@ export function useNetworkAnimation(
   useEffect(() => {
     clearFireTimer();
 
-    if (externalState === "firing") {
+    if (brainState.mode === "firing") {
       const now = performance.now() / 1000;
       setAnimState({
-        state: "firing",
+        mode: "firing",
+        activeAgent: brainState.activeAgent,
         fireStartTime: now,
-        thinkingStartTime: null,
       });
-
-      // Auto-revert to idle after 600ms
       fireTimerRef.current = setTimeout(() => {
-        setAnimState({
-          state: "idle",
+        setAnimState((prev) => ({
+          ...prev,
+          mode: "idle",
           fireStartTime: null,
-          thinkingStartTime: null,
-        });
+        }));
       }, 600);
-    } else if (externalState === "thinking") {
-      const now = performance.now() / 1000;
+    } else if (brainState.mode === "thinking") {
       setAnimState({
-        state: "thinking",
+        mode: "thinking",
+        activeAgent: brainState.activeAgent,
         fireStartTime: null,
-        thinkingStartTime: now,
       });
     } else {
       setAnimState({
-        state: "idle",
+        mode: "idle",
+        activeAgent: undefined,
         fireStartTime: null,
-        thinkingStartTime: null,
       });
     }
 
     return clearFireTimer;
-  }, [externalState, clearFireTimer]);
+  }, [brainState.mode, brainState.activeAgent, clearFireTimer]);
 
   return animState;
 }
