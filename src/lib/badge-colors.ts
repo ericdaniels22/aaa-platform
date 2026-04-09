@@ -1,9 +1,9 @@
 export const statusColors: Record<string, string> = {
-  new: "bg-[#FAEEDA] text-[#633806]",
-  in_progress: "bg-[#E1F5EE] text-[#085041]",
-  pending_invoice: "bg-[#EEEDFE] text-[#3C3489]",
-  completed: "bg-[#F1EFE8] text-[#5F5E5A]",
-  cancelled: "bg-[#F1EFE8] text-[#5F5E5A]",
+  new: "bg-amber-100 text-amber-800 ring-1 ring-amber-200",
+  in_progress: "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200",
+  pending_invoice: "bg-violet-100 text-violet-800 ring-1 ring-violet-200",
+  completed: "bg-stone-100 text-stone-600 ring-1 ring-stone-200",
+  cancelled: "bg-stone-100 text-stone-500 ring-1 ring-stone-200",
 };
 
 export const statusLabels: Record<string, string> = {
@@ -15,9 +15,9 @@ export const statusLabels: Record<string, string> = {
 };
 
 export const urgencyColors: Record<string, string> = {
-  emergency: "bg-[#FCEBEB] text-[#791F1F]",
-  urgent: "bg-[#FAEEDA] text-[#633806]",
-  scheduled: "bg-[#E6F1FB] text-[#0C447C]",
+  emergency: "bg-red-100 text-red-800 ring-1 ring-red-300 font-semibold",
+  urgent: "bg-amber-100 text-amber-800 ring-1 ring-amber-300",
+  scheduled: "bg-sky-100 text-sky-800 ring-1 ring-sky-200",
 };
 
 export const urgencyLabels: Record<string, string> = {
@@ -27,14 +27,14 @@ export const urgencyLabels: Record<string, string> = {
 };
 
 export const damageTypeColors: Record<string, string> = {
-  water: "bg-[#E6F1FB] text-[#0C447C]",
-  fire: "bg-[#FAECE7] text-[#712B13]",
-  mold: "bg-[#EAF3DE] text-[#27500A]",
-  storm: "bg-[#EEEDFE] text-[#3C3489]",
-  biohazard: "bg-[#FCEBEB] text-[#791F1F]",
-  contents: "bg-[#FFF8E6] text-[#7A5E00]",
-  rebuild: "bg-[#F1EFE8] text-[#5F5E5A]",
-  other: "bg-[#F1EFE8] text-[#5F5E5A]",
+  water: "bg-sky-100 text-sky-800 ring-1 ring-sky-200",
+  fire: "bg-orange-100 text-orange-800 ring-1 ring-orange-200",
+  mold: "bg-lime-100 text-lime-800 ring-1 ring-lime-200",
+  storm: "bg-violet-100 text-violet-800 ring-1 ring-violet-200",
+  biohazard: "bg-red-100 text-red-800 ring-1 ring-red-200",
+  contents: "bg-yellow-100 text-yellow-800 ring-1 ring-yellow-200",
+  rebuild: "bg-stone-100 text-stone-700 ring-1 ring-stone-200",
+  other: "bg-stone-100 text-stone-600 ring-1 ring-stone-200",
 };
 
 export const damageTypeLabels: Record<string, string> = {

@@ -142,8 +142,7 @@ export default function DataExportPage() {
         <button
           onClick={handleExportAll}
           disabled={!!exporting}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-colors"
-          style={{ backgroundColor: "var(--brand-primary)" }}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md disabled:opacity-50 transition-all"
         >
           {exporting && <Loader2 size={16} className="animate-spin" />}
           <Download size={16} />

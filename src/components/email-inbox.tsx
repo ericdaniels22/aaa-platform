@@ -337,8 +337,8 @@ export default function EmailInbox() {
   return (
     <div className="h-[calc(100vh-2rem)] flex flex-col">
       {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 shrink-0">
-        <h1 className="text-lg font-bold text-[#333] mr-2">Email</h1>
+      <div className="flex items-center gap-3 px-4 py-3 bg-card border-b border-border shrink-0">
+        <h1 className="text-lg font-bold text-foreground mr-2">Email</h1>
 
         {/* Account filter */}
         <div className="relative">
@@ -348,7 +348,7 @@ export default function EmailInbox() {
               setSelectedAccountId(e.target.value);
               setPage(1);
             }}
-            className="text-sm border border-gray-200 rounded-lg pl-3 pr-8 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30 appearance-none"
+            className="text-sm border border-border rounded-lg pl-3 pr-8 py-1.5 bg-card focus:outline-none focus:ring-2 focus:ring-primary/30 appearance-none"
           >
             <option value="">All Inboxes</option>
             {accounts.map((acc) => (
@@ -359,7 +359,7 @@ export default function EmailInbox() {
           </select>
           <ChevronDown
             size={14}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#999] pointer-events-none"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none"
           />
         </div>
 
@@ -367,7 +367,7 @@ export default function EmailInbox() {
         <div className="flex-1 max-w-md relative">
           <Search
             size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60"
           />
           <input
             type="text"
@@ -377,7 +377,7 @@ export default function EmailInbox() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/30"
+            className="w-full pl-9 pr-3 py-1.5 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
 
@@ -385,7 +385,7 @@ export default function EmailInbox() {
           <button
             onClick={handleSync}
             disabled={syncing || accounts.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#666] border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground border border-border rounded-lg hover:bg-accent disabled:opacity-50"
           >
             <RefreshCw
               size={14}
@@ -395,14 +395,14 @@ export default function EmailInbox() {
           </button>
           <button
             onClick={handleCompose}
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-[#2B5EA7] text-white rounded-lg text-sm font-medium hover:bg-[#234b87]"
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-[image:var(--gradient-primary)] text-white rounded-lg text-sm font-medium shadow-sm hover:brightness-110 hover:shadow-md transition-all"
           >
             <MailPlus size={14} />
             Compose
           </button>
           <a
             href="/settings/email"
-            className="p-1.5 text-[#999] hover:text-[#666] hover:bg-gray-100 rounded"
+            className="p-1.5 text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent rounded"
             title="Email Settings"
           >
             <Settings size={16} />
@@ -413,7 +413,7 @@ export default function EmailInbox() {
       {/* 3-column layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Column 1: Folder sidebar */}
-        <div className="w-52 border-r border-gray-200 bg-gray-50/50 shrink-0 flex flex-col">
+        <div className="w-52 border-r border-border bg-muted/50 shrink-0 flex flex-col">
           <nav className="flex-1 py-2">
             {FOLDERS.map(({ key, label, icon: Icon }) => {
               const isActive = folder === key;
@@ -426,17 +426,17 @@ export default function EmailInbox() {
                   onClick={() => handleFolderChange(key)}
                   className={`w-full flex items-center gap-2.5 px-4 py-2 text-sm transition-colors ${
                     isActive
-                      ? "bg-[#2B5EA7]/10 text-[#2B5EA7] font-medium"
-                      : "text-[#666] hover:bg-gray-100"
+                      ? "bg-primary/10 text-primary font-medium"
+                      : "text-muted-foreground hover:bg-primary/5"
                   }`}
                 >
                   <Icon size={16} />
                   <span className="flex-1 text-left">{label}</span>
                   {key === "starred" && total2 > 0 && (
-                    <span className="text-xs text-[#999]">{total2}</span>
+                    <span className="text-xs text-muted-foreground/60">{total2}</span>
                   )}
                   {key !== "starred" && unread > 0 && (
-                    <span className="text-xs font-bold text-[#2B5EA7] bg-[#2B5EA7]/10 rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                    <span className="text-xs font-bold text-primary bg-primary/10 rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
                       {unread}
                     </span>
                   )}
@@ -448,12 +448,12 @@ export default function EmailInbox() {
 
         {/* Column 2: Email list */}
         <div
-          className={`w-96 border-r border-gray-200 flex flex-col bg-white shrink-0 ${
+          className={`w-96 border-r border-border flex flex-col bg-card shrink-0 ${
             selectedEmailId ? "hidden lg:flex" : "flex"
           }`}
         >
           {/* List header */}
-          <div className="px-4 py-2 border-b border-gray-100 text-xs text-[#999] flex items-center justify-between">
+          <div className="px-4 py-2 border-b border-border/50 text-xs text-muted-foreground/60 flex items-center justify-between">
             <span>
               {total} email{total !== 1 ? "s" : ""}
               {folder !== "starred" && counts[folder]?.unread
@@ -464,7 +464,7 @@ export default function EmailInbox() {
               {counts[folder]?.unread > 0 && (
                 <button
                   onClick={handleMarkAllRead}
-                  className="flex items-center gap-1 text-[#2B5EA7] hover:underline"
+                  className="flex items-center gap-1 text-primary hover:underline"
                   title="Mark all as read"
                 >
                   <MailCheck size={12} />
@@ -474,7 +474,7 @@ export default function EmailInbox() {
             {hasMore && (
               <button
                 onClick={() => setPage((p) => p + 1)}
-                className="text-[#2B5EA7] hover:underline"
+                className="text-primary hover:underline"
               >
                 Load more
               </button>
@@ -485,11 +485,11 @@ export default function EmailInbox() {
           {/* Email rows */}
           <div className="flex-1 overflow-y-auto">
             {loading ? (
-              <div className="flex items-center justify-center py-12 text-[#999] text-sm">
+              <div className="flex items-center justify-center py-12 text-muted-foreground/60 text-sm">
                 Loading...
               </div>
             ) : emails.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-[#999]">
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground/60">
                 <Inbox size={32} className="mb-2 opacity-40" />
                 <p className="text-sm">No emails</p>
               </div>
@@ -510,19 +510,19 @@ export default function EmailInbox() {
 
             {/* Pagination */}
             {!loading && total > 50 && (
-              <div className="flex items-center justify-center gap-2 py-3 border-t border-gray-100">
+              <div className="flex items-center justify-center gap-2 py-3 border-t border-border/50">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="px-3 py-1 text-xs border border-gray-200 rounded disabled:opacity-30 hover:bg-gray-50"
+                  className="px-3 py-1 text-xs border border-border rounded disabled:opacity-30 hover:bg-accent"
                 >
                   Previous
                 </button>
-                <span className="text-xs text-[#999]">Page {page}</span>
+                <span className="text-xs text-muted-foreground/60">Page {page}</span>
                 <button
                   onClick={() => setPage((p) => p + 1)}
                   disabled={!hasMore}
-                  className="px-3 py-1 text-xs border border-gray-200 rounded disabled:opacity-30 hover:bg-gray-50"
+                  className="px-3 py-1 text-xs border border-border rounded disabled:opacity-30 hover:bg-accent"
                 >
                   Next
                 </button>
@@ -533,7 +533,7 @@ export default function EmailInbox() {
 
         {/* Column 3: Reading pane */}
         <div
-          className={`flex-1 bg-gray-50 ${
+          className={`flex-1 bg-muted/50 ${
             selectedEmailId ? "flex" : "hidden lg:flex"
           }`}
         >
@@ -547,7 +547,7 @@ export default function EmailInbox() {
               onStarToggle={handleStarToggle}
             />
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-[#999]">
+            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground/60">
               <Inbox size={48} className="mb-3 opacity-30" />
               <p className="text-sm">Select an email to read</p>
             </div>
@@ -601,12 +601,12 @@ function EmailRow({
   return (
     <div
       onClick={onSelect}
-      className={`flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-gray-50 transition-colors ${
+      className={`flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-border/50 transition-colors ${
         isSelected
-          ? "bg-[#2B5EA7]/5 border-l-2 border-l-[#2B5EA7]"
+          ? "bg-primary/5 border-l-2 border-l-primary"
           : email.is_read
-          ? "hover:bg-gray-50"
-          : "bg-blue-50/30 hover:bg-blue-50/50"
+          ? "hover:bg-primary/5"
+          : "bg-primary/5 hover:bg-primary/10"
       }`}
     >
       {/* Star */}
@@ -632,34 +632,34 @@ function EmailRow({
         <div className="flex items-center gap-2">
           <span
             className={`text-sm truncate ${
-              email.is_read ? "text-[#666]" : "font-semibold text-[#333]"
+              email.is_read ? "text-muted-foreground" : "font-semibold text-foreground"
             }`}
           >
             {displayName}
           </span>
-          <span className="text-xs text-[#999] shrink-0 ml-auto">
+          <span className="text-xs text-muted-foreground/60 shrink-0 ml-auto">
             {formatEmailDate(email.received_at)}
           </span>
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
           <span
             className={`text-sm truncate ${
-              email.is_read ? "text-[#999]" : "text-[#333]"
+              email.is_read ? "text-muted-foreground/60" : "text-foreground"
             }`}
           >
             {email.subject || "(no subject)"}
           </span>
         </div>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-xs text-[#bbb] truncate flex-1">
+          <span className="text-xs text-muted-foreground/40 truncate flex-1">
             {email.snippet}
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
             {email.has_attachments && (
-              <Paperclip size={12} className="text-[#bbb]" />
+              <Paperclip size={12} className="text-muted-foreground/40" />
             )}
             {email.job && (
-              <span className="flex items-center gap-0.5 text-[10px] bg-blue-50 text-[#2B5EA7] px-1.5 py-0.5 rounded">
+              <span className="flex items-center gap-0.5 text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                 <Briefcase size={10} />
                 {email.job.job_number}
               </span>

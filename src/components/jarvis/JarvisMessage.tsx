@@ -33,7 +33,7 @@ export default function JarvisMessage({ message }: { message: JarvisMessageType 
   return (
     <div className={`flex items-start gap-3 px-4 ${isUser ? "flex-row-reverse" : ""}`}>
       {!isUser && (
-        <div className="w-8 h-8 rounded-full bg-[#1B2434] flex items-center justify-center flex-shrink-0">
+        <div className="w-8 h-8 rounded-full bg-[image:var(--gradient-primary)] text-white flex items-center justify-center flex-shrink-0">
           <span className="text-xs font-bold text-white">J</span>
         </div>
       )}
@@ -41,8 +41,8 @@ export default function JarvisMessage({ message }: { message: JarvisMessageType 
         <div
           className={
             isUser
-              ? "bg-[#1B2434] text-white rounded-2xl rounded-tr-sm px-4 py-2.5"
-              : "bg-[#F5F5F5] text-[#1A1A1A] rounded-2xl rounded-tl-sm px-4 py-2.5"
+              ? "bg-[image:var(--gradient-secondary)] text-white rounded-2xl rounded-tr-sm px-4 py-2.5"
+              : "bg-muted text-foreground rounded-2xl rounded-tl-sm px-4 py-2.5"
           }
         >
           {isUser ? (
@@ -61,19 +61,19 @@ export default function JarvisMessage({ message }: { message: JarvisMessageType 
                     const isBlock = className?.includes("language-");
                     if (isBlock) {
                       return (
-                        <pre className="bg-[#E8E8E8] rounded-lg p-3 my-2 overflow-x-auto">
+                        <pre className="bg-muted rounded-lg p-3 my-2 overflow-x-auto">
                           <code className="text-xs font-mono">{children}</code>
                         </pre>
                       );
                     }
                     return (
-                      <code className="bg-[#E8E8E8] rounded px-1.5 py-0.5 text-xs font-mono">
+                      <code className="bg-muted rounded px-1.5 py-0.5 text-xs font-mono">
                         {children}
                       </code>
                     );
                   },
                   a: ({ href, children }) => (
-                    <a href={href} className="text-[#2B5EA7] underline" target="_blank" rel="noopener noreferrer">
+                    <a href={href} className="text-primary underline" target="_blank" rel="noopener noreferrer">
                       {children}
                     </a>
                   ),
@@ -84,7 +84,7 @@ export default function JarvisMessage({ message }: { message: JarvisMessageType 
             </div>
           )}
         </div>
-        <p className={`text-[10px] text-[#999999] px-1 ${isUser ? "text-right" : "text-left"}`}>
+        <p className={`text-[10px] text-muted-foreground/60 px-1 ${isUser ? "text-right" : "text-left"}`}>
           {formatRelativeTime(message.timestamp)}
         </p>
       </div>

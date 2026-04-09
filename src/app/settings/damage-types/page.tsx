@@ -174,8 +174,7 @@ export default function DamageTypesSettingsPage() {
         </div>
         <button
           onClick={() => setShowAdd(!showAdd)}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white transition-colors"
-          style={{ backgroundColor: "var(--brand-primary)" }}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md transition-all"
         >
           <Plus size={16} />
           Add Type
@@ -214,8 +213,7 @@ export default function DamageTypesSettingsPage() {
           </div>
           <div className="flex gap-2 pt-1">
             <button onClick={handleAdd}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
-              style={{ backgroundColor: "var(--brand-primary)" }}>
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md transition-all">
               <Check size={14} /> Add
             </button>
             <button onClick={() => setShowAdd(false)}
@@ -266,7 +264,7 @@ export default function DamageTypesSettingsPage() {
                 <input type="color" value={editText} onChange={(e) => setEditText(e.target.value)}
                   className="w-8 h-8 rounded border border-border cursor-pointer shrink-0" />
                 <button onClick={handleSaveEdit} disabled={saving}
-                  className="p-1.5 rounded-lg text-[var(--brand-primary)] hover:bg-[var(--brand-primary)]/10">
+                  className="p-1.5 rounded-lg text-primary hover:bg-primary/10">
                   <Check size={16} />
                 </button>
                 <button onClick={() => setEditId(null)}

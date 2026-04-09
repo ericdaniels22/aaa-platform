@@ -24,11 +24,16 @@ export default function JobCard({ job }: { job: Job }) {
     <Link
       href={`/jobs/${job.id}`}
       className={cn(
-        "block bg-card rounded-xl border border-border border-t-4 border-l-4 p-5 transition-all hover:-translate-y-0.5 hover:shadow-md",
+        "block bg-card rounded-xl border border-border overflow-hidden card-vibrant p-5 transition-all hover:-translate-y-1",
         isCompleted && "opacity-60"
       )}
-      style={{ borderTopColor: accentColor, borderLeftColor: accentColor }}
     >
+      {/* Gradient top strip */}
+      <div
+        className="h-[3px] -mx-5 -mt-5 mb-4"
+        style={{ background: `linear-gradient(90deg, ${accentColor}, ${accentColor}80)` }}
+      />
+
       {/* Top row: job number + badges */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>

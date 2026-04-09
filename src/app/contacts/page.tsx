@@ -238,12 +238,14 @@ export default function ContactsPage() {
   }
 
   return (
-    <div className="max-w-6xl">
+    <div className="max-w-6xl animate-fade-slide-up">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Contacts</h1>
-          <p className="text-[#666666] mt-1 text-sm">
+          <h1 className="text-3xl font-extrabold text-foreground">
+            <span className="gradient-text">Contacts</span>
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm">
             {totalContacts} contact{totalContacts !== 1 ? "s" : ""} &middot;{" "}
             {homeownersCount} homeowner{homeownersCount !== 1 ? "s" : ""} &middot;{" "}
             {adjustersCount} adjuster{adjustersCount !== 1 ? "s" : ""}
@@ -251,7 +253,7 @@ export default function ContactsPage() {
         </div>
         <button
           onClick={openAddDialog}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-[#0F6E56] text-white hover:bg-[#0B5A45] transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md transition-all"
         >
           <Plus size={16} />
           Add Contact
@@ -263,7 +265,7 @@ export default function ContactsPage() {
         <div className="relative flex-1">
           <Search
             size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999999]"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60"
           />
           <Input
             value={search}
@@ -281,8 +283,8 @@ export default function ContactsPage() {
           className={cn(
             "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
             roleFilter === "all"
-              ? "bg-[#1B2434] text-white border-[#1B2434]"
-              : "bg-white text-[#666666] border-gray-200 hover:border-gray-300"
+              ? "bg-[image:var(--gradient-primary)] text-white border-transparent shadow-sm"
+              : "bg-card text-muted-foreground border-border hover:border-primary/30 hover:shadow-sm"
           )}
         >
           All
@@ -296,8 +298,8 @@ export default function ContactsPage() {
             className={cn(
               "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
               roleFilter === r.value
-                ? "bg-[#1B2434] text-white border-[#1B2434]"
-                : "bg-white text-[#666666] border-gray-200 hover:border-gray-300"
+                ? "bg-[image:var(--gradient-primary)] text-white border-transparent shadow-sm"
+                : "bg-card text-muted-foreground border-border hover:border-primary/30 hover:shadow-sm"
             )}
           >
             {r.label}
@@ -307,11 +309,11 @@ export default function ContactsPage() {
 
       {/* Contact list */}
       {loading ? (
-        <div className="text-center py-12 text-[#999999]">Loading...</div>
+        <div className="text-center py-12 text-muted-foreground/60">Loading...</div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <Users size={48} className="mx-auto text-[#CCCCCC] mb-3" />
-          <p className="text-[#999999]">
+        <div className="bg-card rounded-xl border border-border p-12 text-center">
+          <Users size={48} className="mx-auto text-muted-foreground/40 mb-3" />
+          <p className="text-muted-foreground/60">
             {search || roleFilter !== "all"
               ? "No contacts match your filters"
               : "No contacts yet"}
@@ -319,7 +321,7 @@ export default function ContactsPage() {
           {!search && roleFilter === "all" && (
             <button
               onClick={openAddDialog}
-              className="text-sm text-[#0F6E56] hover:underline font-medium mt-2 inline-block"
+              className="text-sm text-primary hover:underline font-medium mt-2 inline-block"
             >
               Add your first contact
             </button>
@@ -330,13 +332,13 @@ export default function ContactsPage() {
           {filtered.map((contact) => (
             <div
               key={contact.id}
-              className="bg-white rounded-xl border border-gray-200 p-4 hover:border-gray-300 transition-colors"
+              className="card-vibrant bg-card rounded-xl border border-border p-4 hover:border-primary/30 transition-all"
             >
               <div className="flex items-start justify-between gap-4">
                 {/* Left: name + details */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-sm font-semibold text-[#1A1A1A] truncate">
+                    <h3 className="text-sm font-semibold text-foreground truncate">
                       {contact.first_name} {contact.last_name}
                     </h3>
                     <Badge
@@ -348,29 +350,29 @@ export default function ContactsPage() {
                       {roleLabels[contact.role] || contact.role}
                     </Badge>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#666666]">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     {contact.phone && (
                       <span className="inline-flex items-center gap-1">
-                        <Phone size={12} className="text-[#999999]" />
+                        <Phone size={12} className="text-muted-foreground/60" />
                         {contact.phone}
                       </span>
                     )}
                     {contact.email && (
                       <span className="inline-flex items-center gap-1">
-                        <Mail size={12} className="text-[#999999]" />
+                        <Mail size={12} className="text-muted-foreground/60" />
                         {contact.email}
                       </span>
                     )}
                     {contact.company && (
                       <span className="inline-flex items-center gap-1">
-                        <Building2 size={12} className="text-[#999999]" />
+                        <Building2 size={12} className="text-muted-foreground/60" />
                         {contact.company}
                       </span>
                     )}
                     {(contact.job_count ?? 0) > 0 && (
                       <Link
                         href={`/jobs?contact=${contact.id}`}
-                        className="inline-flex items-center gap-1 text-[#2B5EA7] hover:underline"
+                        className="inline-flex items-center gap-1 text-primary hover:underline"
                       >
                         <Briefcase size={12} />
                         {contact.job_count} job{contact.job_count !== 1 ? "s" : ""}
@@ -378,7 +380,7 @@ export default function ContactsPage() {
                     )}
                   </div>
                   {contact.notes && (
-                    <p className="text-xs text-[#999999] mt-1.5 line-clamp-1">
+                    <p className="text-xs text-muted-foreground/60 mt-1.5 line-clamp-1">
                       {contact.notes}
                     </p>
                   )}
@@ -388,14 +390,14 @@ export default function ContactsPage() {
                 <div className="flex items-center gap-1 shrink-0">
                   <button
                     onClick={() => openEditDialog(contact)}
-                    className="p-1.5 rounded-lg text-[#999999] hover:text-[#1A1A1A] hover:bg-gray-100 transition-colors"
+                    className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors"
                     title="Edit"
                   >
                     <Pencil size={14} />
                   </button>
                   <button
                     onClick={() => setDeleteTarget(contact)}
-                    className="p-1.5 rounded-lg text-[#999999] hover:text-[#C41E2A] hover:bg-red-50 transition-colors"
+                    className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-destructive hover:bg-red-50 transition-colors"
                     title="Delete"
                   >
                     <Trash2 size={14} />
@@ -420,7 +422,7 @@ export default function ContactsPage() {
             {/* Name row */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-[#666666] mb-1">
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
                   First Name *
                 </label>
                 <Input
@@ -432,7 +434,7 @@ export default function ContactsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#666666] mb-1">
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
                   Last Name *
                 </label>
                 <Input
@@ -447,7 +449,7 @@ export default function ContactsPage() {
 
             {/* Role pills */}
             <div>
-              <label className="block text-xs font-medium text-[#666666] mb-1.5">
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
                 Role
               </label>
               <div className="flex flex-wrap gap-2">
@@ -462,7 +464,7 @@ export default function ContactsPage() {
                       "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
                       form.role === r.value
                         ? roleColors[r.value] + " border-current"
-                        : "bg-white text-[#666666] border-gray-200"
+                        : "bg-card text-muted-foreground border-border"
                     )}
                   >
                     {r.label}
@@ -474,7 +476,7 @@ export default function ContactsPage() {
             {/* Phone + Email */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-[#666666] mb-1">
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
                   Phone
                 </label>
                 <Input
@@ -484,7 +486,7 @@ export default function ContactsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#666666] mb-1">
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
                   Email
                 </label>
                 <Input
@@ -498,7 +500,7 @@ export default function ContactsPage() {
 
             {/* Company */}
             <div>
-              <label className="block text-xs font-medium text-[#666666] mb-1">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
                 Company
               </label>
               <Input
@@ -510,7 +512,7 @@ export default function ContactsPage() {
 
             {/* Notes */}
             <div>
-              <label className="block text-xs font-medium text-[#666666] mb-1">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
                 Notes
               </label>
               <Textarea
@@ -523,13 +525,13 @@ export default function ContactsPage() {
           </div>
 
           <DialogFooter>
-            <DialogClose className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-[#666666] hover:bg-gray-50 transition-colors">
+            <DialogClose className="px-4 py-2 rounded-lg text-sm font-medium border border-border bg-card text-muted-foreground hover:bg-accent transition-colors">
               Cancel
             </DialogClose>
             <button
               onClick={handleSave}
               disabled={saving}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[#0F6E56] text-white hover:bg-[#0B5A45] disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md disabled:opacity-50 transition-all"
             >
               {saving && <Loader2 size={14} className="animate-spin" />}
               {editingContact ? "Save Changes" : "Create Contact"}
@@ -547,28 +549,28 @@ export default function ContactsPage() {
           <DialogHeader>
             <DialogTitle>Delete Contact</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-[#666666] py-2">
+          <p className="text-sm text-muted-foreground py-2">
             Are you sure you want to delete{" "}
-            <span className="font-medium text-[#1A1A1A]">
+            <span className="font-medium text-foreground">
               {deleteTarget?.first_name} {deleteTarget?.last_name}
             </span>
             ? This cannot be undone.
           </p>
           {(deleteTarget as ContactWithJobs)?.job_count ? (
-            <p className="text-xs text-[#C41E2A] bg-[#FCEBEB] px-3 py-2 rounded-lg">
+            <p className="text-xs text-destructive bg-[#FCEBEB] px-3 py-2 rounded-lg">
               This contact is linked to{" "}
               {(deleteTarget as ContactWithJobs).job_count} job(s) and cannot be
               deleted until those jobs are reassigned.
             </p>
           ) : null}
           <DialogFooter>
-            <DialogClose className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-[#666666] hover:bg-gray-50 transition-colors">
+            <DialogClose className="px-4 py-2 rounded-lg text-sm font-medium border border-border bg-card text-muted-foreground hover:bg-accent transition-colors">
               Cancel
             </DialogClose>
             <button
               onClick={handleDelete}
               disabled={deleting || !!(deleteTarget as ContactWithJobs)?.job_count}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[#C41E2A] text-white hover:bg-[#A3171F] disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-destructive text-white hover:bg-[#A3171F] disabled:opacity-50 transition-colors"
             >
               {deleting && <Loader2 size={14} className="animate-spin" />}
               Delete

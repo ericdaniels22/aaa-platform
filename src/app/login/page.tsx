@@ -39,7 +39,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1B2434] flex items-center justify-center p-4">
+    <div className="min-h-screen gradient-sidebar flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex justify-center mb-8">
@@ -47,17 +47,17 @@ export default function LoginPage() {
         </div>
 
         {/* Login card — force light mode for readability */}
-        <div className="bg-white rounded-2xl p-8 shadow-xl [&_input]:!text-[#1A1A1A] [&_input]:!bg-white [&_input]:!border-gray-200">
-          <h1 className="text-xl font-bold text-[#1A1A1A] text-center mb-1">
+        <div className="bg-card rounded-2xl p-8 shadow-2xl ring-1 ring-white/10">
+          <h1 className="text-xl font-bold text-foreground text-center mb-1">
             Sign In
           </h1>
-          <p className="text-sm text-[#666666] text-center mb-6">
+          <p className="text-sm text-muted-foreground text-center mb-6">
             Enter your credentials to access the platform
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-[#666666] mb-1">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
                 Email
               </label>
               <Input
@@ -71,7 +71,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-[#666666] mb-1">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
                 Password
               </label>
               <Input
@@ -84,7 +84,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <p className="text-sm text-[#C41E2A] bg-[#FCEBEB] px-3 py-2 rounded-lg">
+              <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
                 {error}
               </p>
             )}
@@ -92,7 +92,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-[#0F6E56] text-white hover:bg-[#0B5A45] disabled:opacity-50 transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md disabled:opacity-50 transition-all"
             >
               {loading && <Loader2 size={16} className="animate-spin" />}
               {loading ? "Signing in..." : "Sign In"}

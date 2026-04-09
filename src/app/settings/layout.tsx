@@ -23,7 +23,7 @@ export default function SettingsLayout({
       {/* Header */}
       <div className="flex items-center gap-2 mb-6">
         <Settings size={22} className="text-[var(--brand-primary)]" />
-        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+        <h1 className="text-3xl font-extrabold text-foreground">Settings</h1>
       </div>
 
       {/* Mobile nav dropdown */}
@@ -78,7 +78,7 @@ export default function SettingsLayout({
                   className={cn(
                     "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                     isActive
-                      ? "bg-[var(--brand-primary)]/10 text-[var(--brand-primary)]"
+                      ? "bg-primary/10 text-primary font-medium"
                       : "text-muted-foreground hover:text-foreground hover:bg-accent"
                   )}
                 >

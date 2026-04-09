@@ -238,8 +238,7 @@ export default function IntakeFormBuilderPage() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-colors"
-            style={{ backgroundColor: "var(--brand-primary)" }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md disabled:opacity-50 transition-all"
           >
             {saving && <Loader2 size={14} className="animate-spin" />}
             {saving ? "Saving..." : "Save Form"}
@@ -254,7 +253,7 @@ export default function IntakeFormBuilderPage() {
             <label className="block text-xs font-medium text-muted-foreground mb-1">Section Title</label>
             <Input value={newSectionTitle} onChange={(e) => setNewSectionTitle(e.target.value)} placeholder="e.g. Equipment Needed" />
           </div>
-          <button onClick={addSection} className="px-3 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: "var(--brand-primary)" }}>
+          <button onClick={addSection} className="px-3 py-2 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md transition-all">
             Add
           </button>
           <button onClick={() => setShowAddSection(false)} className="px-3 py-2 rounded-lg text-sm font-medium border border-border text-muted-foreground">
@@ -468,7 +467,7 @@ function FieldEditor({
           {!isDefault && (
             <div className="flex gap-2 mt-2">
               <Input value={newOption} onChange={(e) => setNewOption(e.target.value)} placeholder="New option" className="h-7 text-xs flex-1" onKeyDown={(e) => e.key === "Enter" && addOption()} />
-              <button onClick={addOption} className="px-2 py-1 rounded text-xs font-medium text-white" style={{ backgroundColor: "var(--brand-primary)" }}>Add</button>
+              <button onClick={addOption} className="px-2 py-1 rounded text-xs font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 transition-all">Add</button>
             </div>
           )}
         </div>

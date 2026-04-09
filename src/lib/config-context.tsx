@@ -78,10 +78,10 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
   function getStatusColor(name: string): string {
     const s = statuses.find((st) => st.name === name);
-    if (s) return `bg-[${s.bg_color}] text-[${s.text_color}]`;
+    if (s) return `bg-[${s.bg_color}] text-[${s.text_color}] ring-1 ring-[${s.text_color}]/20`;
     const d = DEFAULT_STATUS_COLORS[name];
-    if (d) return `bg-[${d.bg}] text-[${d.text}]`;
-    return "bg-gray-100 text-gray-600";
+    if (d) return `bg-[${d.bg}] text-[${d.text}] ring-1 ring-[${d.text}]/20`;
+    return "bg-muted text-muted-foreground ring-1 ring-border";
   }
 
   function getStatusLabel(name: string): string {
@@ -92,10 +92,10 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
   function getDamageTypeColor(name: string): string {
     const dt = damageTypes.find((d) => d.name === name);
-    if (dt) return `bg-[${dt.bg_color}] text-[${dt.text_color}]`;
+    if (dt) return `bg-[${dt.bg_color}] text-[${dt.text_color}] ring-1 ring-[${dt.text_color}]/20`;
     const d = DEFAULT_DAMAGE_COLORS[name];
-    if (d) return `bg-[${d.bg}] text-[${d.text}]`;
-    return "bg-gray-100 text-gray-600";
+    if (d) return `bg-[${d.bg}] text-[${d.text}] ring-1 ring-[${d.text}]/20`;
+    return "bg-muted text-muted-foreground ring-1 ring-border";
   }
 
   function getDamageTypeLabel(name: string): string {

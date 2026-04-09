@@ -119,8 +119,8 @@ export default function AppearancePage() {
                 className={cn(
                   "flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-all flex-1 justify-center",
                   isActive
-                    ? "border-[var(--brand-primary)] bg-[var(--brand-primary)]/10 text-[var(--brand-primary)]"
-                    : "border-border bg-card text-muted-foreground hover:border-[var(--brand-primary)]/30 hover:text-foreground"
+                    ? "bg-[image:var(--gradient-primary)] text-white border-transparent shadow-sm"
+                    : "bg-card text-muted-foreground border-border hover:border-primary/30 hover:shadow-sm"
                 )}
               >
                 <Icon size={18} />
@@ -250,8 +250,7 @@ export default function AppearancePage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-colors"
-          style={{ backgroundColor: primary }}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md disabled:opacity-50 transition-all"
         >
           {saving && <Loader2 size={16} className="animate-spin" />}
           {saving ? "Saving..." : "Save Changes"}

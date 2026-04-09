@@ -4,6 +4,16 @@ import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
 import { Job, JobActivity, Payment, Photo, PhotoTag, PhotoReport, Email } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import ActivityTimeline from "@/components/activity-timeline";
 import RecordPaymentModal from "@/components/record-payment";
 import PhotoUploadModal from "@/components/photo-upload";
@@ -30,6 +40,7 @@ import {
   Inbox,
   Send,
   Clock,
+  Loader2,
 } from "lucide-react";
 import {
   statusColors,
@@ -70,6 +81,8 @@ export default function JobDetail({ jobId }: { jobId: string }) {
   const [annotatorOpen, setAnnotatorOpen] = useState(false);
   const [annotatorPhoto, setAnnotatorPhoto] = useState<Photo | null>(null);
   const [annotatorUrl, setAnnotatorUrl] = useState("");
+  const [editJobOpen, setEditJobOpen] = useState(false);
+  const [editContactOpen, setEditContactOpen] = useState(false);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
@@ -149,15 +162,15 @@ export default function JobDetail({ jobId }: { jobId: string }) {
 
   if (loading) {
     return (
-      <div className="text-center py-12 text-[#999999]">Loading job...</div>
+      <div className="text-center py-12 text-muted-foreground/60">Loading job...</div>
     );
   }
 
   if (!job) {
     return (
       <div className="text-center py-12">
-        <p className="text-[#999999] text-lg">Job not found.</p>
-        <Link href="/jobs" className="text-[#2B5EA7] text-sm hover:underline mt-2 inline-block">
+        <p className="text-muted-foreground text-lg">Job not found.</p>
+        <Link href="/jobs" className="text-primary text-sm hover:underline mt-2 inline-block">
           Back to jobs
         </Link>
       </div>
@@ -179,11 +192,11 @@ export default function JobDetail({ jobId }: { jobId: string }) {
     .reduce((sum, p) => sum + Number(p.amount), 0);
 
   return (
-    <div className="max-w-6xl">
+    <div className="max-w-6xl animate-fade-slide-up">
       {/* Back link */}
       <Link
         href="/jobs"
-        className="inline-flex items-center gap-1.5 text-sm text-[#666666] hover:text-[#1A1A1A] mb-4"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4"
       >
         <ArrowLeft size={16} />
         Back to Jobs
@@ -192,8 +205,8 @@ export default function JobDetail({ jobId }: { jobId: string }) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div>
-          <p className="text-sm font-mono text-[#999999]">{job.job_number}</p>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">{contactName}</h1>
+          <p className="text-sm font-mono text-muted-foreground/60">{job.job_number}</p>
+          <h1 className="text-2xl font-bold text-foreground">{contactName}</h1>
           <div className="flex items-center gap-2 mt-2">
             <Badge
               className={cn(
@@ -234,7 +247,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
           <select
             value={job.status}
             onChange={(e) => updateStatus(e.target.value)}
-            className="w-[180px] rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/20 focus:border-[#2B5EA7]"
+            className="w-[180px] rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
           >
             <option value="new">New</option>
             <option value="in_progress">In Progress</option>
@@ -248,10 +261,19 @@ export default function JobDetail({ jobId }: { jobId: string }) {
       {/* Info grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         {/* Job Info */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-base font-semibold text-[#1A1A1A] mb-4">
-            Job Info
-          </h3>
+        <div className="bg-card rounded-xl border border-border p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-foreground">
+              Job Info
+            </h3>
+            <button
+              onClick={() => setEditJobOpen(true)}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Edit Job Info"
+            >
+              <Pencil size={14} />
+            </button>
+          </div>
           <div className="space-y-3 text-sm">
             <InfoRow icon={MapPin} label="Address" value={job.property_address} />
             {job.property_type && (
@@ -285,10 +307,19 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         </div>
 
         {/* Contact & Insurance */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-base font-semibold text-[#1A1A1A] mb-4">
-            Contact & Insurance
-          </h3>
+        <div className="bg-card rounded-xl border border-border p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-foreground">
+              Contact & Insurance
+            </h3>
+            <button
+              onClick={() => setEditContactOpen(true)}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Edit Contact & Insurance"
+            >
+              <Pencil size={14} />
+            </button>
+          </div>
           <div className="space-y-3 text-sm">
             <InfoRow icon={User} label="Contact" value={contactName} />
             {job.contact?.phone && (
@@ -307,7 +338,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
 
             {(job.insurance_company || job.claim_number) && (
               <>
-                <div className="border-t border-gray-100 pt-3 mt-3" />
+                <div className="border-t border-border/50 pt-3 mt-3" />
                 {job.insurance_company && (
                   <InfoRow
                     icon={Building}
@@ -327,7 +358,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
 
             {job.adjuster && (
               <>
-                <div className="border-t border-gray-100 pt-3 mt-3" />
+                <div className="border-t border-border/50 pt-3 mt-3" />
                 <InfoRow
                   icon={User}
                   label="Adjuster"
@@ -346,13 +377,31 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         </div>
       </div>
 
+      {/* Edit Job Info Dialog */}
+      <EditJobInfoDialog
+        open={editJobOpen}
+        onOpenChange={setEditJobOpen}
+        job={job}
+        jobId={jobId}
+        onSaved={fetchData}
+      />
+
+      {/* Edit Contact & Insurance Dialog */}
+      <EditContactDialog
+        open={editContactOpen}
+        onOpenChange={setEditContactOpen}
+        job={job}
+        jobId={jobId}
+        onSaved={fetchData}
+      />
+
       {/* Billing card */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="bg-card rounded-xl border border-border p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-[#1A1A1A]">Billing</h3>
+          <h3 className="text-base font-semibold text-foreground">Billing</h3>
           <button
             onClick={() => setPaymentModalOpen(true)}
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 bg-[#1B2434] hover:bg-[#2a3a52] text-white transition-colors"
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md transition-colors"
           >
             + Record Payment
           </button>
@@ -364,7 +413,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
           onPaymentAdded={fetchData}
         />
         {payments.length === 0 ? (
-          <p className="text-sm text-[#999999] text-center py-4">
+          <p className="text-sm text-muted-foreground/60 text-center py-4">
             No payments recorded yet.
           </p>
         ) : (
@@ -372,13 +421,13 @@ export default function JobDetail({ jobId }: { jobId: string }) {
             {/* Progress bar */}
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-[#666666]">Total Collected</span>
-                <span className="font-semibold text-[#1A1A1A]">
+                <span className="text-muted-foreground">Total Collected</span>
+                <span className="font-semibold text-foreground">
                   ${totalPaid.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                 </span>
               </div>
               {totalPaid > 0 && (
-                <div className="h-3 bg-gray-100 rounded-full overflow-hidden flex">
+                <div className="h-3 bg-muted rounded-full overflow-hidden flex">
                   {insurancePaid > 0 && (
                     <div
                       className="bg-[#0F6E56] h-full"
@@ -397,7 +446,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
                   )}
                 </div>
               )}
-              <div className="flex gap-4 text-xs text-[#999999]">
+              <div className="flex gap-4 text-xs text-muted-foreground/60">
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-[#0F6E56]" />
                   Insurance: ${insurancePaid.toLocaleString("en-US", { minimumFractionDigits: 2 })}
@@ -410,7 +459,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
             </div>
 
             {/* Payment rows */}
-            <div className="border-t border-gray-100 pt-3 space-y-2">
+            <div className="border-t border-border/50 pt-3 space-y-2">
               {payments.map((p) => (
                 <div
                   key={p.id}
@@ -429,13 +478,13 @@ export default function JobDetail({ jobId }: { jobId: string }) {
                     >
                       {p.source}
                     </Badge>
-                    <span className="text-[#666666]">
+                    <span className="text-muted-foreground">
                       {p.method.replace("_", " ")}
                       {p.reference_number && ` — ${p.reference_number}`}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-[#1A1A1A]">
+                    <span className="font-medium text-foreground">
                       ${Number(p.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </span>
                     <Badge
@@ -459,9 +508,9 @@ export default function JobDetail({ jobId }: { jobId: string }) {
       </div>
 
       {/* Photos */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="bg-card rounded-xl border border-border p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-[#1A1A1A]">
+          <h3 className="text-base font-semibold text-foreground">
             <Camera size={16} className="inline mr-2 -mt-0.5" />
             Photos ({photos.length})
           </h3>
@@ -469,7 +518,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
             {photos.length > 0 && (
               <Link
                 href={`/reports/new?jobId=${jobId}`}
-                className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 border border-gray-200 bg-white text-[#2B5EA7] hover:bg-[#E8F0FE] transition-colors gap-1.5"
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 border border-gray-200 bg-white text-primary hover:bg-[#E8F0FE] transition-colors gap-1.5"
               >
                 <FileText size={14} />
                 Generate Report
@@ -477,7 +526,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
             )}
             <button
               onClick={() => setPhotoUploadOpen(true)}
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 bg-[#1B2434] hover:bg-[#2a3a52] text-white transition-colors"
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md transition-colors"
             >
               + Upload Photos
             </button>
@@ -492,9 +541,9 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         />
         {photos.length === 0 ? (
           <div className="text-center py-8">
-            <ImageIcon size={40} className="mx-auto text-[#CCCCCC] mb-2" />
-            <p className="text-sm text-[#999999]">No photos yet.</p>
-            <p className="text-xs text-[#BBBBBB] mt-1">
+            <ImageIcon size={40} className="mx-auto text-muted-foreground/40 mb-2" />
+            <p className="text-sm text-muted-foreground/60">No photos yet.</p>
+            <p className="text-xs text-muted-foreground/40 mt-1">
               Upload photos using the button above.
             </p>
           </div>
@@ -504,7 +553,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
               <button
                 key={photo.id}
                 onClick={() => setSelectedPhoto(photo)}
-                className="aspect-square bg-gray-100 rounded-lg overflow-hidden relative group text-left"
+                className="aspect-square bg-muted rounded-lg overflow-hidden relative group text-left"
               >
                 <img
                   src={`${supabaseUrl}/storage/v1/object/public/photos/${photo.annotated_path || photo.storage_path}`}
@@ -580,15 +629,15 @@ export default function JobDetail({ jobId }: { jobId: string }) {
 
       {/* Reports */}
       {reports.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <div className="bg-card rounded-xl border border-border p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-[#1A1A1A]">
+            <h3 className="text-base font-semibold text-foreground">
               <FileText size={16} className="inline mr-2 -mt-0.5" />
               Reports ({reports.length})
             </h3>
             <Link
               href={`/reports/new?jobId=${jobId}`}
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 border border-gray-200 bg-white text-[#2B5EA7] hover:bg-[#E8F0FE] transition-colors gap-1.5"
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 border border-gray-200 bg-white text-primary hover:bg-[#E8F0FE] transition-colors gap-1.5"
             >
               <FileText size={14} />
               New Report
@@ -599,31 +648,31 @@ export default function JobDetail({ jobId }: { jobId: string }) {
               <Link
                 key={report.id}
                 href={`/reports/${report.id}`}
-                className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50/50 transition-all"
+                className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:border-border hover:bg-accent/50 transition-all"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div
                     className={cn(
                       "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
                       report.status === "generated"
-                        ? "bg-[#0F6E56]/10"
-                        : "bg-[#6C5CE7]/10"
+                        ? "bg-primary/10"
+                        : "bg-vibrant-purple/10"
                     )}
                   >
                     <FileText
                       size={14}
                       className={
                         report.status === "generated"
-                          ? "text-[#0F6E56]"
-                          : "text-[#6C5CE7]"
+                          ? "text-primary"
+                          : "text-vibrant-purple"
                       }
                     />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-[#1A1A1A] truncate">
+                    <p className="text-sm font-medium text-foreground truncate">
                       {report.title}
                     </p>
-                    <p className="text-xs text-[#999999]">
+                    <p className="text-xs text-muted-foreground/60">
                       {format(new Date(report.report_date), "MMM d, yyyy")}
                     </p>
                   </div>
@@ -645,9 +694,9 @@ export default function JobDetail({ jobId }: { jobId: string }) {
       )}
 
       {/* Emails */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="bg-card rounded-xl border border-border p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-[#1A1A1A]">
+          <h3 className="text-base font-semibold text-foreground">
             <Mail size={16} className="inline mr-2 -mt-0.5" />
             Emails ({emails.length})
           </h3>
@@ -658,7 +707,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
               setComposeDefaults({ to: defaultTo, subject: defaultSubject, replyToMessageId: "" });
               setComposeOpen(true);
             }}
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 bg-[#2B5EA7] hover:bg-[#234b87] text-white transition-colors gap-1.5"
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 transition-colors gap-1.5"
           >
             <Send size={14} />
             Send Email
@@ -694,9 +743,9 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         )}
         {emails.length === 0 && (
           <div className="text-center py-6">
-            <Mail size={32} className="mx-auto text-[#CCCCCC] mb-2" />
-            <p className="text-sm text-[#999999]">No emails linked to this job yet.</p>
-            <p className="text-xs text-[#BBBBBB] mt-1">
+            <Mail size={32} className="mx-auto text-muted-foreground/40 mb-2" />
+            <p className="text-sm text-muted-foreground/60">No emails linked to this job yet.</p>
+            <p className="text-xs text-muted-foreground/40 mt-1">
               Sync your email or send one using the button above.
             </p>
           </div>
@@ -705,15 +754,15 @@ export default function JobDetail({ jobId }: { jobId: string }) {
 
       {/* Custom Fields */}
       {customFields.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-          <h3 className="text-sm font-semibold text-[#1A1A1A] mb-3">Custom Fields</h3>
+        <div className="bg-card rounded-xl border border-border p-5 mb-6">
+          <h3 className="text-sm font-semibold text-foreground mb-3">Custom Fields</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {customFields.map((cf) => (
               <div key={cf.field_key}>
-                <p className="text-xs font-medium text-[#999999] capitalize">
+                <p className="text-xs font-medium text-muted-foreground/60 capitalize">
                   {cf.field_key.replace(/_/g, " ").replace(/^custom /, "")}
                 </p>
-                <p className="text-sm text-[#1A1A1A]">{cf.field_value || "—"}</p>
+                <p className="text-sm text-foreground">{cf.field_value || "—"}</p>
               </div>
             ))}
           </div>
@@ -741,10 +790,10 @@ function InfoRow({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <Icon size={16} className="text-[#999999] flex-shrink-0 mt-0.5" />
+      <Icon size={16} className="text-primary/60 flex-shrink-0 mt-0.5" />
       <div>
-        <p className="text-xs text-[#999999]">{label}</p>
-        <p className="text-[#1A1A1A]">{value}</p>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-foreground">{value}</p>
       </div>
     </div>
   );
@@ -765,10 +814,10 @@ function EmailRow({
   const toLine = (email.to_addresses || []).map((a) => a.name || a.email).join(", ");
 
   const directionIcon = isSent
-    ? <Send size={14} className="text-[#0F6E56]" />
-    : <Inbox size={14} className="text-[#2B5EA7]" />;
+    ? <Send size={14} className="text-primary" />
+    : <Inbox size={14} className="text-primary" />;
 
-  const iconBg = isSent ? "bg-[#0F6E56]/10" : "bg-[#2B5EA7]/10";
+  const iconBg = isSent ? "bg-primary/10" : "bg-vibrant-blue/10";
   const folderBadge = isSent ? "bg-[#E1F5EE] text-[#085041]" : "bg-[#E6F1FB] text-[#0C447C]";
 
   const fromDisplay = isSent
@@ -780,58 +829,337 @@ function EmailRow({
     : email.from_address;
 
   return (
-    <div className="border border-gray-100 rounded-lg overflow-hidden">
+    <div className="border border-border/50 rounded-lg overflow-hidden">
       <button
         onClick={onToggle}
-        className="w-full flex items-start gap-3 p-3 hover:bg-gray-50/50 transition-colors text-left"
+        className="w-full flex items-start gap-3 p-3 hover:bg-accent/50 transition-colors text-left"
       >
         <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5", iconBg)}>
           {directionIcon}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className={cn("text-sm font-medium text-[#1A1A1A] truncate", !email.is_read && "font-bold")}>
+            <p className={cn("text-sm font-medium text-foreground truncate", !email.is_read && "font-bold")}>
               {email.subject || "(No Subject)"}
             </p>
             <Badge className={cn("text-[10px] px-1.5 py-0 rounded flex-shrink-0", folderBadge)}>
               {email.folder}
             </Badge>
             {email.matched_by && (
-              <Badge className="text-[10px] px-1.5 py-0 rounded bg-gray-100 text-[#666] flex-shrink-0">
+              <Badge className="text-[10px] px-1.5 py-0 rounded bg-muted text-[#666] flex-shrink-0">
                 {email.matched_by}
               </Badge>
             )}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            <p className="text-xs text-[#666666] truncate">{fromDisplay}</p>
-            <span className="text-xs text-[#999999] flex items-center gap-1 flex-shrink-0">
+            <p className="text-xs text-muted-foreground truncate">{fromDisplay}</p>
+            <span className="text-xs text-muted-foreground/60 flex items-center gap-1 flex-shrink-0">
               <Clock size={10} />
               {format(new Date(email.received_at), "MMM d, h:mm a")}
             </span>
           </div>
           {!isExpanded && email.snippet && (
-            <p className="text-xs text-[#999999] mt-1 line-clamp-1">{email.snippet}</p>
+            <p className="text-xs text-muted-foreground/60 mt-1 line-clamp-1">{email.snippet}</p>
           )}
         </div>
       </button>
       {isExpanded && (
-        <div className="px-3 pb-3 pt-0 border-t border-gray-100">
-          <div className="mt-3 text-xs text-[#666666] space-y-1 mb-3">
-            <p><span className="font-medium text-[#333]">From:</span> {fullFrom}</p>
-            <p><span className="font-medium text-[#333]">To:</span> {toLine}</p>
-            <p><span className="font-medium text-[#333]">Date:</span> {format(new Date(email.received_at), "EEEE, MMM d, yyyy 'at' h:mm a")}</p>
+        <div className="px-3 pb-3 pt-0 border-t border-border/50">
+          <div className="mt-3 text-xs text-muted-foreground space-y-1 mb-3">
+            <p><span className="font-medium text-foreground/80">From:</span> {fullFrom}</p>
+            <p><span className="font-medium text-foreground/80">To:</span> {toLine}</p>
+            <p><span className="font-medium text-foreground/80">Date:</span> {format(new Date(email.received_at), "EEEE, MMM d, yyyy 'at' h:mm a")}</p>
           </div>
-          <div className="bg-gray-50 rounded-lg p-3 text-sm text-[#333] whitespace-pre-wrap leading-relaxed max-h-80 overflow-y-auto">
+          <div className="bg-muted/50 rounded-lg p-3 text-sm text-foreground/80 whitespace-pre-wrap leading-relaxed max-h-80 overflow-y-auto">
             {email.body_text || email.snippet || "(No content)"}
           </div>
           <button
             onClick={(e) => { e.stopPropagation(); onReply(); }}
-            className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-[#2B5EA7] hover:underline"
+            className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
           >
             <Send size={12} /> Reply
           </button>
         </div>
       )}
     </div>
+  );
+}
+
+/* ── Edit Job Info Dialog ── */
+
+function EditJobInfoDialog({
+  open,
+  onOpenChange,
+  job,
+  jobId,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  job: Job;
+  jobId: string;
+  onSaved: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    property_address: "",
+    property_type: "" as string,
+    property_sqft: "" as string,
+    property_stories: "" as string,
+    damage_source: "",
+    affected_areas: "",
+    access_notes: "",
+    insurance_company: "",
+    claim_number: "",
+  });
+
+  useEffect(() => {
+    if (open) {
+      setForm({
+        property_address: job.property_address || "",
+        property_type: job.property_type || "",
+        property_sqft: job.property_sqft ? String(job.property_sqft) : "",
+        property_stories: job.property_stories ? String(job.property_stories) : "",
+        damage_source: job.damage_source || "",
+        affected_areas: job.affected_areas || "",
+        access_notes: job.access_notes || "",
+        insurance_company: job.insurance_company || "",
+        claim_number: job.claim_number || "",
+      });
+    }
+  }, [open, job]);
+
+  async function handleSave() {
+    if (!form.property_address.trim()) {
+      toast.error("Address is required.");
+      return;
+    }
+    setSaving(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("jobs")
+      .update({
+        property_address: form.property_address.trim(),
+        property_type: form.property_type || null,
+        property_sqft: form.property_sqft ? Number(form.property_sqft) : null,
+        property_stories: form.property_stories ? Number(form.property_stories) : null,
+        damage_source: form.damage_source.trim() || null,
+        affected_areas: form.affected_areas.trim() || null,
+        access_notes: form.access_notes.trim() || null,
+        insurance_company: form.insurance_company.trim() || null,
+        claim_number: form.claim_number.trim() || null,
+      })
+      .eq("id", jobId);
+
+    if (error) {
+      toast.error("Failed to update job info.");
+    } else {
+      toast.success("Job info updated.");
+      onOpenChange(false);
+      onSaved();
+    }
+    setSaving(false);
+  }
+
+  function update(field: string, value: string) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit Job Info</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2 max-h-[70vh] overflow-y-auto">
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-1">Address *</label>
+            <Input value={form.property_address} onChange={(e) => update("property_address", e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Property Type</label>
+              <select
+                value={form.property_type}
+                onChange={(e) => update("property_type", e.target.value)}
+                className="w-full h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20"
+              >
+                <option value="">Select...</option>
+                <option value="single_family">Single Family</option>
+                <option value="multi_family">Multi Family</option>
+                <option value="commercial">Commercial</option>
+                <option value="condo">Condo</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Sq Ft</label>
+              <Input type="number" value={form.property_sqft} onChange={(e) => update("property_sqft", e.target.value)} placeholder="e.g. 2400" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Stories</label>
+              <Input type="number" value={form.property_stories} onChange={(e) => update("property_stories", e.target.value)} placeholder="e.g. 2" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Damage Source</label>
+              <Input value={form.damage_source} onChange={(e) => update("damage_source", e.target.value)} placeholder="e.g. Burst pipe" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-1">Affected Areas</label>
+            <Input value={form.affected_areas} onChange={(e) => update("affected_areas", e.target.value)} placeholder="e.g. Kitchen, hallway" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-1">Access Notes</label>
+            <Textarea value={form.access_notes} onChange={(e) => update("access_notes", e.target.value)} rows={2} placeholder="Gate code, lockbox, etc." />
+          </div>
+          <div className="border-t border-border/50 pt-4">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Insurance</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-1">Insurance Company</label>
+                <Input value={form.insurance_company} onChange={(e) => update("insurance_company", e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-1">Claim #</label>
+                <Input value={form.claim_number} onChange={(e) => update("claim_number", e.target.value)} />
+              </div>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="gradient" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── Edit Contact Dialog ── */
+
+function EditContactDialog({
+  open,
+  onOpenChange,
+  job,
+  jobId,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  job: Job;
+  jobId: string;
+  onSaved: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    first_name: "",
+    last_name: "",
+    phone: "",
+    email: "",
+    role: "homeowner" as string,
+  });
+
+  useEffect(() => {
+    if (open && job.contact) {
+      setForm({
+        first_name: job.contact.first_name || "",
+        last_name: job.contact.last_name || "",
+        phone: job.contact.phone || "",
+        email: job.contact.email || "",
+        role: job.contact.role || "homeowner",
+      });
+    }
+  }, [open, job.contact]);
+
+  async function handleSave() {
+    if (!form.first_name.trim() || !form.last_name.trim()) {
+      toast.error("First and last name are required.");
+      return;
+    }
+    if (!job.contact_id) {
+      toast.error("No contact linked to this job.");
+      return;
+    }
+    setSaving(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("contacts")
+      .update({
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim(),
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        role: form.role,
+      })
+      .eq("id", job.contact_id);
+
+    if (error) {
+      toast.error("Failed to update contact.");
+    } else {
+      toast.success("Contact updated.");
+      onOpenChange(false);
+      onSaved();
+    }
+    setSaving(false);
+  }
+
+  function update(field: string, value: string) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  if (!job.contact) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit Contact</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">First Name *</label>
+              <Input value={form.first_name} onChange={(e) => update("first_name", e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Last Name *</label>
+              <Input value={form.last_name} onChange={(e) => update("last_name", e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-1">Phone</label>
+            <Input type="tel" value={form.phone} onChange={(e) => update("phone", e.target.value)} placeholder="(512) 555-0101" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-1">Email</label>
+            <Input type="email" value={form.email} onChange={(e) => update("email", e.target.value)} placeholder="contact@email.com" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-1">Role</label>
+            <select
+              value={form.role}
+              onChange={(e) => update("role", e.target.value)}
+              className="w-full h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20"
+            >
+              <option value="homeowner">Homeowner</option>
+              <option value="tenant">Tenant</option>
+              <option value="property_manager">Property Manager</option>
+              <option value="adjuster">Adjuster</option>
+              <option value="insurance">Insurance</option>
+            </select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="gradient" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -77,17 +77,19 @@ export default function PhotosPage() {
 
   if (loading) {
     return (
-      <div className="text-center py-12 text-[#999999]">Loading photos...</div>
+      <div className="text-center py-12 text-muted-foreground/60">Loading photos...</div>
     );
   }
 
   return (
-    <div className="max-w-7xl">
+    <div className="max-w-7xl animate-fade-slide-up">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Photos</h1>
-          <p className="text-sm text-[#999999] mt-1">
+          <h1 className="text-3xl font-extrabold text-foreground">
+            <span className="gradient-text">Photos</span>
+          </h1>
+          <p className="text-sm text-muted-foreground/60 mt-1">
             {totalPhotos} photo{totalPhotos !== 1 ? "s" : ""} across{" "}
             {jobsWithPhotos} job{jobsWithPhotos !== 1 ? "s" : ""}
           </p>
@@ -100,13 +102,13 @@ export default function PhotosPage() {
           label="Total Photos"
           value={totalPhotos}
           icon={Camera}
-          color="bg-[#2B5EA7]"
+          gradient="gradient-primary"
         />
         <StatCard
           label="Jobs with Photos"
           value={jobsWithPhotos}
           icon={MapPin}
-          color="bg-[#0F6E56]"
+          gradient="gradient-secondary"
         />
         <StatCard
           label="This Week"
@@ -119,24 +121,24 @@ export default function PhotosPage() {
             }).length
           }
           icon={Calendar}
-          color="bg-[#6C5CE7]"
+          gradient="gradient-accent"
         />
         <StatCard
           label="Tags"
           value={tags.length}
           icon={Filter}
-          color="bg-[#633806]"
+          gradient="bg-gradient-to-br from-violet-500 to-purple-600"
         />
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+      <div className="bg-card rounded-xl border border-border p-4 mb-6">
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Search */}
           <div className="relative flex-1">
             <Search
               size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999999]"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60"
             />
             <Input
               value={search}
@@ -149,7 +151,7 @@ export default function PhotosPage() {
           <select
             value={selectedJob || ""}
             onChange={(e) => setSelectedJob(e.target.value || null)}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/20 focus:border-[#2B5EA7]"
+            className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
           >
             <option value="">All Jobs</option>
             {jobs.map((j) => (
@@ -168,8 +170,8 @@ export default function PhotosPage() {
               className={cn(
                 "px-3 py-1 rounded-full text-xs font-medium border transition-all",
                 !selectedTag
-                  ? "bg-[#1B2434] text-white border-[#1B2434]"
-                  : "bg-white text-[#666666] border-gray-200 hover:border-gray-300"
+                  ? "bg-[image:var(--gradient-primary)] text-white border-transparent shadow-sm"
+                  : "bg-card text-muted-foreground border-border hover:border-primary/30 hover:shadow-sm"
               )}
             >
               All
@@ -184,7 +186,7 @@ export default function PhotosPage() {
                   "px-3 py-1 rounded-full text-xs font-medium border transition-all",
                   selectedTag === tag.id
                     ? "text-white border-transparent"
-                    : "bg-white text-[#666666] border-gray-200 hover:border-gray-300"
+                    : "bg-card text-muted-foreground border-border hover:border-primary/30 hover:shadow-sm"
                 )}
                 style={
                   selectedTag === tag.id
@@ -201,10 +203,10 @@ export default function PhotosPage() {
 
       {/* Photo grid */}
       {filtered.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <ImageIcon size={48} className="mx-auto text-[#CCCCCC] mb-3" />
-          <p className="text-[#999999] text-lg font-medium">No photos yet</p>
-          <p className="text-[#BBBBBB] text-sm mt-1">
+        <div className="bg-card rounded-xl border border-border p-12 text-center">
+          <ImageIcon size={48} className="mx-auto text-muted-foreground/40 mb-3" />
+          <p className="text-muted-foreground/60 text-lg font-medium">No photos yet</p>
+          <p className="text-muted-foreground/40 text-sm mt-1">
             Photos will appear here once uploaded to a job.
           </p>
         </div>
@@ -214,9 +216,9 @@ export default function PhotosPage() {
             <Link
               key={photo.id}
               href={`/jobs/${photo.job_id}`}
-              className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
+              className="group card-vibrant bg-card rounded-xl border border-border overflow-hidden hover:shadow-md transition-all"
             >
-              <div className="aspect-square bg-gray-100 relative overflow-hidden">
+              <div className="aspect-square bg-muted relative overflow-hidden">
                 <img
                   src={getPublicUrl(photo.annotated_path || photo.storage_path)}
                   alt={photo.caption || "Job photo"}
@@ -243,17 +245,17 @@ export default function PhotosPage() {
               </div>
               <div className="p-3">
                 {photo.caption && (
-                  <p className="text-sm text-[#1A1A1A] font-medium truncate">
+                  <p className="text-sm text-foreground font-medium truncate">
                     {photo.caption}
                   </p>
                 )}
-                <p className="text-xs text-[#2B5EA7] font-mono mt-1">
+                <p className="text-xs text-primary font-mono mt-1">
                   {photo.job?.job_number}
                 </p>
-                <p className="text-xs text-[#999999] truncate">
+                <p className="text-xs text-muted-foreground/60 truncate">
                   {photo.job?.property_address}
                 </p>
-                <p className="text-xs text-[#BBBBBB] mt-1">
+                <p className="text-xs text-muted-foreground/40 mt-1">
                   {format(new Date(photo.created_at), "MMM d, yyyy")}
                 </p>
               </div>
@@ -269,27 +271,22 @@ function StatCard({
   label,
   value,
   icon: Icon,
-  color,
+  gradient,
 }: {
   label: string;
   value: number;
   icon: React.ComponentType<{ size?: number; className?: string }>;
-  color: string;
+  gradient: string;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <div className="flex items-center gap-3">
-        <div
-          className={cn(
-            "w-9 h-9 rounded-lg flex items-center justify-center",
-            color
-          )}
-        >
-          <Icon size={18} className="text-white" />
-        </div>
+    <div className={`rounded-xl p-5 text-white shadow-lg ${gradient}`}>
+      <div className="flex items-center justify-between">
         <div>
-          <p className="text-xl font-bold text-[#1A1A1A]">{value}</p>
-          <p className="text-xs text-[#999999]">{label}</p>
+          <p className="text-xs font-medium text-white/70 uppercase tracking-wider">{label}</p>
+          <p className="text-3xl font-extrabold mt-1">{value}</p>
+        </div>
+        <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
+          <Icon size={22} className="text-white" />
         </div>
       </div>
     </div>

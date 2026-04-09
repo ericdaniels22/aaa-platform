@@ -38,7 +38,7 @@ type Step = 1 | 2 | 3;
 
 export default function NewReportPage() {
   return (
-    <Suspense fallback={<div className="text-center py-12 text-[#999999]">Loading...</div>}>
+    <Suspense fallback={<div className="text-center py-12 text-muted-foreground/60">Loading...</div>}>
       <NewReportPageInner />
     </Suspense>
   );
@@ -295,25 +295,25 @@ function NewReportPageInner() {
 
   if (loading) {
     return (
-      <div className="text-center py-12 text-[#999999]">Loading...</div>
+      <div className="text-center py-12 text-muted-foreground/60">Loading...</div>
     );
   }
 
   return (
-    <div className="max-w-6xl">
+    <div className="max-w-6xl animate-fade-slide-up">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Link
           href="/reports"
-          className="text-[#999999] hover:text-[#1A1A1A] transition-colors"
+          className="text-muted-foreground/60 hover:text-foreground transition-colors"
         >
           <ArrowLeft size={20} />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">
-            Generate Photo Report
+          <h1 className="text-3xl font-extrabold text-foreground">
+            <span className="gradient-text">Generate Photo Report</span>
           </h1>
-          <p className="text-sm text-[#999999] mt-0.5">
+          <p className="text-sm text-muted-foreground/60 mt-0.5">
             Step {step} of 3
           </p>
         </div>
@@ -331,7 +331,7 @@ function NewReportPageInner() {
               <div
                 className={cn(
                   "w-8 h-px",
-                  step >= s.num ? "bg-[#2B5EA7]" : "bg-gray-200"
+                  step >= s.num ? "bg-primary" : "bg-border"
                 )}
               />
             )}
@@ -344,10 +344,10 @@ function NewReportPageInner() {
               className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
                 step === s.num
-                  ? "bg-[#2B5EA7] text-white"
+                  ? "bg-[image:var(--gradient-primary)] text-white shadow-sm"
                   : step > s.num
                   ? "bg-[#E1F5EE] text-[#085041]"
-                  : "bg-gray-100 text-[#999999]"
+                  : "bg-muted text-muted-foreground/60"
               )}
             >
               {step > s.num ? <Check size={12} /> : s.num}
@@ -357,18 +357,18 @@ function NewReportPageInner() {
         ))}
       </div>
 
-      {/* ═══ STEP 1: Setup ═══ */}
+      {/* STEP 1: Setup */}
       {step === 1 && (
         <div className="space-y-4">
           {/* Job selection */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
+          <div className="bg-card rounded-xl border border-border p-5">
+            <label className="block text-sm font-semibold text-foreground mb-2">
               Select Job
             </label>
             <select
               value={selectedJobId}
               onChange={(e) => setSelectedJobId(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/20 focus:border-[#2B5EA7]"
+              className="w-full rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             >
               <option value="">Choose a job...</option>
               {jobs.map((j) => (
@@ -378,23 +378,23 @@ function NewReportPageInner() {
               ))}
             </select>
             {selectedJobId && (
-              <p className="text-xs text-[#999999] mt-2">
+              <p className="text-xs text-muted-foreground/60 mt-2">
                 {photos.length} photo{photos.length !== 1 ? "s" : ""} available
               </p>
             )}
           </div>
 
           {/* Template selection */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
+          <div className="bg-card rounded-xl border border-border p-5">
+            <label className="block text-sm font-semibold text-foreground mb-2">
               Choose Template
             </label>
             {templates.length === 0 ? (
               <div className="text-center py-6">
-                <p className="text-sm text-[#999999]">No templates available.</p>
+                <p className="text-sm text-muted-foreground/60">No templates available.</p>
                 <Link
                   href="/reports/templates"
-                  className="text-sm text-[#2B5EA7] hover:underline mt-1 inline-block"
+                  className="text-sm text-primary hover:underline mt-1 inline-block"
                 >
                   Create a template first
                 </Link>
@@ -408,14 +408,14 @@ function NewReportPageInner() {
                     className={cn(
                       "p-3 rounded-lg border text-left transition-all",
                       selectedTemplateId === tmpl.id
-                        ? "border-[#2B5EA7] bg-[#E8F0FE] ring-1 ring-[#2B5EA7]"
-                        : "border-gray-200 hover:border-gray-300 bg-white"
+                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        : "border-border hover:border-primary/30 bg-card"
                     )}
                   >
-                    <p className="text-sm font-medium text-[#1A1A1A]">
+                    <p className="text-sm font-medium text-foreground">
                       {tmpl.name}
                     </p>
-                    <p className="text-xs text-[#999999] mt-0.5 capitalize">
+                    <p className="text-xs text-muted-foreground/60 mt-0.5 capitalize">
                       {tmpl.audience} &middot;{" "}
                       {(tmpl.sections as unknown[]).length} sections &middot;{" "}
                       {tmpl.photos_per_page}/page
@@ -428,8 +428,8 @@ function NewReportPageInner() {
 
           {/* Report title */}
           {selectedTemplateId && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
+            <div className="bg-card rounded-xl border border-border p-5">
+              <label className="block text-sm font-semibold text-foreground mb-2">
                 Report Title
               </label>
               <Input
@@ -445,7 +445,7 @@ function NewReportPageInner() {
             <button
               onClick={() => setStep(2)}
               disabled={!canProceedToStep2()}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[#2B5EA7] text-white hover:bg-[#244d8a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             >
               Select Photos
               <ArrowRight size={16} />
@@ -454,16 +454,16 @@ function NewReportPageInner() {
         </div>
       )}
 
-      {/* ═══ STEP 2: Select Photos ═══ */}
+      {/* STEP 2: Select Photos */}
       {step === 2 && (
         <div className="space-y-4">
           {/* Filters */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="bg-card rounded-xl border border-border p-4">
             <div className="flex flex-col sm:flex-row gap-3 mb-3">
               <div className="relative flex-1">
                 <Filter
                   size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999999]"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60"
                 />
                 <Input
                   value={photoSearch}
@@ -475,7 +475,7 @@ function NewReportPageInner() {
               <select
                 value={roleFilter || ""}
                 onChange={(e) => setRoleFilter(e.target.value || null)}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#2B5EA7]/20"
+                className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <option value="">All Roles</option>
                 <option value="before">Before</option>
@@ -489,8 +489,8 @@ function NewReportPageInner() {
                   className={cn(
                     "px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
                     !tagFilter
-                      ? "bg-[#1B2434] text-white border-[#1B2434]"
-                      : "bg-white text-[#666666] border-gray-200"
+                      ? "bg-[image:var(--gradient-primary)] text-white border-transparent shadow-sm"
+                      : "bg-card text-muted-foreground border-border hover:border-primary/30 hover:shadow-sm"
                   )}
                 >
                   All
@@ -505,7 +505,7 @@ function NewReportPageInner() {
                       "px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
                       tagFilter === tag.id
                         ? "text-white border-transparent"
-                        : "bg-white text-[#666666] border-gray-200"
+                        : "bg-card text-muted-foreground border-border hover:border-primary/30 hover:shadow-sm"
                     )}
                     style={
                       tagFilter === tag.id
@@ -518,20 +518,20 @@ function NewReportPageInner() {
                 ))}
               </div>
             )}
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-              <span className="text-xs text-[#999999]">
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/50">
+              <span className="text-xs text-muted-foreground/60">
                 {selectedPhotoIds.size} of {photos.length} selected
               </span>
               <div className="flex gap-2">
                 <button
                   onClick={selectAll}
-                  className="text-xs text-[#2B5EA7] hover:underline font-medium"
+                  className="text-xs text-primary hover:underline font-medium"
                 >
                   Select All
                 </button>
                 <button
                   onClick={selectNone}
-                  className="text-xs text-[#999999] hover:underline"
+                  className="text-xs text-muted-foreground/60 hover:underline"
                 >
                   Clear
                 </button>
@@ -541,9 +541,9 @@ function NewReportPageInner() {
 
           {/* Photo grid */}
           {filteredPhotos.length === 0 ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-              <ImageIcon size={48} className="mx-auto text-[#CCCCCC] mb-3" />
-              <p className="text-[#999999]">No photos match your filters</p>
+            <div className="bg-card rounded-xl border border-border p-12 text-center">
+              <ImageIcon size={48} className="mx-auto text-muted-foreground/40 mb-3" />
+              <p className="text-muted-foreground/60">No photos match your filters</p>
             </div>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -556,8 +556,8 @@ function NewReportPageInner() {
                     className={cn(
                       "aspect-square rounded-lg overflow-hidden relative group border-2 transition-all",
                       isSelected
-                        ? "border-[#2B5EA7] ring-2 ring-[#2B5EA7]/30"
-                        : "border-transparent hover:border-gray-300"
+                        ? "border-primary ring-2 ring-primary/30"
+                        : "border-transparent hover:border-primary/30"
                     )}
                   >
                     <img
@@ -572,8 +572,8 @@ function NewReportPageInner() {
                       className={cn(
                         "absolute top-1.5 right-1.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
                         isSelected
-                          ? "bg-[#2B5EA7] border-[#2B5EA7]"
-                          : "bg-white/80 border-white/80 group-hover:border-[#2B5EA7]/50"
+                          ? "bg-primary border-primary"
+                          : "bg-white/80 border-white/80 group-hover:border-primary/50"
                       )}
                     >
                       {isSelected && <Check size={12} className="text-white" />}
@@ -611,7 +611,7 @@ function NewReportPageInner() {
           <div className="flex justify-between">
             <button
               onClick={() => setStep(1)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-[#666666] hover:bg-gray-50 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-border bg-card text-muted-foreground hover:bg-accent transition-colors"
             >
               <ArrowLeft size={16} />
               Back
@@ -619,7 +619,7 @@ function NewReportPageInner() {
             <button
               onClick={() => setStep(3)}
               disabled={!canProceedToStep3()}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[#2B5EA7] text-white hover:bg-[#244d8a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             >
               Assign to Sections
               <ArrowRight size={16} />
@@ -628,17 +628,17 @@ function NewReportPageInner() {
         </div>
       )}
 
-      {/* ═══ STEP 3: Assign Photos to Sections ═══ */}
+      {/* STEP 3: Assign Photos to Sections */}
       {step === 3 && (
         <div className="space-y-4">
           {/* Auto-assign button */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between">
+          <div className="bg-card rounded-xl border border-border p-4 flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-[#1A1A1A]">
+              <p className="text-sm font-medium text-foreground">
                 {selectedPhotoIds.size} photos selected &middot;{" "}
                 {sections.length} sections
               </p>
-              <p className="text-xs text-[#999999] mt-0.5">
+              <p className="text-xs text-muted-foreground/60 mt-0.5">
                 Drag photos into sections below, or auto-distribute evenly.
               </p>
             </div>
@@ -662,20 +662,20 @@ function NewReportPageInner() {
             return (
               <div
                 key={si}
-                className="bg-white rounded-xl border border-gray-200 p-4"
+                className="bg-card rounded-xl border border-border p-4"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h4 className="text-sm font-semibold text-[#1A1A1A]">
+                    <h4 className="text-sm font-semibold text-foreground">
                       {si + 1}. {section.title}
                     </h4>
                     {section.description && (
-                      <p className="text-xs text-[#999999] mt-0.5">
+                      <p className="text-xs text-muted-foreground/60 mt-0.5">
                         {section.description}
                       </p>
                     )}
                   </div>
-                  <span className="text-xs text-[#BBBBBB]">
+                  <span className="text-xs text-muted-foreground/40">
                     {assignedPhotos.length} photo
                     {assignedPhotos.length !== 1 ? "s" : ""}
                   </span>
@@ -715,8 +715,8 @@ function NewReportPageInner() {
                     ))}
                   </div>
                 ) : (
-                  <div className="border-2 border-dashed border-gray-200 rounded-lg py-4 text-center mb-3">
-                    <p className="text-xs text-[#BBBBBB]">
+                  <div className="border-2 border-dashed border-border rounded-lg py-4 text-center mb-3">
+                    <p className="text-xs text-muted-foreground/40">
                       No photos assigned yet
                     </p>
                   </div>
@@ -725,7 +725,7 @@ function NewReportPageInner() {
                 {/* Add from unassigned */}
                 {unassigned.length > 0 && (
                   <div>
-                    <p className="text-[10px] font-medium text-[#999999] mb-1.5">
+                    <p className="text-[10px] font-medium text-muted-foreground/60 mb-1.5">
                       Add unassigned photos:
                     </p>
                     <div className="flex flex-wrap gap-1.5">
@@ -736,7 +736,7 @@ function NewReportPageInner() {
                           <button
                             key={id}
                             onClick={() => addPhotoToSection(si, id)}
-                            className="w-12 h-12 rounded overflow-hidden border border-gray-200 hover:border-[#2B5EA7] transition-colors relative"
+                            className="w-12 h-12 rounded overflow-hidden border border-border hover:border-primary transition-colors relative"
                           >
                             <img
                               src={getPublicUrl(
@@ -755,7 +755,7 @@ function NewReportPageInner() {
                         );
                       })}
                       {unassigned.length > 12 && (
-                        <span className="text-[10px] text-[#999999] self-center ml-1">
+                        <span className="text-[10px] text-muted-foreground/60 self-center ml-1">
                           +{unassigned.length - 12} more
                         </span>
                       )}
@@ -770,7 +770,7 @@ function NewReportPageInner() {
           <div className="flex justify-between">
             <button
               onClick={() => setStep(2)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-[#666666] hover:bg-gray-50 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-border bg-card text-muted-foreground hover:bg-accent transition-colors"
             >
               <ArrowLeft size={16} />
               Back
@@ -778,7 +778,7 @@ function NewReportPageInner() {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium bg-[#0F6E56] text-white hover:bg-[#0B5A45] disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md disabled:opacity-50 transition-all"
             >
               <FileText size={16} />
               {saving ? "Saving..." : "Save Draft Report"}

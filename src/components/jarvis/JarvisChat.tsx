@@ -200,7 +200,7 @@ export default function JarvisChat({
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm text-[#999999]">Loading...</p>
+        <p className="text-sm text-muted-foreground/60">Loading...</p>
       </div>
     );
   }
@@ -209,9 +209,9 @@ export default function JarvisChat({
     <div className="flex flex-col h-full">
       {/* Job context banner */}
       {contextType === "job" && jobContext && (
-        <div className="px-4 py-2.5 bg-[#F5F5F5] border-b border-gray-100 flex items-center gap-2">
-          <span className="text-xs text-[#666666]">Viewing:</span>
-          <span className="text-xs font-medium text-[#1A1A1A]">
+        <div className="px-4 py-2.5 bg-muted border-b border-border/50 flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Viewing:</span>
+          <span className="text-xs font-medium text-foreground">
             {jobContext.customerName} — {jobContext.address}
           </span>
         </div>

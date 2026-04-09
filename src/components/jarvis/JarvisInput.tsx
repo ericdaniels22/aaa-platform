@@ -47,7 +47,7 @@ export default function JarvisInput({ onSend, disabled, placeholder }: JarvisInp
 
   return (
     <div className="px-4 pb-4 pt-2">
-      <div className="flex items-end gap-2 bg-white border border-gray-200 rounded-2xl px-4 py-2 focus-within:border-[#1B2434]/30 focus-within:ring-2 focus-within:ring-[#1B2434]/10 transition-all">
+      <div className="flex items-end gap-2 bg-card border border-border rounded-2xl px-4 py-2 focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
         <textarea
           ref={textareaRef}
           value={value}
@@ -56,12 +56,12 @@ export default function JarvisInput({ onSend, disabled, placeholder }: JarvisInp
           disabled={disabled}
           placeholder={disabled ? "Jarvis is thinking..." : placeholder || "Message Jarvis..."}
           rows={1}
-          className="flex-1 resize-none bg-transparent text-sm text-[#1A1A1A] placeholder:text-[#999999] focus:outline-none disabled:opacity-50 py-1"
+          className="flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50 py-1"
         />
         <button
           onClick={handleSend}
           disabled={isEmpty || disabled}
-          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors disabled:opacity-30 disabled:cursor-not-allowed bg-[#1B2434] text-white hover:bg-[#2a3a52]"
+          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-30 disabled:cursor-not-allowed bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md"
         >
           <ArrowUp size={16} />
         </button>

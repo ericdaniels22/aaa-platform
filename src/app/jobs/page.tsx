@@ -93,39 +93,41 @@ export default function JobsPage() {
   });
 
   return (
-    <div className="max-w-6xl">
+    <div className="max-w-6xl animate-fade-slide-up">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-[#1A1A1A]">Jobs</h1>
-        <p className="text-[#666666] mt-1">
+        <h1 className="text-3xl font-extrabold text-foreground">
+          <span className="gradient-text">Jobs</span>
+        </h1>
+        <p className="text-muted-foreground mt-1">
           Track and manage all your jobs.
         </p>
       </div>
 
-      {/* Stat cards */}
+      {/* Stat cards — gradient hero style */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
           label="Active Jobs"
           value={stats.active}
           icon={Briefcase}
-          accent="border-l-[#0F6E56]"
+          gradient="gradient-primary"
         />
         <StatCard
           label="Emergencies"
           value={stats.emergency}
           icon={Flame}
-          accent="border-l-[#C41E2A]"
+          gradient="gradient-accent"
         />
         <StatCard
           label="Pending Invoice"
           value={stats.pendingInvoice}
           icon={FileText}
-          accent="border-l-[#6C5CE7]"
+          gradient="bg-gradient-to-br from-violet-500 to-purple-600"
         />
         <StatCard
           label="This Month"
           value={stats.thisMonth}
           icon={CalendarDays}
-          accent="border-l-[#2B5EA7]"
+          gradient="gradient-secondary"
         />
       </div>
 
@@ -141,8 +143,8 @@ export default function JobsPage() {
             className={cn(
               "px-4 py-2 rounded-lg text-sm font-medium border transition-all",
               filter === opt.value
-                ? "bg-[#1B2434] text-white border-[#1B2434]"
-                : "bg-white text-[#666666] border-gray-200 hover:border-gray-300"
+                ? "bg-[image:var(--gradient-primary)] text-white border-transparent shadow-sm"
+                : "bg-card text-muted-foreground border-border hover:border-primary/30 hover:shadow-sm"
             )}
           >
             {opt.label}
@@ -152,11 +154,11 @@ export default function JobsPage() {
 
       {/* Job list */}
       {loading ? (
-        <div className="text-center py-12 text-[#999999]">Loading jobs...</div>
+        <div className="text-center py-12 text-muted-foreground/60">Loading jobs...</div>
       ) : sortedJobs.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-[#999999] text-lg">No jobs found</p>
-          <p className="text-[#BBBBBB] text-sm mt-1">
+          <p className="text-muted-foreground text-lg">No jobs found</p>
+          <p className="text-muted-foreground/60 text-sm mt-1">
             Create a new intake to get started.
           </p>
         </div>
@@ -175,25 +177,27 @@ function StatCard({
   label,
   value,
   icon: Icon,
-  accent,
+  gradient,
 }: {
   label: string;
   value: number;
   icon: React.ComponentType<{ size?: number; className?: string }>;
-  accent: string;
+  gradient: string;
 }) {
   return (
     <div
-      className={`bg-white rounded-xl border border-gray-200 p-5 border-l-4 ${accent}`}
+      className={`rounded-xl p-5 text-white shadow-lg ${gradient}`}
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium text-[#999999] uppercase tracking-wider">
+          <p className="text-xs font-medium text-white/70 uppercase tracking-wider">
             {label}
           </p>
-          <p className="text-2xl font-bold text-[#1A1A1A] mt-1">{value}</p>
+          <p className="text-3xl font-extrabold mt-1">{value}</p>
         </div>
-        <Icon size={20} className="text-[#CCCCCC]" />
+        <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
+          <Icon size={22} className="text-white" />
+        </div>
       </div>
     </div>
   );

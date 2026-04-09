@@ -233,7 +233,7 @@ export default function IntakeForm() {
         <Button
           type="submit"
           disabled={submitting}
-          className="px-6 py-2.5 bg-[var(--brand-primary)] text-white hover:opacity-90"
+          className="px-6 py-2.5 bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md transition-all"
         >
           {submitting ? (
             <>
@@ -345,8 +345,8 @@ function DynamicField({
                 className={cn(
                   "px-4 py-2 rounded-lg text-sm font-medium border transition-all",
                   isSelected
-                    ? opt.color || "bg-[#1B2434] text-white border-[#1B2434]"
-                    : "bg-card text-muted-foreground border-border hover:border-foreground/20"
+                    ? opt.color || "bg-[image:var(--gradient-primary)] text-white border-transparent shadow-sm"
+                    : "bg-card text-muted-foreground border-border hover:border-primary/30 hover:shadow-sm"
                 )}
               >
                 {opt.label}
@@ -385,7 +385,7 @@ function SectionCard({
   return (
     <div className="bg-card rounded-xl border border-border p-5 sm:p-6">
       <div className="flex items-center gap-3 mb-4">
-        <span className="flex items-center justify-center w-7 h-7 rounded-full bg-[#1B2434] text-white text-xs font-bold">
+        <span className="flex items-center justify-center w-7 h-7 rounded-full bg-secondary text-white text-xs font-bold">
           {number}
         </span>
         <h2 className="text-base font-semibold text-foreground">{title}</h2>

@@ -183,8 +183,7 @@ export default function UsersSettingsPage() {
         </div>
         <button
           onClick={() => setShowInvite(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white transition-colors"
-          style={{ backgroundColor: "var(--brand-primary)" }}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md transition-all"
         >
           <Plus size={16} />
           Add User
@@ -224,7 +223,7 @@ export default function UsersSettingsPage() {
                         {ROLES.find((r) => r.value === user.role)?.label || user.role}
                       </Badge>
                       {!user.is_active && (
-                        <Badge className="text-[10px] px-1.5 py-0 rounded-full bg-gray-100 text-gray-500">
+                        <Badge className="text-[10px] px-1.5 py-0 rounded-full bg-muted text-muted-foreground">
                           Inactive
                         </Badge>
                       )}
@@ -261,7 +260,7 @@ export default function UsersSettingsPage() {
                       "p-1.5 rounded-lg transition-colors",
                       user.is_active
                         ? "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        : "text-muted-foreground hover:text-[var(--brand-primary)] hover:bg-[var(--brand-primary)]/10"
+                        : "text-muted-foreground hover:text-primary hover:bg-primary/10"
                     )}
                     title={user.is_active ? "Deactivate" : "Reactivate"}
                   >
@@ -321,8 +320,7 @@ export default function UsersSettingsPage() {
             <button
               onClick={handleInvite}
               disabled={inviting}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-              style={{ backgroundColor: "var(--brand-primary)" }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md disabled:opacity-50 transition-all"
             >
               {inviting && <Loader2 size={14} className="animate-spin" />}
               Add User
@@ -378,8 +376,7 @@ export default function UsersSettingsPage() {
               <button
                 onClick={savePermissions}
                 disabled={savingPerms}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-                style={{ backgroundColor: "var(--brand-primary)" }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md disabled:opacity-50 transition-all"
               >
                 {savingPerms && <Loader2 size={14} className="animate-spin" />}
                 Save Permissions

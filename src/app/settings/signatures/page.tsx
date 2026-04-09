@@ -175,8 +175,8 @@ export default function EmailSignaturesPage() {
             className={cn(
               "px-3 py-2 rounded-lg text-sm font-medium border transition-all",
               selectedId === acc.id
-                ? "border-[var(--brand-primary)] bg-[var(--brand-primary)]/10 text-[var(--brand-primary)]"
-                : "border-border bg-card text-muted-foreground hover:text-foreground"
+                ? "bg-[image:var(--gradient-primary)] text-white border-transparent shadow-sm"
+                : "bg-card text-muted-foreground border-border hover:border-primary/30 hover:shadow-sm"
             )}
           >
             <span className="flex items-center gap-2">
@@ -254,7 +254,7 @@ export default function EmailSignaturesPage() {
             <div className="bg-card rounded-xl border border-border p-6">
               <label className="block text-sm font-medium text-foreground mb-3">Preview</label>
               <div className="border border-border rounded-lg p-4 bg-white">
-                <div className="border-t border-gray-200 pt-3 mt-2">
+                <div className="border-t border-border/50 pt-3 mt-2">
                   <div
                     className="text-sm text-gray-600 prose prose-sm max-w-none [&_*]:!text-gray-700 [&_strong]:!text-gray-900"
                     dangerouslySetInnerHTML={{ __html: sigHtml }}
@@ -269,8 +269,7 @@ export default function EmailSignaturesPage() {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-colors"
-              style={{ backgroundColor: "var(--brand-primary)" }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md disabled:opacity-50 transition-all"
             >
               {saving && <Loader2 size={16} className="animate-spin" />}
               {saving ? "Saving..." : "Save Signature"}

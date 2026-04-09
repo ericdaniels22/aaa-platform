@@ -29,14 +29,14 @@ const TYPE_ICONS: Record<string, typeof Bell> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  new_job: "text-[#0F6E56]",
-  status_change: "text-[#2B5EA7]",
-  payment: "text-[#0F6E56]",
-  activity: "text-[#666]",
-  photo: "text-[#6C5CE7]",
-  email: "text-[#2B5EA7]",
-  overdue: "text-[#C41E2A]",
-  reminder: "text-[#633806]",
+  new_job: "text-primary",
+  status_change: "text-vibrant-blue",
+  payment: "text-primary",
+  activity: "text-muted-foreground",
+  photo: "text-vibrant-purple",
+  email: "text-vibrant-blue",
+  overdue: "text-destructive",
+  reminder: "text-vibrant-amber",
 };
 
 export default function NotificationBell() {
@@ -107,21 +107,21 @@ export default function NotificationBell() {
       >
         <Bell size={20} />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 min-w-[18px] flex items-center justify-center rounded-full bg-[#C41E2A] text-white text-[10px] font-bold leading-none px-1">
+          <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 min-w-[18px] flex items-center justify-center rounded-full bg-destructive text-white text-[10px] font-bold leading-none px-1 animate-pulse-glow">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="fixed left-64 top-2 w-80 bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl z-[100] overflow-hidden">
+        <div className="fixed left-52 top-2 w-80 bg-card dark:bg-card border border-border rounded-xl shadow-2xl ring-1 ring-primary/10 z-[100] overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
             {unreadCount > 0 && (
               <button
                 onClick={markAllRead}
-                className="text-xs text-[var(--brand-primary)] hover:underline font-medium flex items-center gap-1"
+                className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
               >
                 <Check size={12} />
                 Mark all read
@@ -133,8 +133,8 @@ export default function NotificationBell() {
           <div className="max-h-80 overflow-y-auto">
             {notifications.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <Bell size={24} className="mx-auto text-gray-300 dark:text-gray-600 mb-2" />
-                <p className="text-sm text-gray-500 dark:text-gray-400">No notifications</p>
+                <Bell size={24} className="mx-auto text-muted-foreground/40 mb-2" />
+                <p className="text-sm text-muted-foreground">No notifications</p>
               </div>
             ) : (
               notifications.map((n) => {
@@ -143,8 +143,8 @@ export default function NotificationBell() {
                 const content = (
                   <div
                     className={cn(
-                      "flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer border-b border-gray-100 dark:border-gray-700 last:border-b-0",
-                      !n.is_read && "bg-green-50/50 dark:bg-green-900/10"
+                      "flex items-start gap-3 px-4 py-3 hover:bg-accent/50 transition-colors cursor-pointer border-b border-border/50 last:border-b-0",
+                      !n.is_read && "bg-primary/5"
                     )}
                     onClick={() => {
                       if (!n.is_read) markAsRead(n.id);
@@ -153,18 +153,18 @@ export default function NotificationBell() {
                   >
                     <Icon size={16} className={cn("mt-0.5 shrink-0", color)} />
                     <div className="flex-1 min-w-0">
-                      <p className={cn("text-sm", n.is_read ? "text-gray-500 dark:text-gray-400" : "text-gray-900 dark:text-gray-100 font-medium")}>
+                      <p className={cn("text-sm", n.is_read ? "text-muted-foreground" : "text-foreground font-medium")}>
                         {n.title}
                       </p>
                       {n.body && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{n.body}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>
                       )}
-                      <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                      <p className="text-[10px] text-muted-foreground/60 mt-1">
                         {format(new Date(n.created_at), "MMM d, h:mm a")}
                       </p>
                     </div>
                     {!n.is_read && (
-                      <div className="w-2 h-2 rounded-full bg-[var(--brand-primary)] shrink-0 mt-1.5" />
+                      <div className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1.5" />
                     )}
                   </div>
                 );
@@ -179,10 +179,10 @@ export default function NotificationBell() {
           </div>
 
           {/* Footer */}
-          <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700">
+          <div className="px-4 py-2 border-t border-border">
             <Link
               href="/settings/notifications"
-              className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+              className="text-xs text-muted-foreground hover:text-foreground"
               onClick={() => setOpen(false)}
             >
               Notification settings

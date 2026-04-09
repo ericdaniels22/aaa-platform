@@ -29,8 +29,8 @@ const AUDIENCE_CONFIG: Record<
   string,
   { label: string; icon: React.ComponentType<{ size?: number; className?: string }>; color: string; bg: string }
 > = {
-  adjuster: { label: "Adjuster", icon: Shield, color: "text-[#2B5EA7]", bg: "bg-[#E8F0FE]" },
-  customer: { label: "Customer", icon: Users, color: "text-[#0F6E56]", bg: "bg-[#E1F5EE]" },
+  adjuster: { label: "Adjuster", icon: Shield, color: "text-primary", bg: "bg-primary/10" },
+  customer: { label: "Customer", icon: Users, color: "text-primary", bg: "bg-[#E1F5EE]" },
   internal: { label: "Internal", icon: Briefcase, color: "text-[#6C5CE7]", bg: "bg-[#F3F0FF]" },
   general: { label: "General", icon: Globe, color: "text-[#633806]", bg: "bg-[#FFF3E0]" },
 };
@@ -155,28 +155,28 @@ export default function TemplatesPage() {
 
   if (loading) {
     return (
-      <div className="text-center py-12 text-[#999999]">
+      <div className="text-center py-12 text-muted-foreground/60">
         Loading templates...
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl">
+    <div className="max-w-5xl animate-fade-slide-up">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <Link
             href="/reports"
-            className="text-[#999999] hover:text-[#1A1A1A] transition-colors"
+            className="text-muted-foreground/60 hover:text-foreground transition-colors"
           >
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-[#1A1A1A]">
-              Report Templates
+            <h1 className="text-3xl font-extrabold text-foreground">
+              <span className="gradient-text">Report Templates</span>
             </h1>
-            <p className="text-sm text-[#999999] mt-1">
+            <p className="text-sm text-muted-foreground/60 mt-1">
               {templates.length} template
               {templates.length !== 1 ? "s" : ""}
             </p>
@@ -187,7 +187,7 @@ export default function TemplatesPage() {
             <button
               onClick={handleSeedDefaults}
               disabled={seeding}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-[#6C5CE7] hover:bg-[#F3F0FF] transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-border bg-card text-[#6C5CE7] hover:bg-[#F3F0FF] transition-colors disabled:opacity-50"
             >
               <Sparkles size={16} />
               {seeding ? "Creating..." : "Add Defaults"}
@@ -195,7 +195,7 @@ export default function TemplatesPage() {
           )}
           <button
             onClick={handleCreate}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-[#2B5EA7] text-white hover:bg-[#244d8a] transition-colors"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md transition-all"
           >
             <Plus size={16} />
             New Template
@@ -204,11 +204,11 @@ export default function TemplatesPage() {
       </div>
 
       {/* Search */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+      <div className="bg-card rounded-xl border border-border p-4 mb-6">
         <div className="relative">
           <Search
             size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999999]"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60"
           />
           <Input
             value={search}
@@ -221,12 +221,12 @@ export default function TemplatesPage() {
 
       {/* Template list */}
       {filtered.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <Layers size={48} className="mx-auto text-[#CCCCCC] mb-3" />
-          <p className="text-[#999999] text-lg font-medium">
+        <div className="bg-card rounded-xl border border-border p-12 text-center">
+          <Layers size={48} className="mx-auto text-muted-foreground/40 mb-3" />
+          <p className="text-muted-foreground/60 text-lg font-medium">
             No templates yet
           </p>
-          <p className="text-[#BBBBBB] text-sm mt-1">
+          <p className="text-muted-foreground/40 text-sm mt-1">
             Create a template or add the default starter templates.
           </p>
         </div>
@@ -241,7 +241,7 @@ export default function TemplatesPage() {
             return (
               <div
                 key={template.id}
-                className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                className="card-vibrant bg-card rounded-xl border border-border p-4 hover:shadow-md transition-all"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3 min-w-0">
@@ -254,7 +254,7 @@ export default function TemplatesPage() {
                       <AudIcon size={20} className={aud.color} />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-sm font-semibold text-[#1A1A1A]">
+                      <h3 className="text-sm font-semibold text-foreground">
                         {template.name}
                       </h3>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -267,22 +267,22 @@ export default function TemplatesPage() {
                         >
                           {aud.label}
                         </Badge>
-                        <span className="text-xs text-[#999999] flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
                           <LayoutGrid size={10} />
                           {template.photos_per_page} photo
                           {template.photos_per_page !== 1 ? "s" : ""}/page
                         </span>
-                        <span className="text-xs text-[#999999]">
+                        <span className="text-xs text-muted-foreground/60">
                           {sections.length} section
                           {sections.length !== 1 ? "s" : ""}
                         </span>
                         {coverPage.show_logo && (
-                          <span className="text-xs text-[#BBBBBB]">
+                          <span className="text-xs text-muted-foreground/40">
                             Cover page
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-[#BBBBBB] mt-1">
+                      <p className="text-xs text-muted-foreground/40 mt-1">
                         Created{" "}
                         {format(new Date(template.created_at), "MMM d, yyyy")}
                       </p>
@@ -291,14 +291,14 @@ export default function TemplatesPage() {
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       onClick={() => handleEdit(template)}
-                      className="p-2 rounded-lg text-[#999999] hover:text-[#2B5EA7] hover:bg-blue-50 transition-colors"
+                      className="p-2 rounded-lg text-muted-foreground/60 hover:text-primary hover:bg-accent transition-colors"
                     >
                       <Pencil size={16} />
                     </button>
                     <button
                       onClick={() => handleDelete(template.id, template.name)}
                       disabled={deleting === template.id}
-                      className="p-2 rounded-lg text-[#999999] hover:text-[#C41E2A] hover:bg-red-50 transition-colors disabled:opacity-50"
+                      className="p-2 rounded-lg text-muted-foreground/60 hover:text-destructive hover:bg-red-50 transition-colors disabled:opacity-50"
                     >
                       <Trash2 size={16} />
                     </button>

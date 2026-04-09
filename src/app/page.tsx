@@ -51,40 +51,42 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="max-w-6xl">
+    <div className="max-w-6xl animate-fade-slide-up">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <h1 className="text-3xl font-extrabold text-foreground">
+          <span className="gradient-text">Dashboard</span>
+        </h1>
         <p className="text-muted-foreground mt-1">
           Welcome back, Eric. Here&apos;s your overview.
         </p>
       </div>
 
-      {/* Stat cards */}
+      {/* Stat cards — gradient hero style */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         <StatCard
           label="Active Jobs"
           value={stats.active}
           icon={Briefcase}
-          accent="border-l-[#0F6E56]"
+          gradient="gradient-primary"
         />
         <StatCard
           label="Pending Invoice"
           value={stats.pendingInvoice}
           icon={FileText}
-          accent="border-l-[#6C5CE7]"
+          gradient="bg-gradient-to-br from-violet-500 to-purple-600"
         />
         <StatCard
           label="This Month"
           value={stats.thisMonth}
           icon={CalendarDays}
-          accent="border-l-[#2B5EA7]"
+          gradient="gradient-secondary"
         />
         <StatCard
           label="Reports"
           value={stats.reports}
           icon={Camera}
-          accent="border-l-[#C41E2A]"
+          gradient="gradient-accent"
         />
       </div>
 
@@ -93,17 +95,17 @@ export default function DashboardPage() {
         <h2 className="text-lg font-semibold text-foreground">Recent Jobs</h2>
         <Link
           href="/jobs"
-          className="text-sm text-[#2B5EA7] hover:underline font-medium"
+          className="text-sm text-primary hover:underline font-medium"
         >
           View all
         </Link>
       </div>
       {recentJobs.length === 0 ? (
-        <div className="text-center py-12 bg-card rounded-xl border border-border">
+        <div className="text-center py-12 bg-card rounded-xl border border-border shadow-[var(--shadow-card)]">
           <p className="text-muted-foreground">No jobs yet.</p>
           <Link
             href="/intake"
-            className="text-sm text-[var(--brand-accent)] hover:underline font-medium mt-1 inline-block"
+            className="text-sm text-primary hover:underline font-medium mt-1 inline-block"
           >
             Create your first intake
           </Link>
@@ -123,25 +125,27 @@ function StatCard({
   label,
   value,
   icon: Icon,
-  accent,
+  gradient,
 }: {
   label: string;
   value: number;
   icon: React.ComponentType<{ size?: number; className?: string }>;
-  accent: string;
+  gradient: string;
 }) {
   return (
     <div
-      className={`bg-card rounded-xl border border-border p-5 border-l-4 ${accent}`}
+      className={`rounded-xl p-5 text-white shadow-lg ${gradient}`}
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          <p className="text-xs font-medium text-white/70 uppercase tracking-wider">
             {label}
           </p>
-          <p className="text-2xl font-bold text-foreground mt-1">{value}</p>
+          <p className="text-3xl font-extrabold mt-1">{value}</p>
         </div>
-        <Icon size={20} className="text-muted-foreground/40" />
+        <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
+          <Icon size={22} className="text-white" />
+        </div>
       </div>
     </div>
   );

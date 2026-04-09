@@ -55,7 +55,7 @@ export default function Sidebar() {
   return (
     <>
       {/* Mobile top bar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-[#1B2434] border-b border-white/10 px-4 py-3 flex items-center justify-between">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 gradient-sidebar border-b border-white/10 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Image src="/logo.png" alt="AAA Logo" width={120} height={44} />
         </div>
@@ -63,7 +63,7 @@ export default function Sidebar() {
           <NotificationBell />
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="text-white/70 hover:text-white"
+            className="text-white/70 hover:text-white transition-colors"
           >
             {mobileOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -73,7 +73,7 @@ export default function Sidebar() {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/50"
+          className="lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-md"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -81,14 +81,14 @@ export default function Sidebar() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed top-0 left-0 z-40 h-full w-64 bg-[#1B2434] flex flex-col transition-transform duration-200",
+          "fixed top-0 left-0 z-40 h-full w-52 gradient-sidebar flex flex-col transition-transform duration-200",
           "lg:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         {/* Logo area */}
         <div className="px-4 py-1 border-b border-white/10 flex items-center justify-between overflow-hidden">
-          <Image src="/logo.png" alt="AAA Disaster Recovery" width={160} height={58} className="-my-2" />
+          <Image src="/logo.png" alt="AAA Disaster Recovery" width={140} height={51} className="-my-2" />
           <div className="hidden lg:block">
             <NotificationBell />
           </div>
@@ -108,13 +108,13 @@ export default function Sidebar() {
                 href={item.href}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                  "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-200",
                   isActive
-                    ? "bg-[#C41E2A] text-white"
-                    : "text-white/60 hover:text-white hover:bg-white/5"
+                    ? "bg-[image:var(--gradient-primary)] text-white shadow-lg shadow-[oklch(0.45_0.18_165_/_25%)]"
+                    : "text-white/60 hover:text-white hover:bg-white/10"
                 )}
               >
-                <item.icon size={20} />
+                <item.icon size={18} />
                 {item.label}
               </Link>
             );
@@ -125,12 +125,12 @@ export default function Sidebar() {
         <div className="px-3 py-3 border-t border-white/10">
           {profile ? (
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-                <span className="text-xs font-semibold text-white/80">{initials}</span>
+              <div className="w-8 h-8 rounded-full bg-[image:var(--gradient-primary)] flex items-center justify-center shrink-0 shadow-sm">
+                <span className="text-xs font-semibold text-white">{initials}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white/80 truncate">{profile.full_name}</p>
-                <p className="text-[10px] text-white/30 capitalize">{profile.role.replace("_", " ")}</p>
+                <p className="text-sm font-medium text-white/90 truncate">{profile.full_name}</p>
+                <p className="text-[10px] text-white/40 capitalize">{profile.role.replace("_", " ")}</p>
               </div>
               <button
                 onClick={handleSignOut}
