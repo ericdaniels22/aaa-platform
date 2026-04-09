@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, type MutableRefObject } from "react";
 import { createClient } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import type { JarvisConversation, JarvisMessage as JarvisMessageType } from "@/lib/types";
@@ -38,6 +38,7 @@ export default function JarvisChat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
+  const abortControllerRef: MutableRefObject<AbortController | null> = useRef(null);
 
   // Load conversation
   const loadConversation = useCallback(async (id: string) => {
@@ -127,9 +128,7 @@ export default function JarvisChat({
       .single();
 
     if (error) throw error;
-    const conv = data as JarvisConversation;
-    onConversationCreated?.(conv.id);
-    return conv;
+    return data as JarvisConversation;
   }
 
   async function saveMessages(convId: string, msgs: JarvisMessageType[]) {
@@ -143,12 +142,12 @@ export default function JarvisChat({
       .eq("id", convId);
   }
 
-  function getMockResponse(): string {
-    if (contextType === "job" && jobContext) {
-      return `I can see I'm on the ${jobContext.customerName} job at ${jobContext.address}. My full intelligence gets connected in the next build — once that's done, ask me anything about this job and I'll pull from the database in real time. For now, just know I'm here and I'm ready.`;
-    }
-    return "Hey Eric! I'm Jarvis — your AI partner for AAA Disaster Recovery. My brain gets fully connected in the next build, but I can already see that my conversation system is working perfectly. Once I'm wired up, ask me anything about the business. I'll be ready.";
-  }
+  // Cleanup abort controller on unmount
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   async function handleSend(content: string) {
     const userMsg: JarvisMessageType = {
@@ -163,30 +162,81 @@ export default function JarvisChat({
     userScrolledUp.current = false;
 
     let conv = conversation;
+    let isNewConversation = false;
 
-    // Create or update conversation
+    // Create or update conversation optimistically
     if (!conv) {
       conv = await createConversation(userMsg);
       setConversation(conv);
+      isNewConversation = true;
+      // Don't call onConversationCreated yet — it changes the key and remounts us
     } else {
       await saveMessages(conv.id, newMessages);
     }
 
-    // Mock response with delay
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // Call the real Jarvis API
+    abortControllerRef.current = new AbortController();
 
-    const assistantMsg: JarvisMessageType = {
-      role: "assistant",
-      content: getMockResponse(),
-      timestamp: new Date().toISOString(),
-    };
+    try {
+      const response = await fetch("/api/jarvis/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          context_type: contextType,
+          job_id: jobId,
+          message: content,
+          conversation_id: conv?.id,
+        }),
+        signal: abortControllerRef.current.signal,
+      });
 
-    const finalMessages = [...newMessages, assistantMsg];
-    setMessages(finalMessages);
-    setIsTyping(false);
+      const data = await response.json();
 
-    if (conv) {
-      await saveMessages(conv.id, finalMessages);
+      let assistantContent: string;
+      if (!response.ok) {
+        assistantContent =
+          data.content ||
+          "I hit a snag — give me a sec and try again. If this keeps happening, let Eric know.";
+      } else {
+        assistantContent = data.content;
+      }
+
+      const assistantMsg: JarvisMessageType = {
+        role: "assistant",
+        content: assistantContent,
+        timestamp: new Date().toISOString(),
+      };
+
+      const finalMessages = [...newMessages, assistantMsg];
+      setMessages(finalMessages);
+
+      if (conv) {
+        await saveMessages(conv.id, finalMessages);
+      }
+
+      // Now safe to notify parent — response is already in state
+      if (isNewConversation && conv) {
+        onConversationCreated?.(conv.id);
+      }
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return;
+
+      const errorMsg: JarvisMessageType = {
+        role: "assistant",
+        content:
+          "Looks like I lost connection. Check your internet and try again.",
+        timestamp: new Date().toISOString(),
+      };
+
+      const finalMessages = [...newMessages, errorMsg];
+      setMessages(finalMessages);
+
+      if (conv) {
+        await saveMessages(conv.id, finalMessages);
+      }
+    } finally {
+      setIsTyping(false);
+      abortControllerRef.current = null;
     }
   }
 
