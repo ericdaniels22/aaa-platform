@@ -632,6 +632,9 @@ async function toolConsultRnd(
       || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
       || "http://localhost:3000";
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120_000);
+
     const response = await fetch(`${baseUrl}/api/jarvis/rnd`, {
       method: "POST",
       headers: {
@@ -642,7 +645,10 @@ async function toolConsultRnd(
         question: input.question,
         context: input.context,
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     const data = await response.json();
     if (!response.ok) {

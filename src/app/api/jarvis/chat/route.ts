@@ -9,6 +9,8 @@ import {
 } from "@/lib/jarvis/tools";
 import type { JarvisMessage } from "@/lib/types";
 
+export const maxDuration = 120;
+
 const MAX_TOOL_ITERATIONS = 5;
 const MAX_CONVERSATION_MESSAGES = 30;
 

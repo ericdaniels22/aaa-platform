@@ -5,7 +5,10 @@ import { createServiceClient } from "@/lib/supabase-api";
 import * as fs from "fs";
 import * as path from "path";
 
+export const maxDuration = 120;
+
 const MAX_TOOL_ITERATIONS = 10;
+const CLAUDE_TIMEOUT_MS = 120_000;
 
 const RND_SYSTEM_PROMPT = `You are the Research & Development department for AAA Disaster Recovery's business platform.
 
@@ -27,7 +30,8 @@ RESPONSE RULES:
 - When diagnosing issues: provide what's happening, likely root cause, affected components, and proposed fix.
 - When generating build specs: format them as Claude Code-ready prompts with database schema if needed, component descriptions, API routes, and testing checklists. Match the style of the project's existing build patterns.
 - When researching technologies: evaluate license compatibility (prefer MIT/Apache), bundle size, maintenance activity, community adoption, and fit with the existing stack.
-- Stay within the tech stack unless there's strong justification to add something new.`;
+- Stay within the tech stack unless there's strong justification to add something new.
+- When generating build specs, deliver the response in stages. First give a brief summary of your research findings and recommended approach. Then provide the full build spec. This ensures the user sees something even if the response is very long.`;
 
 // R&D tool definitions for Claude API
 const rndToolDefinitions: Anthropic.Messages.Tool[] = [
@@ -468,13 +472,21 @@ export async function POST(request: NextRequest) {
       } as unknown as Anthropic.Messages.Tool,
     ];
 
-    let response = await anthropic.messages.create({
-      model: "claude-opus-4-6",
-      max_tokens: 4096,
-      system: RND_SYSTEM_PROMPT,
-      messages: claudeMessages,
-      tools: allTools,
-    });
+    let response: Anthropic.Messages.Message;
+    try {
+      response = await anthropic.messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 16384,
+        system: RND_SYSTEM_PROMPT,
+        messages: claudeMessages,
+        tools: allTools,
+      }, { timeout: CLAUDE_TIMEOUT_MS });
+    } catch (apiErr) {
+      const status = (apiErr as { status?: number }).status;
+      const msg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+      console.error(`R&D Claude API call failed [status=${status}]:`, msg);
+      throw apiErr;
+    }
 
     // Tool use loop
     let iterations = 0;
@@ -510,13 +522,20 @@ export async function POST(request: NextRequest) {
         claudeMessages.push({ role: "user", content: toolResults });
       }
 
-      response = await anthropic.messages.create({
-        model: "claude-opus-4-6",
-        max_tokens: 4096,
-        system: RND_SYSTEM_PROMPT,
-        messages: claudeMessages,
-        tools: allTools,
-      });
+      try {
+        response = await anthropic.messages.create({
+          model: "claude-opus-4-6",
+          max_tokens: 16384,
+          system: RND_SYSTEM_PROMPT,
+          messages: claudeMessages,
+          tools: allTools,
+        }, { timeout: CLAUDE_TIMEOUT_MS });
+      } catch (apiErr) {
+        const status = (apiErr as { status?: number }).status;
+        const msg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+        console.error(`R&D Claude API call failed on iteration ${iterations} [status=${status}]:`, msg);
+        throw apiErr;
+      }
     }
 
     // Extract final text
