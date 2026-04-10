@@ -67,7 +67,7 @@ CREATE POLICY "nav_items admin write"
 
 ### Migration file
 
-New file: `supabase/migration-build27-nav-order.sql`
+New file: `supabase/migration-build29-nav-order.sql`
 
 Contains the CREATE TABLE, trigger, seed INSERT, and two RLS policies above.
 
@@ -76,7 +76,7 @@ Contains the CREATE TABLE, trigger, seed INSERT, and two RLS policies above.
 ### Files touched
 
 ```
-NEW  supabase/migration-build27-nav-order.sql       # table + RLS + seed
+NEW  supabase/migration-build29-nav-order.sql       # table + RLS + seed
 NEW  src/lib/nav-items.ts                           # canonical navItems array (extracted)
 NEW  src/lib/nav-order-context.tsx                  # NavOrderProvider + useNavOrder()
 NEW  src/app/api/settings/nav-order/route.ts        # GET + PUT (admin-gated)

@@ -17,14 +17,15 @@
 ## Task 1: DB migration for `nav_items` table
 
 **Files:**
-- Create: `supabase/migration-build27-nav-order.sql`
+- Create: `supabase/migration-build29-nav-order.sql`
 
 - [ ] **Step 1: Create the migration file**
 
-Create `supabase/migration-build27-nav-order.sql` with this exact content:
+Create `supabase/migration-build29-nav-order.sql` with this exact content:
 
 ```sql
--- Build 27: nav_items table for admin-configurable sidebar order
+-- Build 29: nav_items table for admin-configurable sidebar order
+-- (Numbered 29 because Build 27 and 28 are occupied by email categories)
 --
 -- Stores only the href and sort_order for each top-level sidebar item.
 -- Labels, icons, and the canonical set of items live in src/lib/nav-items.ts.
@@ -74,7 +75,7 @@ CREATE POLICY "nav_items admin write"
 
 - [ ] **Step 2: Apply the migration to Supabase**
 
-Open the Supabase SQL editor for your project (from `.env.local` → `NEXT_PUBLIC_SUPABASE_URL`), paste the contents of `supabase/migration-build27-nav-order.sql`, and run it.
+Open the Supabase SQL editor for your project (from `.env.local` → `NEXT_PUBLIC_SUPABASE_URL`), paste the contents of `supabase/migration-build29-nav-order.sql`, and run it.
 
 Expected: success, no errors.
 
@@ -91,7 +92,7 @@ Expected output: 10 rows in the order `/`, `/jarvis`, `/marketing`, `/intake`, `
 - [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migration-build27-nav-order.sql
+git add supabase/migration-build29-nav-order.sql
 git commit -m "$(cat <<'EOF'
 feat(nav): add nav_items migration for configurable sidebar order
 

@@ -1,4 +1,5 @@
--- Build 27: nav_items table for admin-configurable sidebar order
+-- Build 29: nav_items table for admin-configurable sidebar order
+-- (Numbered 29 because Build 27 and 28 are occupied by email categories.)
 --
 -- Stores only the href and sort_order for each top-level sidebar item.
 -- Labels, icons, and the canonical set of items live in src/lib/nav-items.ts.
