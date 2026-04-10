@@ -301,7 +301,7 @@ export interface JarvisConversation {
   job_id: string | null;
   user_id: string | null;
   title: string | null;
-  context_type: "general" | "job" | "rnd" | "marketing";
+  context_type: "general" | "job" | "rnd" | "marketing" | "field-ops";
   messages: JarvisMessage[];
   is_active: boolean;
   created_at: string;
@@ -346,6 +346,35 @@ export interface MarketingDraft {
   updated_at: string;
   // Joined
   image?: MarketingAsset;
+}
+
+// Knowledge Base (RAG)
+export interface KnowledgeDocument {
+  id: string;
+  name: string;
+  file_name: string;
+  standard_id: string;
+  description: string | null;
+  chunk_count: number;
+  status: "processing" | "ready" | "error";
+  file_path: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeChunk {
+  id: string;
+  document_id: string;
+  content: string;
+  section_number: string | null;
+  section_title: string | null;
+  page_number: number | null;
+  chunk_index: number;
+  token_count: number;
+  created_at: string;
+  // Joined / computed
+  similarity?: number;
+  document?: KnowledgeDocument;
 }
 
 export interface CompanySettings {

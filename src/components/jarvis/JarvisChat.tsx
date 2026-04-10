@@ -12,7 +12,7 @@ import JarvisWelcome from "./JarvisWelcome";
 import type { BrainState } from "./neural-network/useNetworkAnimation";
 
 export interface JarvisChatProps {
-  contextType: "general" | "job" | "rnd" | "marketing";
+  contextType: "general" | "job" | "rnd" | "marketing" | "field-ops";
   jobId?: string;
   jobContext?: {
     customerName: string;
@@ -22,7 +22,7 @@ export interface JarvisChatProps {
   };
   conversationId?: string | null;
   onConversationCreated?: (id: string) => void;
-  directDepartment?: "rnd" | "marketing";
+  directDepartment?: "rnd" | "marketing" | "field-ops";
 }
 
 export default function JarvisChat({
@@ -314,10 +314,11 @@ export default function JarvisChat({
       {/* Quick actions */}
       {showQuickActions && !showWelcome && (
         <JarvisQuickActions
-          contextType={contextType as "general" | "job" | "rnd" | "marketing"}
+          contextType={contextType as "general" | "job" | "rnd" | "marketing" | "field-ops"}
           onSelect={handleQuickAction}
           fillMode={isMarketing}
           onFill={handleInputFill}
+          damageType={jobContext?.damageType}
         />
       )}
 

@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       job_id?: string;
       message: string;
       conversation_id?: string;
-      direct_department?: "rnd" | "marketing";
+      direct_department?: "rnd" | "marketing" | "field-ops";
     } = body;
 
     if (!message || !context_type) {
@@ -184,27 +184,54 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // Detect @rnd or @marketing prefix or direct_department routing
+    // Detect @rnd, @marketing, or @fieldops prefix or direct_department routing
     const isRndDirect =
       direct_department === "rnd" || message.trim().toLowerCase().startsWith("@rnd");
     const isMarketingDirect =
       direct_department === "marketing" || message.trim().toLowerCase().startsWith("@marketing");
+    const isFieldOpsDirect =
+      direct_department === "field-ops" || message.trim().toLowerCase().startsWith("@fieldops");
+
+    // Auto-route to field-ops: restoration terms + job context
+    const FIELD_OPS_TERMS = /\b(water damage|drying|moisture|dehumidifier|air mover|containment|PPE|mold|remediation|category [123]|class [1234]|fire damage|smoke|soot|char|hvac restoration|antimicrobial|iicrc|water category|water class|drying goal|equipment placement|mold condition|clearance testing)\b/i;
+    const isFieldOpsAuto =
+      !isRndDirect &&
+      !isMarketingDirect &&
+      !isFieldOpsDirect &&
+      context_type === "job" &&
+      FIELD_OPS_TERMS.test(message);
+
     const cleanMessage = message
       .trim()
       .replace(/^@rnd\s*/i, "")
-      .replace(/^@marketing\s*/i, "");
+      .replace(/^@marketing\s*/i, "")
+      .replace(/^@fieldops\s*/i, "");
 
     // If direct department routing, call department then wrap through Jarvis personality
     let assistantContent: string;
     let routedTo: string | null = null;
 
-    if (isRndDirect || isMarketingDirect) {
+    if (isRndDirect || isMarketingDirect || isFieldOpsDirect || isFieldOpsAuto) {
       const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
         || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
         || "http://localhost:3000";
 
-      const departmentEndpoint = isRndDirect ? "rnd" : "marketing";
+      const departmentEndpoint = isFieldOpsDirect || isFieldOpsAuto
+        ? "field-ops"
+        : isRndDirect
+          ? "rnd"
+          : "marketing";
       routedTo = departmentEndpoint;
+
+      const deptBody: Record<string, unknown> = {
+        question: cleanMessage,
+      };
+      if (context_type === "job" && jobData) {
+        deptBody.context = `Job context: ${jobData.customerName} at ${jobData.address}, ${jobData.damageType} damage, status: ${jobData.status}`;
+      }
+      if (departmentEndpoint === "field-ops" && job_id) {
+        deptBody.job_id = job_id;
+      }
 
       const deptResponse = await fetch(`${baseUrl}/api/jarvis/${departmentEndpoint}`, {
         method: "POST",
@@ -212,20 +239,20 @@ export async function POST(request: NextRequest) {
           "Content-Type": "application/json",
           "x-service-key": process.env.SUPABASE_SERVICE_ROLE_KEY || "",
         },
-        body: JSON.stringify({
-          question: cleanMessage,
-          context: context_type === "job" && jobData
-            ? `Job context: ${jobData.customerName} at ${jobData.address}, ${jobData.damageType} damage, status: ${jobData.status}`
-            : undefined,
-        }),
+        body: JSON.stringify(deptBody),
       });
 
       const deptData = await deptResponse.json();
-      const deptContent = deptData.content || `${isRndDirect ? "R&D" : "Marketing"} wasn't able to process that one. Try rephrasing.`;
+      const deptLabels: Record<string, string> = {
+        rnd: "R&D",
+        marketing: "Marketing",
+        "field-ops": "Field Operations",
+      };
+      const deptLabel = deptLabels[departmentEndpoint] || departmentEndpoint;
+      const deptContent = deptData.content || `${deptLabel} wasn't able to process that one. Try rephrasing.`;
 
       // Light Jarvis personality pass on the department response
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-      const deptLabel = isRndDirect ? "R&D" : "Marketing";
 
       const personalityResponse = await anthropic.messages.create({
         model: "claude-sonnet-4-20250514",

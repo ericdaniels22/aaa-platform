@@ -63,14 +63,17 @@ function AgentNode({
   const isHub = index === 0;
   const isRnd = node.agent.id === "rnd";
   const isMarketing = node.agent.id === "marketing";
+  const isFieldOps = node.agent.id === "field-ops";
   const isRouted = animState.activeAgent === node.agent.id;
   const baseColor = isRnd
     ? isDarkMode ? "#7C3AED" : "#6D28D9"
     : isMarketing
       ? isDarkMode ? "#0D9488" : "#0F766E"
-      : isActive
-        ? isDarkMode ? "#0F6E56" : "#0A5A46"
-        : isDarkMode ? "#2A4A40" : "#3A5A50";
+      : isFieldOps
+        ? isDarkMode ? "#EA580C" : "#C2410C"
+        : isActive
+          ? isDarkMode ? "#0F6E56" : "#0A5A46"
+          : isDarkMode ? "#2A4A40" : "#3A5A50";
 
   useFrame((state) => {
     if (reducedMotion || !materialRef.current || !meshRef.current) return;
@@ -127,7 +130,7 @@ function AgentNode({
       </mesh>
       <Html position={[0, node.radius + 0.3, 0]} center distanceFactor={8}>
         <span className={`text-xs font-medium pointer-events-none select-none whitespace-nowrap ${
-          isRnd ? "text-violet-400" : isMarketing ? "text-teal-400" : isActive ? "text-emerald-400" : "text-teal-700"
+          isRnd ? "text-violet-400" : isMarketing ? "text-teal-400" : isFieldOps ? "text-orange-400" : isActive ? "text-emerald-400" : "text-teal-700"
         }`}>
           {node.agent.shortName}
         </span>

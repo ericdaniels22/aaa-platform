@@ -6,10 +6,11 @@ interface QuickAction {
 }
 
 interface JarvisQuickActionsProps {
-  contextType: "general" | "job" | "rnd" | "marketing";
+  contextType: "general" | "job" | "rnd" | "marketing" | "field-ops";
   onSelect: (text: string) => void;
   fillMode?: boolean;
   onFill?: (text: string) => void;
+  damageType?: string;
 }
 
 const generalActions: string[] = [
@@ -48,7 +49,40 @@ const marketingActions: QuickAction[] = [
   { label: "Content Calendar", prompt: "Create a 4-week content calendar for " },
 ];
 
-export default function JarvisQuickActions({ contextType, onSelect, fillMode, onFill }: JarvisQuickActionsProps) {
+// Field Ops quick actions by damage type
+const waterDamageActions: string[] = [
+  "What category is this water?",
+  "PPE requirements for this job",
+  "Equipment placement for this room",
+  "What materials need removal?",
+  "Is drying on track?",
+];
+
+const moldActions: string[] = [
+  "What condition level is this mold?",
+  "Containment requirements",
+  "PPE for mold remediation",
+  "Do we need an IEP?",
+  "Clearance testing requirements",
+];
+
+const fireActions: string[] = [
+  "Damage assessment classification",
+  "PPE for fire/smoke restoration",
+  "Source removal priorities",
+  "Smoke odor management approach",
+  "Contents salvageability?",
+];
+
+function getFieldOpsActions(damageType?: string): string[] {
+  if (!damageType) return waterDamageActions;
+  const dt = damageType.toLowerCase();
+  if (dt.includes("mold")) return moldActions;
+  if (dt.includes("fire") || dt.includes("smoke")) return fireActions;
+  return waterDamageActions;
+}
+
+export default function JarvisQuickActions({ contextType, onSelect, fillMode, onFill, damageType }: JarvisQuickActionsProps) {
   if (contextType === "marketing") {
     return (
       <div className="flex flex-wrap justify-center gap-2 px-4 pb-2">
@@ -59,6 +93,24 @@ export default function JarvisQuickActions({ contextType, onSelect, fillMode, on
             className="px-3.5 py-1.5 rounded-full border text-sm transition-colors border-teal-500/30 bg-teal-500/5 text-teal-300 hover:border-teal-400/50 hover:bg-teal-500/10 hover:text-teal-200"
           >
             {action.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  // Field Ops tab or job context with damage type → show field ops actions
+  if (contextType === "field-ops" || (contextType === "job" && damageType)) {
+    const fieldOpsActions = getFieldOpsActions(damageType);
+    return (
+      <div className="flex flex-wrap justify-center gap-2 px-4 pb-2">
+        {fieldOpsActions.map((action) => (
+          <button
+            key={action}
+            onClick={() => onSelect(action)}
+            className="px-3.5 py-1.5 rounded-full border text-sm transition-colors border-orange-500/30 bg-orange-500/5 text-orange-300 hover:border-orange-400/50 hover:bg-orange-500/10 hover:text-orange-200"
+          >
+            {action}
           </button>
         ))}
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, FlaskConical, Megaphone } from "lucide-react";
+import { Sparkles, FlaskConical, Megaphone, HardHat } from "lucide-react";
 import JarvisQuickActions from "./JarvisQuickActions";
 import NeuralNetwork3D from "./NeuralNetwork3D";
 import type { AgentConfig } from "@/lib/jarvis/agent-registry";
@@ -9,6 +9,7 @@ import type { BrainState } from "./neural-network/useNetworkAnimation";
 import { JARVIS_CORE_STATIC_PROMPT } from "@/lib/jarvis/prompts/jarvis-core";
 import { RND_SYSTEM_PROMPT } from "@/lib/jarvis/prompts/rnd";
 import { MARKETING_SYSTEM_PROMPT } from "@/lib/jarvis/prompts/marketing";
+import { FIELD_OPS_SYSTEM_PROMPT } from "@/lib/jarvis/prompts/field-ops";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
@@ -18,10 +19,11 @@ const PROMPT_MAP: Record<string, string> = {
   "jarvis-core": JARVIS_CORE_STATIC_PROMPT,
   "rnd": RND_SYSTEM_PROMPT,
   "marketing": MARKETING_SYSTEM_PROMPT,
+  "field-ops": FIELD_OPS_SYSTEM_PROMPT,
 };
 
 interface JarvisWelcomeProps {
-  contextType: "general" | "job" | "rnd" | "marketing";
+  contextType: "general" | "job" | "rnd" | "marketing" | "field-ops";
   jobContext?: { customerName: string; address: string };
   onQuickAction: (text: string) => void;
   onInputFill?: (text: string) => void;
@@ -49,6 +51,22 @@ export default function JarvisWelcome({ contextType, jobContext, onQuickAction, 
           I create marketing content for AAA Disaster Recovery — Google Ads, blog posts, social media, review responses, and more. What do you need?
         </p>
         <JarvisQuickActions contextType="marketing" onSelect={onQuickAction} fillMode onFill={onInputFill} />
+      </div>
+    );
+  }
+
+  if (contextType === "field-ops") {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-600 to-amber-700 flex items-center justify-center mb-5">
+          <HardHat size={32} className="text-white" />
+        </div>
+        <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-400 mb-2">Field Operations</h2>
+        <p className="text-base text-muted-foreground mb-1">IICRC standards-backed restoration guidance</p>
+        <p className="text-sm text-muted-foreground/60 max-w-md mb-8">
+          I provide water damage, mold remediation, and fire/smoke restoration guidance backed by IICRC S500, S520, and S700 standards. Ask me about categories, PPE, equipment, drying, or any field question.
+        </p>
+        <JarvisQuickActions contextType="field-ops" onSelect={onQuickAction} />
       </div>
     );
   }

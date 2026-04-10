@@ -10,6 +10,7 @@ import {
   Bell,
   FileText,
   Download,
+  BookOpen,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
@@ -32,4 +33,5 @@ export const settingsNavItems: SettingsNavItem[] = [
   { href: "/settings/notifications", label: "Notifications", icon: Bell },
   { href: "/settings/reports", label: "Reports", icon: FileText },
   { href: "/settings/export", label: "Data Export", icon: Download },
+  { href: "/settings/knowledge", label: "Knowledge Base", icon: BookOpen },
 ];
