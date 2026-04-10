@@ -18,6 +18,7 @@ import {
   MailCheck,
   ChevronDown,
   Settings,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Email, EmailAccount } from "@/lib/types";
@@ -120,6 +121,65 @@ export default function EmailInbox() {
   function clearSelection() {
     setSelectedIds(new Set());
   }
+
+  // Bulk actions
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [jobPickerOpen, setJobPickerOpen] = useState(false);
+  const [jobSearch, setJobSearch] = useState("");
+  const [jobResults, setJobResults] = useState<{ id: string; job_number: string; property_address: string }[]>([]);
+  const jobPickerRef = useRef<HTMLDivElement>(null);
+
+  async function executeBulkAction(action: string, jobId?: string) {
+    if (selectedIds.size === 0) return;
+    setBulkLoading(true);
+    try {
+      const res = await fetch("/api/email/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds), action, jobId }),
+      });
+      if (!res.ok) throw new Error("Bulk action failed");
+      const data = await res.json();
+      toast.success(`Updated ${data.updated} email${data.updated !== 1 ? "s" : ""}`);
+      clearSelection();
+      loadEmails();
+      loadCounts();
+    } catch {
+      toast.error("Bulk action failed");
+    }
+    setBulkLoading(false);
+    setJobPickerOpen(false);
+  }
+
+  // Debounced job search for picker
+  useEffect(() => {
+    if (!jobPickerOpen || jobSearch.length < 1) {
+      setJobResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/jobs/search?q=${encodeURIComponent(jobSearch)}&limit=8`);
+        const data = await res.json();
+        setJobResults(data.jobs || []);
+      } catch {
+        setJobResults([]);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [jobSearch, jobPickerOpen]);
+
+  // Close job picker on outside click
+  useEffect(() => {
+    if (!jobPickerOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (jobPickerRef.current && !jobPickerRef.current.contains(e.target as Node)) {
+        setJobPickerOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [jobPickerOpen]);
 
   // Clear selection when navigating
   useEffect(() => {
@@ -517,40 +577,137 @@ export default function EmailInbox() {
             selectedEmailId ? "hidden lg:flex" : "flex"
           }`}
         >
-          {/* List header */}
+          {/* List header / Bulk action bar */}
           <div className="px-4 py-2 border-b border-border/50 text-xs text-muted-foreground/60 flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={emails.length > 0 && selectedIds.size === emails.length}
-                onChange={toggleSelectAll}
-                className="rounded border-border accent-primary"
-              />
-              {total} email{total !== 1 ? "s" : ""}
-              {folder !== "starred" && counts[folder]?.unread
-                ? ` (${counts[folder].unread} unread)`
-                : ""}
-            </span>
-            <div className="flex items-center gap-2">
-              {counts[folder]?.unread > 0 && (
-                <button
-                  onClick={handleMarkAllRead}
-                  className="flex items-center gap-1 text-primary hover:underline"
-                  title="Mark all as read"
-                >
-                  <MailCheck size={12} />
-                  Mark all read
-                </button>
-              )}
-            {hasMore && (
-              <button
-                onClick={() => setPage((p) => p + 1)}
-                className="text-primary hover:underline"
-              >
-                Load more
-              </button>
+            {selectedIds.size > 0 ? (
+              <>
+                <span className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.size === emails.length}
+                    onChange={toggleSelectAll}
+                    className="rounded border-border accent-primary"
+                  />
+                  <span className="font-medium text-foreground">
+                    {selectedIds.size} selected
+                  </span>
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => {
+                      const allRead = emails
+                        .filter((e) => selectedIds.has(e.id))
+                        .every((e) => e.is_read);
+                      executeBulkAction(allRead ? "mark_unread" : "mark_read");
+                    }}
+                    disabled={bulkLoading}
+                    className="px-2 py-1 rounded hover:bg-accent disabled:opacity-50"
+                    title="Toggle read/unread"
+                  >
+                    <MailCheck size={14} />
+                  </button>
+                  <button
+                    onClick={() => executeBulkAction("archive")}
+                    disabled={bulkLoading}
+                    className="px-2 py-1 rounded hover:bg-accent disabled:opacity-50"
+                    title="Archive"
+                  >
+                    <Archive size={14} />
+                  </button>
+                  <button
+                    onClick={() => executeBulkAction("trash")}
+                    disabled={bulkLoading}
+                    className="px-2 py-1 rounded hover:bg-accent disabled:opacity-50"
+                    title="Delete"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                  <div className="relative" ref={jobPickerRef}>
+                    <button
+                      onClick={() => {
+                        setJobPickerOpen(!jobPickerOpen);
+                        setJobSearch("");
+                        setJobResults([]);
+                      }}
+                      disabled={bulkLoading}
+                      className="px-2 py-1 rounded hover:bg-accent disabled:opacity-50"
+                      title="Assign to job"
+                    >
+                      <Briefcase size={14} />
+                    </button>
+                    {jobPickerOpen && (
+                      <div className="absolute right-0 top-full mt-1 w-72 bg-card border border-border rounded-lg shadow-lg z-50 p-2">
+                        <input
+                          type="text"
+                          placeholder="Search jobs..."
+                          value={jobSearch}
+                          onChange={(e) => setJobSearch(e.target.value)}
+                          autoFocus
+                          className="w-full px-2 py-1.5 text-sm border border-border rounded mb-1 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        />
+                        <div className="max-h-48 overflow-y-auto">
+                          {jobResults.length === 0 && jobSearch.length > 0 && (
+                            <p className="text-xs text-muted-foreground/60 px-2 py-2">No jobs found</p>
+                          )}
+                          {jobResults.map((job) => (
+                            <button
+                              key={job.id}
+                              onClick={() => executeBulkAction("assign_job", job.id)}
+                              className="w-full text-left px-2 py-1.5 text-sm hover:bg-accent rounded flex items-center gap-2"
+                            >
+                              <span className="font-medium text-primary">{job.job_number}</span>
+                              <span className="truncate text-muted-foreground">{job.property_address}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={clearSelection}
+                    className="px-2 py-1 rounded hover:bg-accent ml-1"
+                    title="Clear selection"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={emails.length > 0 && selectedIds.size === emails.length}
+                    onChange={toggleSelectAll}
+                    className="rounded border-border accent-primary"
+                  />
+                  {total} email{total !== 1 ? "s" : ""}
+                  {folder !== "starred" && counts[folder]?.unread
+                    ? ` (${counts[folder].unread} unread)`
+                    : ""}
+                </span>
+                <div className="flex items-center gap-2">
+                  {counts[folder]?.unread > 0 && (
+                    <button
+                      onClick={handleMarkAllRead}
+                      className="flex items-center gap-1 text-primary hover:underline"
+                      title="Mark all as read"
+                    >
+                      <MailCheck size={12} />
+                      Mark all read
+                    </button>
+                  )}
+                  {hasMore && (
+                    <button
+                      onClick={() => setPage((p) => p + 1)}
+                      className="text-primary hover:underline"
+                    >
+                      Load more
+                    </button>
+                  )}
+                </div>
+              </>
             )}
-            </div>
           </div>
 
           {/* Email rows */}
