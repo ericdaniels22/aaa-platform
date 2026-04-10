@@ -9,11 +9,23 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import NotificationBell from "@/components/notification-bell";
 import { navItems } from "@/lib/nav-items";
+import { useNavOrder } from "@/lib/nav-order-context";
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { profile, signOut } = useAuth();
+  const { order } = useNavOrder();
+
+  // Sort the canonical nav items by DB sort_order.
+  // Items missing from the DB fall to the bottom in code-defined order.
+  const sortedNavItems = [...navItems].sort((a, b) => {
+    const aOrder = order.get(a.href) ?? Infinity;
+    const bOrder = order.get(b.href) ?? Infinity;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return navItems.indexOf(a) - navItems.indexOf(b);
+  });
+
   const [mobileOpen, setMobileOpen] = useState(false);
 
   async function handleSignOut() {
@@ -72,7 +84,7 @@ export default function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {navItems.map((item) => {
+          {sortedNavItems.map((item) => {
             const isActive =
               item.href === "/"
                 ? pathname === "/"
