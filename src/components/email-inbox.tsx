@@ -270,6 +270,24 @@ export default function EmailInbox() {
     loadCounts();
   }, [loadCounts]);
 
+  // Auto-sync on mount (debounced: skip if synced < 60s ago)
+  const hasAutoSynced = useRef(false);
+  useEffect(() => {
+    if (hasAutoSynced.current || accounts.length === 0) return;
+    hasAutoSynced.current = true;
+
+    // Check if any account was synced recently
+    const now = Date.now();
+    const recentlySynced = accounts.some((acc) => {
+      if (!acc.last_synced_at) return false;
+      return now - new Date(acc.last_synced_at).getTime() < 60_000;
+    });
+
+    if (!recentlySynced) {
+      handleSync();
+    }
+  }, [accounts]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Sync all accounts
   async function handleSync() {
     if (syncing) return;
