@@ -69,18 +69,30 @@ export default function EmailInbox() {
     purchases: 0,
   });
 
-  // Resizable pane widths
-  const [listWidth, setListWidth] = useState(() => {
-    if (typeof window === "undefined") return 384;
+  // Resizable pane widths. Initialize with the default on both server and
+  // client to avoid hydration mismatch, then hydrate from localStorage in
+  // an effect after mount.
+  const [listWidth, setListWidth] = useState(384);
+  const listWidthHydrated = useRef(false);
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem("email-pane-widths");
-      if (saved) return JSON.parse(saved).list ?? 384;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.list === "number") {
+          setListWidth(parsed.list);
+        }
+      }
     } catch {}
-    return 384;
-  });
+    listWidthHydrated.current = true;
+  }, []);
 
-  // Persist list width to localStorage
+  // Persist list width to localStorage (skip the initial render before
+  // we've hydrated from localStorage, to avoid writing the default over
+  // the saved value).
   useEffect(() => {
+    if (!listWidthHydrated.current) return;
     try {
       localStorage.setItem(
         "email-pane-widths",
