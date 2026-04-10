@@ -94,12 +94,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const isFirstSync = !account.last_synced_uid || account.last_synced_uid === 0;
-
   let client: ImapFlow | null = null;
   let totalSynced = 0;
   let totalMatched = 0;
-  let highestUid = account.last_synced_uid || 0;
   const errors: string[] = [];
 
   try {
@@ -170,28 +167,22 @@ export async function POST(request: NextRequest) {
           .eq("folder", folder);
         const knownMessageIds = new Set((knownEmails || []).map((e: { message_id: string }) => e.message_id));
 
-        // Determine fetch range
-        let range: string;
-        if (isFirstSync) {
-          // First sync: last 30 days via SEARCH, or last N messages by sequence
-          const totalMessages = mailbox.exists || 0;
-          if (totalMessages === 0) {
-            await client.mailboxClose();
-            continue;
-          }
-          const startSeq = Math.max(1, totalMessages - maxPerFolder + 1);
-          range = `${startSeq}:*`;
-        } else {
-          // Incremental: fetch by UID > last synced
-          range = `${highestUid + 1}:*`;
+        // Always fetch last N messages by sequence number and rely on
+        // batch dedup to skip known messages. This avoids the cross-folder
+        // UID bug (UIDs are per-mailbox, not global).
+        const totalMessages = mailbox.exists || 0;
+        if (totalMessages === 0) {
+          await client.mailboxClose();
+          continue;
         }
+        const startSeq = Math.max(1, totalMessages - maxPerFolder + 1);
+        const range = `${startSeq}:*`;
 
         const messages: FetchMessageObject[] = [];
         try {
           for await (const msg of client.fetch(
             range,
-            { uid: true, envelope: true, source: true, bodyStructure: true },
-            { uid: !isFirstSync }
+            { uid: true, envelope: true, source: true, bodyStructure: true }
           )) {
             messages.push(msg);
             if (messages.length >= maxPerFolder) break;
@@ -206,8 +197,6 @@ export async function POST(request: NextRequest) {
         for (const msg of messages) {
           try {
             const uid = msg.uid;
-            if (uid > highestUid) highestUid = uid;
-
             const messageId = msg.envelope?.messageId || "uid-" + uid + "-" + folderPath;
 
             // In-memory dedup check
@@ -365,7 +354,6 @@ export async function POST(request: NextRequest) {
     await supabase
       .from("email_accounts")
       .update({
-        last_synced_uid: highestUid > (account.last_synced_uid || 0) ? highestUid : account.last_synced_uid,
         last_synced_at: new Date().toISOString(),
       })
       .eq("id", accountId);
