@@ -1,7 +1,7 @@
 export type Category = "general" | "promotions" | "social" | "purchases";
 
 export interface CategoryRule {
-  match_type: "sender_address" | "sender_domain" | "header" | "subject_pattern";
+  match_type: "sender_address" | "sender_domain" | "header" | "body_pattern" | "subject_pattern";
   match_value: string;
   category: Category;
 }
@@ -10,6 +10,7 @@ export interface EmailForCategorization {
   from_address: string;
   subject: string;
   headers?: Record<string, string>;
+  body_text?: string | null;
 }
 
 /**
@@ -18,7 +19,8 @@ export interface EmailForCategorization {
  *   1. sender_address (exact, case-insensitive)
  *   2. sender_domain (suffix match on domain portion of from_address)
  *   3. header (case-insensitive presence of the named header)
- *   4. subject_pattern (case-insensitive regex match against subject)
+ *   4. body_pattern (case-insensitive regex match against body_text)
+ *   5. subject_pattern (case-insensitive regex match against subject)
  * Fallback: "general".
  */
 export function categorizeEmail(
@@ -28,6 +30,7 @@ export function categorizeEmail(
   const fromLower = email.from_address.toLowerCase();
   const subject = email.subject || "";
   const headers = email.headers || {};
+  const bodyText = email.body_text || "";
 
   // Extract domain from "name@domain.tld" — take everything after the last "@"
   const atIdx = fromLower.lastIndexOf("@");
@@ -62,7 +65,23 @@ export function categorizeEmail(
     }
   }
 
-  // 4. subject_pattern regex
+  // 4. body_pattern regex
+  if (bodyText) {
+    for (const rule of rules) {
+      if (rule.match_type === "body_pattern") {
+        try {
+          const re = new RegExp(rule.match_value, "i");
+          if (re.test(bodyText)) {
+            return rule.category;
+          }
+        } catch {
+          // Invalid regex in DB — skip
+        }
+      }
+    }
+  }
+
+  // 5. subject_pattern regex
   for (const rule of rules) {
     if (rule.match_type === "subject_pattern") {
       try {
