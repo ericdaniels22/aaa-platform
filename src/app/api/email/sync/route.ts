@@ -4,6 +4,7 @@ import { decrypt } from "@/lib/encryption";
 import { ImapFlow, FetchMessageObject } from "imapflow";
 import { matchEmailToJob, type MatcherCache, type JobRow, type ContactRow } from "@/lib/email-matcher";
 import { simpleParser, Attachment } from "mailparser";
+import { categorizeEmail, type CategoryRule, type Category } from "@/lib/email-categorizer";
 
 interface ParsedEmail {
   uid: number;
@@ -20,6 +21,7 @@ interface ParsedEmail {
   hasAttachments: boolean;
   receivedAt: Date;
   parsedAttachments: Attachment[];
+  headers: Record<string, string>;
 }
 
 // Map IMAP folder names to our normalized folder enum
@@ -137,6 +139,13 @@ export async function POST(request: NextRequest) {
 
     const matcherCache: MatcherCache = { jobs, contacts };
 
+    // Pre-fetch category rules (once for entire sync)
+    const { data: rulesData } = await supabase
+      .from("category_rules")
+      .select("match_type, match_value, category")
+      .eq("is_active", true);
+    const categoryRules = (rulesData || []) as CategoryRule[];
+
     // Discover available folders
     const folders = await client.list();
     const folderPaths = folders.map((f) => f.path);
@@ -207,12 +216,19 @@ export async function POST(request: NextRequest) {
             let hasAttachments = false;
             let msgAttachments: Attachment[] = [];
 
+            const msgHeaders: Record<string, string> = {};
             if (msg.source) {
               const parsedMsg = await simpleParser(msg.source);
               bodyText = parsedMsg.text || "";
               bodyHtml = typeof parsedMsg.html === "string" ? parsedMsg.html : "";
               msgAttachments = parsedMsg.attachments || [];
               hasAttachments = msgAttachments.length > 0;
+              // Flatten mailparser headers Map to a lowercased plain object
+              if (parsedMsg.headers) {
+                for (const [key, value] of parsedMsg.headers) {
+                  msgHeaders[key.toLowerCase()] = String(value);
+                }
+              }
             }
 
             if (!hasAttachments && msg.bodyStructure) {
@@ -258,6 +274,7 @@ export async function POST(request: NextRequest) {
               hasAttachments,
               receivedAt: date,
               parsedAttachments: msgAttachments,
+              headers: msgHeaders,
             });
           } catch (msgErr) {
             errors.push(folderPath + ": " + (msgErr instanceof Error ? msgErr.message : "unknown"));
@@ -271,6 +288,11 @@ export async function POST(request: NextRequest) {
               matcherCache,
               { from_address: p.fromAddr, to_addresses: p.toAddresses, subject: p.subject, body_text: p.bodyText },
               account.email_address
+            );
+
+            const category = categorizeEmail(
+              { from_address: p.fromAddr, subject: p.subject, headers: p.headers },
+              categoryRules
             );
 
             return {
@@ -294,6 +316,7 @@ export async function POST(request: NextRequest) {
               matched_by: match?.matched_by || null,
               uid: p.uid,
               received_at: p.receivedAt,
+              category,
             };
           });
 
