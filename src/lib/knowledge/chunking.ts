@@ -203,7 +203,9 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<string> {
   // Write buffer to temp file, run extraction in a child process
   // to avoid Next.js Turbopack bundling issues with pdfjs
   const tmpPath = join(os.tmpdir(), `pdf-extract-${Date.now()}.pdf`);
-  const scriptPath = join(process.cwd(), "src", "lib", "knowledge", "extract-pdf.cjs");
+  // Build path without path.join so Turbopack NFT won't trace it as a module
+  const sep = (await import("path")).sep;
+  const scriptPath = [process.cwd(), "src", "lib", "knowledge", "extract-pdf.cjs"].join(sep);
 
   try {
     writeFileSync(tmpPath, buffer);
