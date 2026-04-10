@@ -1,17 +1,35 @@
 "use client";
 
-import { useState, useRef, useCallback, type KeyboardEvent } from "react";
+import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from "react";
 import { ArrowUp } from "lucide-react";
 
 interface JarvisInputProps {
   onSend: (message: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  fillValue?: string;
+  onFillConsumed?: () => void;
 }
 
-export default function JarvisInput({ onSend, disabled, placeholder }: JarvisInputProps) {
+export default function JarvisInput({ onSend, disabled, placeholder, fillValue, onFillConsumed }: JarvisInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Handle fill from quick action buttons
+  useEffect(() => {
+    if (fillValue) {
+      setValue(fillValue);
+      onFillConsumed?.();
+      // Focus and place cursor at end
+      requestAnimationFrame(() => {
+        const ta = textareaRef.current;
+        if (ta) {
+          ta.focus();
+          ta.selectionStart = ta.selectionEnd = fillValue.length;
+        }
+      });
+    }
+  }, [fillValue, onFillConsumed]);
 
   const adjustHeight = useCallback(() => {
     const ta = textareaRef.current;

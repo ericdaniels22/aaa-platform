@@ -6,10 +6,10 @@ import { useAuth } from "@/lib/auth-context";
 import type { JarvisConversation } from "@/lib/types";
 import JarvisChat from "@/components/jarvis/JarvisChat";
 import JarvisConversationList from "@/components/jarvis/JarvisConversationList";
-import { Sparkles, FlaskConical, PanelRightClose, PanelRight } from "lucide-react";
+import { Sparkles, FlaskConical, Megaphone, PanelRightClose, PanelRight } from "lucide-react";
 import { toast } from "sonner";
 
-type JarvisMode = "jarvis" | "rnd";
+type JarvisMode = "jarvis" | "rnd" | "marketing";
 
 export default function JarvisPage() {
   const { user, profile } = useAuth();
@@ -25,11 +25,11 @@ export default function JarvisPage() {
     if (!user) return;
     const supabase = createClient();
 
-    // Fetch both general and rnd conversations
+    // Fetch general, rnd, and marketing conversations
     let query = supabase
       .from("jarvis_conversations")
       .select("*")
-      .in("context_type", ["general", "rnd"])
+      .in("context_type", ["general", "rnd", "marketing"])
       .order("updated_at", { ascending: false });
 
     if (!isAdmin) {
@@ -56,6 +56,8 @@ export default function JarvisPage() {
     const conv = conversations.find((c) => c.id === id);
     if (conv?.context_type === "rnd") {
       setMode("rnd");
+    } else if (conv?.context_type === "marketing") {
+      setMode("marketing");
     } else {
       setMode("jarvis");
     }
@@ -91,16 +93,19 @@ export default function JarvisPage() {
   }
 
   const isRnd = mode === "rnd";
+  const isMarketing = mode === "marketing";
 
   return (
     <div className="h-[calc(100vh-3.5rem)] lg:h-screen flex -m-6 lg:-m-8">
       {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0 bg-background">
         {/* Header */}
-        <div className={`flex items-center justify-between px-4 py-3 border-b ${isRnd ? "border-violet-500/20" : "border-border"}`}>
+        <div className={`flex items-center justify-between px-4 py-3 border-b ${isRnd ? "border-violet-500/20" : isMarketing ? "border-teal-500/20" : "border-border"}`}>
           <div className="flex items-center gap-2">
             {isRnd ? (
               <FlaskConical size={20} className="text-violet-400" />
+            ) : isMarketing ? (
+              <Megaphone size={20} className="text-teal-400" />
             ) : (
               <Sparkles size={20} className="text-primary" />
             )}
@@ -109,8 +114,11 @@ export default function JarvisPage() {
               {isRnd && (
                 <span className="text-violet-400 font-normal"> &gt; R&D</span>
               )}
+              {isMarketing && (
+                <span className="text-teal-400 font-normal"> &gt; Marketing</span>
+              )}
             </h1>
-            <span className={`w-2 h-2 rounded-full ${isRnd ? "bg-violet-400" : "bg-emerald-500"}`} title="Connected" />
+            <span className={`w-2 h-2 rounded-full ${isRnd ? "bg-violet-400" : isMarketing ? "bg-teal-400" : "bg-emerald-500"}`} title="Connected" />
           </div>
 
           <div className="flex items-center gap-2">
@@ -120,7 +128,7 @@ export default function JarvisPage() {
                 <button
                   onClick={() => handleModeToggle("jarvis")}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                    !isRnd
+                    mode === "jarvis"
                       ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
@@ -138,6 +146,17 @@ export default function JarvisPage() {
                 >
                   <FlaskConical size={12} />
                   R&D
+                </button>
+                <button
+                  onClick={() => handleModeToggle("marketing")}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                    isMarketing
+                      ? "bg-teal-500/20 text-teal-300 shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Megaphone size={12} />
+                  Marketing
                 </button>
               </div>
             )}
@@ -167,10 +186,10 @@ export default function JarvisPage() {
           ) : (
             <JarvisChat
               key={`${mode}-${activeConversationId || "new"}`}
-              contextType={isRnd ? "rnd" : "general"}
+              contextType={isRnd ? "rnd" : isMarketing ? "marketing" : "general"}
               conversationId={activeConversationId}
               onConversationCreated={handleConversationCreated}
-              directDepartment={isRnd ? "rnd" : undefined}
+              directDepartment={isRnd ? "rnd" : isMarketing ? "marketing" : undefined}
             />
           )}
         </div>

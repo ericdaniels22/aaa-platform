@@ -301,7 +301,7 @@ export interface JarvisConversation {
   job_id: string | null;
   user_id: string | null;
   title: string | null;
-  context_type: "general" | "job" | "rnd";
+  context_type: "general" | "job" | "rnd" | "marketing";
   messages: JarvisMessage[];
   is_active: boolean;
   created_at: string;
@@ -318,6 +318,34 @@ export interface JarvisAlert {
   due_date: string;
   created_at: string;
   resolved_at: string | null;
+}
+
+// Marketing
+export interface MarketingAsset {
+  id: string;
+  file_name: string;
+  storage_path: string;
+  description: string | null;
+  tags: string[];
+  uploaded_by: string | null;
+  created_at: string;
+}
+
+export interface MarketingDraft {
+  id: string;
+  platform: "instagram" | "facebook" | "linkedin" | "gbp";
+  caption: string;
+  hashtags: string | null;
+  image_id: string | null;
+  image_brief: string | null;
+  status: "draft" | "ready" | "posted";
+  conversation_id: string | null;
+  posted_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  image?: MarketingAsset;
 }
 
 export interface CompanySettings {

@@ -151,6 +151,22 @@ export const jarvisToolDefinitions: Tool[] = [
       required: ["question"],
     },
   },
+  {
+    name: "consult_marketing",
+    description:
+      "Route to the Marketing department for content creation, ad copy, SEO, social media posts, Google Business Profile content, review responses, website copy, LLM/AI search optimization, and marketing strategy. Use this when the user asks for any marketing-related content or advice.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "The marketing question or content request to send to the Marketing department",
+        },
+      },
+      required: ["query"],
+    },
+  },
 ];
 
 // --- Activity type mapping ---
@@ -235,6 +251,11 @@ export async function executeJarvisTool(
       case "consult_rnd":
         result = await toolConsultRnd(
           toolInput as { question: string; context?: string }
+        );
+        break;
+      case "consult_marketing":
+        result = await toolConsultMarketing(
+          toolInput as { query: string }
         );
         break;
       default:
@@ -658,6 +679,43 @@ async function toolConsultRnd(
   } catch (err) {
     return {
       error: `Failed to reach R&D: ${err instanceof Error ? err.message : "Unknown error"}`,
+    };
+  }
+}
+
+async function toolConsultMarketing(
+  input: { query: string }
+): Promise<{ content: string } | { error: string }> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || "http://localhost:3000";
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+
+    const response = await fetch(`${baseUrl}/api/jarvis/marketing`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-service-key": process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+      },
+      body: JSON.stringify({
+        question: input.query,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    const data = await response.json();
+    if (!response.ok) {
+      return { error: data.error || "Marketing request failed" };
+    }
+    return { content: data.content };
+  } catch (err) {
+    return {
+      error: `Failed to reach Marketing: ${err instanceof Error ? err.message : "Unknown error"}`,
     };
   }
 }

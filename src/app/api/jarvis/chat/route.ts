@@ -25,11 +25,11 @@ export async function POST(request: NextRequest) {
       conversation_id,
       direct_department,
     }: {
-      context_type: "general" | "job" | "rnd";
+      context_type: "general" | "job" | "rnd" | "marketing";
       job_id?: string;
       message: string;
       conversation_id?: string;
-      direct_department?: "rnd";
+      direct_department?: "rnd" | "marketing";
     } = body;
 
     if (!message || !context_type) {
@@ -184,22 +184,29 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // Detect @rnd prefix or direct_department routing
+    // Detect @rnd or @marketing prefix or direct_department routing
     const isRndDirect =
       direct_department === "rnd" || message.trim().toLowerCase().startsWith("@rnd");
-    const cleanMessage = message.trim().replace(/^@rnd\s*/i, "");
+    const isMarketingDirect =
+      direct_department === "marketing" || message.trim().toLowerCase().startsWith("@marketing");
+    const cleanMessage = message
+      .trim()
+      .replace(/^@rnd\s*/i, "")
+      .replace(/^@marketing\s*/i, "");
 
-    // If direct R&D routing, call R&D then wrap through Jarvis personality
+    // If direct department routing, call department then wrap through Jarvis personality
     let assistantContent: string;
     let routedTo: string | null = null;
 
-    if (isRndDirect) {
-      // Call R&D directly
+    if (isRndDirect || isMarketingDirect) {
       const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
         || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
         || "http://localhost:3000";
 
-      const rndResponse = await fetch(`${baseUrl}/api/jarvis/rnd`, {
+      const departmentEndpoint = isRndDirect ? "rnd" : "marketing";
+      routedTo = departmentEndpoint;
+
+      const deptResponse = await fetch(`${baseUrl}/api/jarvis/${departmentEndpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -213,21 +220,21 @@ export async function POST(request: NextRequest) {
         }),
       });
 
-      const rndData = await rndResponse.json();
-      const rndContent = rndData.content || "R&D wasn't able to process that one. Try rephrasing.";
-      routedTo = "rnd";
+      const deptData = await deptResponse.json();
+      const deptContent = deptData.content || `${isRndDirect ? "R&D" : "Marketing"} wasn't able to process that one. Try rephrasing.`;
 
-      // Light Jarvis personality pass on the R&D response
+      // Light Jarvis personality pass on the department response
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      const deptLabel = isRndDirect ? "R&D" : "Marketing";
 
       const personalityResponse = await anthropic.messages.create({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 2048,
-        system: `You are Jarvis, relaying a response from your R&D department. Keep the technical content intact but deliver it in your voice — warm, direct, and with your characteristic wit. Don't add fluff, just make it sound like you. If the R&D answer is already well-structured, you can keep it mostly as-is with light personality touches. The user is ${userName} (${userRole}).`,
+        max_tokens: 8192,
+        system: `You are Jarvis, relaying a response from your ${deptLabel} department. Keep the content intact but deliver it in your voice — warm, direct, and with your characteristic wit. Don't add fluff, just make it sound like you. If the ${deptLabel} answer is already well-structured, you can keep it mostly as-is with light personality touches. The user is ${userName} (${userRole}).`,
         messages: [
           {
             role: "user",
-            content: `The user asked: "${cleanMessage}"\n\nR&D department response:\n${rndContent}\n\nDeliver this in your voice.`,
+            content: `The user asked: "${cleanMessage}"\n\n${deptLabel} department response:\n${deptContent}\n\nDeliver this in your voice.`,
           },
         ],
       });
@@ -235,14 +242,14 @@ export async function POST(request: NextRequest) {
       const personalityBlocks = personalityResponse.content.filter(
         (block): block is Anthropic.TextBlock => block.type === "text"
       );
-      assistantContent = personalityBlocks.map((b) => b.text).join("\n") || rndContent;
+      assistantContent = personalityBlocks.map((b) => b.text).join("\n") || deptContent;
     } else {
       // Normal Jarvis flow
       // Build system prompt
       const systemPrompt = buildSystemPrompt({
         userName,
         userRole,
-        contextType: context_type === "rnd" ? "general" : context_type,
+        contextType: (context_type === "rnd" || context_type === "marketing") ? "general" : context_type,
         jobData,
         businessSnapshot,
       });
@@ -304,6 +311,8 @@ export async function POST(request: NextRequest) {
         for (const toolUse of toolUseBlocks) {
           if (toolUse.name === "consult_rnd") {
             routedTo = "rnd";
+          } else if (toolUse.name === "consult_marketing") {
+            routedTo = "marketing";
           }
           const result = await executeJarvisTool(
             toolUse.name,

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, FlaskConical } from "lucide-react";
+import { Sparkles, FlaskConical, Megaphone } from "lucide-react";
 import JarvisQuickActions from "./JarvisQuickActions";
 import NeuralNetwork3D from "./NeuralNetwork3D";
 import type { AgentConfig } from "@/lib/jarvis/agent-registry";
 import type { BrainState } from "./neural-network/useNetworkAnimation";
 import { JARVIS_CORE_STATIC_PROMPT } from "@/lib/jarvis/prompts/jarvis-core";
 import { RND_SYSTEM_PROMPT } from "@/lib/jarvis/prompts/rnd";
+import { MARKETING_SYSTEM_PROMPT } from "@/lib/jarvis/prompts/marketing";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
@@ -16,16 +17,18 @@ import { Badge } from "@/components/ui/badge";
 const PROMPT_MAP: Record<string, string> = {
   "jarvis-core": JARVIS_CORE_STATIC_PROMPT,
   "rnd": RND_SYSTEM_PROMPT,
+  "marketing": MARKETING_SYSTEM_PROMPT,
 };
 
 interface JarvisWelcomeProps {
-  contextType: "general" | "job" | "rnd";
+  contextType: "general" | "job" | "rnd" | "marketing";
   jobContext?: { customerName: string; address: string };
   onQuickAction: (text: string) => void;
+  onInputFill?: (text: string) => void;
   brainState?: BrainState;
 }
 
-export default function JarvisWelcome({ contextType, jobContext, onQuickAction, brainState }: JarvisWelcomeProps) {
+export default function JarvisWelcome({ contextType, jobContext, onQuickAction, onInputFill, brainState }: JarvisWelcomeProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentConfig | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -33,6 +36,22 @@ export default function JarvisWelcome({ contextType, jobContext, onQuickAction, 
     setSelectedAgent(agent);
     setSheetOpen(true);
   };
+
+  if (contextType === "marketing") {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-600 to-cyan-700 flex items-center justify-center mb-5">
+          <Megaphone size={32} className="text-white" />
+        </div>
+        <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-cyan-400 mb-2">Marketing Department</h2>
+        <p className="text-base text-muted-foreground mb-1">Content creation, SEO, ads, social media & LLM optimization</p>
+        <p className="text-sm text-muted-foreground/60 max-w-md mb-8">
+          I create marketing content for AAA Disaster Recovery — Google Ads, blog posts, social media, review responses, and more. What do you need?
+        </p>
+        <JarvisQuickActions contextType="marketing" onSelect={onQuickAction} fillMode onFill={onInputFill} />
+      </div>
+    );
+  }
 
   if (contextType === "rnd") {
     return (

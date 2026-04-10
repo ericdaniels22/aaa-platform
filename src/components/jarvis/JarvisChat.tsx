@@ -12,7 +12,7 @@ import JarvisWelcome from "./JarvisWelcome";
 import type { BrainState } from "./neural-network/useNetworkAnimation";
 
 export interface JarvisChatProps {
-  contextType: "general" | "job" | "rnd";
+  contextType: "general" | "job" | "rnd" | "marketing";
   jobId?: string;
   jobContext?: {
     customerName: string;
@@ -22,7 +22,7 @@ export interface JarvisChatProps {
   };
   conversationId?: string | null;
   onConversationCreated?: (id: string) => void;
-  directDepartment?: "rnd";
+  directDepartment?: "rnd" | "marketing";
 }
 
 export default function JarvisChat({
@@ -252,10 +252,17 @@ export default function JarvisChat({
     }
   }
 
+  const [inputFill, setInputFill] = useState("");
+
   function handleQuickAction(text: string) {
     handleSend(text);
   }
 
+  function handleInputFill(text: string) {
+    setInputFill(text);
+  }
+
+  const isMarketing = contextType === "marketing";
   const showQuickActions = messages.length < 2 && !isTyping;
   const showWelcome = messages.length === 0 && !loading;
 
@@ -290,6 +297,7 @@ export default function JarvisChat({
             contextType={contextType}
             jobContext={jobContext ? { customerName: jobContext.customerName, address: jobContext.address } : undefined}
             onQuickAction={handleQuickAction}
+            onInputFill={handleInputFill}
             brainState={brainState}
           />
         ) : (
@@ -305,11 +313,16 @@ export default function JarvisChat({
 
       {/* Quick actions */}
       {showQuickActions && !showWelcome && (
-        <JarvisQuickActions contextType={contextType as "general" | "job" | "rnd"} onSelect={handleQuickAction} />
+        <JarvisQuickActions
+          contextType={contextType as "general" | "job" | "rnd" | "marketing"}
+          onSelect={handleQuickAction}
+          fillMode={isMarketing}
+          onFill={handleInputFill}
+        />
       )}
 
       {/* Input */}
-      <JarvisInput onSend={handleSend} disabled={isTyping} />
+      <JarvisInput onSend={handleSend} disabled={isTyping} fillValue={inputFill} onFillConsumed={() => setInputFill("")} />
     </div>
   );
 }
