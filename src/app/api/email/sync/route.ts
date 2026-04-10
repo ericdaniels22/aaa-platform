@@ -146,16 +146,25 @@ export async function POST(request: NextRequest) {
       .eq("is_active", true);
     const categoryRules = (rulesData || []) as CategoryRule[];
 
-    // One-time per-account backfill of historical emails
+    // One-time per-account backfill of historical emails.
+    // Paginates by keyset (id) instead of offset because the category filter
+    // shrinks as rows get updated — offset-based pagination would skip rows.
     if (!account.category_backfill_completed_at) {
-      let offset = 0;
+      let lastId: string | null = null;
       while (true) {
-        const { data: oldEmails } = await supabase
+        let batchQuery = supabase
           .from("emails")
           .select("id, from_address, subject")
           .eq("account_id", accountId)
           .eq("category", "general")
-          .range(offset, offset + 199);
+          .order("id", { ascending: true })
+          .limit(200);
+
+        if (lastId) {
+          batchQuery = batchQuery.gt("id", lastId);
+        }
+
+        const { data: oldEmails } = await batchQuery;
 
         if (!oldEmails || oldEmails.length === 0) break;
 
@@ -175,8 +184,13 @@ export async function POST(request: NextRequest) {
           await supabase.from("emails").update({ category: cat }).in("id", ids);
         }
 
+        // Advance the keyset cursor to the last id we saw.
+        // Rows whose category got changed are excluded from the next query by
+        // the category filter; rows that stayed "general" are skipped by the
+        // `id > lastId` cursor, so we make forward progress every iteration.
+        lastId = (oldEmails[oldEmails.length - 1] as { id: string }).id;
+
         if (oldEmails.length < 200) break;
-        offset += 200;
       }
 
       await supabase
