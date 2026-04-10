@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
@@ -11,7 +11,6 @@ export default function NavigationSettingsPage() {
   const { profile, loading: authLoading } = useAuth();
   const { order, loading: orderLoading, refresh } = useNavOrder();
   const [items, setItems] = useState<NavItem[]>([]);
-  const prevItemsRef = useRef<NavItem[] | null>(null);
 
   // Whenever the DB order changes, compute the sorted items for this page.
   // Mirrors the sort logic in src/components/nav.tsx.
@@ -27,7 +26,7 @@ export default function NavigationSettingsPage() {
   }, [order, orderLoading]);
 
   const saveOrder = useCallback(
-    async (next: NavItem[]) => {
+    async (next: NavItem[], snapshot: NavItem[]) => {
       const res = await fetch("/api/settings/nav-order", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -39,30 +38,29 @@ export default function NavigationSettingsPage() {
       } else {
         const err = await res.json().catch(() => ({}));
         toast.error(err.error || "Failed to save order");
-        // Revert to the snapshot we took before the optimistic move
-        if (prevItemsRef.current) setItems(prevItemsRef.current);
+        // Revert to the snapshot taken before the optimistic move
+        setItems(snapshot);
       }
-      prevItemsRef.current = null;
     },
     [refresh]
   );
 
   function moveUp(index: number) {
     if (index === 0) return;
-    prevItemsRef.current = items;
+    const snapshot = items;
     const updated = [...items];
     [updated[index - 1], updated[index]] = [updated[index], updated[index - 1]];
     setItems(updated);
-    saveOrder(updated);
+    saveOrder(updated, snapshot);
   }
 
   function moveDown(index: number) {
     if (index === items.length - 1) return;
-    prevItemsRef.current = items;
+    const snapshot = items;
     const updated = [...items];
     [updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
     setItems(updated);
-    saveOrder(updated);
+    saveOrder(updated, snapshot);
   }
 
   if (authLoading || orderLoading) {
