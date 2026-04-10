@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
   const page = parseInt(searchParams.get("page") || "1");
   const limit = parseInt(searchParams.get("limit") || "50");
   const starred = searchParams.get("starred");
+  const category = searchParams.get("category");
 
   const supabase = createApiClient();
   const offset = (page - 1) * limit;
@@ -28,6 +29,11 @@ export async function GET(request: NextRequest) {
   // Filter by account
   if (accountId) {
     query = query.eq("account_id", accountId);
+  }
+
+  // Filter by category (only applies to inbox)
+  if (category && folder === "inbox" && starred !== "true") {
+    query = query.eq("category", category);
   }
 
   // Search in subject, from_address, from_name, snippet
