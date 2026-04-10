@@ -11,6 +11,7 @@ import {
   FileText,
   Download,
   BookOpen,
+  Menu,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
@@ -24,6 +25,7 @@ export interface SettingsNavItem {
 export const settingsNavItems: SettingsNavItem[] = [
   { href: "/settings/company", label: "Company Profile", icon: Building2 },
   { href: "/settings/appearance", label: "Appearance", icon: Palette },
+  { href: "/settings/navigation", label: "Navigation", icon: Menu },
   { href: "/settings/statuses", label: "Job Statuses", icon: ListChecks },
   { href: "/settings/damage-types", label: "Damage Types", icon: Flame },
   { href: "/settings/users", label: "Users & Crew", icon: Users },
