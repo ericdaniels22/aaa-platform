@@ -4,8 +4,8 @@ import { createApiClient } from "@/lib/supabase-api";
 // GET /api/jobs/search?q=...&limit=10
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const q = searchParams.get("q") || "";
-  const limit = parseInt(searchParams.get("limit") || "10");
+  const q = (searchParams.get("q") || "").replace(/[%,.*()]/g, "");
+  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || "10") || 10, 1), 50);
 
   const supabase = createApiClient();
 

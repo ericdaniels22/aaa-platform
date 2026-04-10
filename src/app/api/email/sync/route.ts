@@ -5,6 +5,23 @@ import { ImapFlow, FetchMessageObject } from "imapflow";
 import { matchEmailToJob, type MatcherCache, type JobRow, type ContactRow } from "@/lib/email-matcher";
 import { simpleParser, Attachment } from "mailparser";
 
+interface ParsedEmail {
+  uid: number;
+  messageId: string;
+  threadId: string;
+  fromAddr: string;
+  fromName: string | null;
+  toAddresses: { email: string; name?: string }[];
+  ccAddresses: { email: string; name?: string }[];
+  subject: string;
+  bodyText: string | null;
+  bodyHtml: string | null;
+  snippet: string | null;
+  hasAttachments: boolean;
+  receivedAt: Date;
+  parsedAttachments: Attachment[];
+}
+
 // Map IMAP folder names to our normalized folder enum
 function mapFolder(imapPath: string): string {
   const lower = imapPath.toLowerCase().replace(/^(\[gmail\]|inbox)\/?/i, "").trim();
@@ -184,23 +201,6 @@ export async function POST(request: NextRequest) {
         }
 
         // Parse all messages first
-        interface ParsedEmail {
-          uid: number;
-          messageId: string;
-          threadId: string;
-          fromAddr: string;
-          fromName: string | null;
-          toAddresses: { email: string; name?: string }[];
-          ccAddresses: { email: string; name?: string }[];
-          subject: string;
-          bodyText: string | null;
-          bodyHtml: string | null;
-          snippet: string | null;
-          hasAttachments: boolean;
-          receivedAt: Date;
-          parsedAttachments: Attachment[];
-        }
-
         const parsed: ParsedEmail[] = [];
 
         for (const msg of messages) {

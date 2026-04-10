@@ -840,8 +840,7 @@ function ResizeHandle({
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     let lastX = e.clientX;
-    const parent = (e.target as HTMLElement).closest(".flex");
-    if (parent) parent.classList.add("select-none");
+    document.body.classList.add("select-none");
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = moveEvent.clientX - lastX;
@@ -850,7 +849,7 @@ function ResizeHandle({
     };
 
     const handleMouseUp = () => {
-      if (parent) parent.classList.remove("select-none");
+      document.body.classList.remove("select-none");
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };

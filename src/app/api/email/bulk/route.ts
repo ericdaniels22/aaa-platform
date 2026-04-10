@@ -7,11 +7,15 @@ export async function PATCH(request: NextRequest) {
   const body = await request.json();
   const { ids, action, jobId } = body;
 
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return NextResponse.json({ error: "ids array is required" }, { status: 400 });
+  if (!Array.isArray(ids) || ids.length === 0 || !ids.every((id: unknown) => typeof id === "string")) {
+    return NextResponse.json({ error: "ids must be a non-empty array of strings" }, { status: 400 });
   }
 
-  if (!action) {
+  if (ids.length > 500) {
+    return NextResponse.json({ error: "Maximum 500 ids per request" }, { status: 400 });
+  }
+
+  if (!action || typeof action !== "string") {
     return NextResponse.json({ error: "action is required" }, { status: 400 });
   }
 
