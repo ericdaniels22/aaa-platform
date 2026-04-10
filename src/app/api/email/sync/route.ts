@@ -146,6 +146,45 @@ export async function POST(request: NextRequest) {
       .eq("is_active", true);
     const categoryRules = (rulesData || []) as CategoryRule[];
 
+    // One-time per-account backfill of historical emails
+    if (!account.category_backfill_completed_at) {
+      let offset = 0;
+      while (true) {
+        const { data: oldEmails } = await supabase
+          .from("emails")
+          .select("id, from_address, subject")
+          .eq("account_id", accountId)
+          .eq("category", "general")
+          .range(offset, offset + 199);
+
+        if (!oldEmails || oldEmails.length === 0) break;
+
+        const byCategory = new Map<Category, string[]>();
+        for (const e of oldEmails as { id: string; from_address: string; subject: string }[]) {
+          const cat = categorizeEmail(
+            { from_address: e.from_address, subject: e.subject },
+            categoryRules
+          );
+          if (cat !== "general") {
+            if (!byCategory.has(cat)) byCategory.set(cat, []);
+            byCategory.get(cat)!.push(e.id);
+          }
+        }
+
+        for (const [cat, ids] of byCategory) {
+          await supabase.from("emails").update({ category: cat }).in("id", ids);
+        }
+
+        if (oldEmails.length < 200) break;
+        offset += 200;
+      }
+
+      await supabase
+        .from("email_accounts")
+        .update({ category_backfill_completed_at: new Date().toISOString() })
+        .eq("id", accountId);
+    }
+
     // Discover available folders
     const folders = await client.list();
     const folderPaths = folders.map((f) => f.path);
