@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createApiClient } from "@/lib/supabase-api";
 import { decrypt } from "@/lib/encryption";
 import { ImapFlow, FetchMessageObject } from "imapflow";
-import { matchEmailToJob } from "@/lib/email-matcher";
+import { matchEmailToJob, type MatcherCache, type JobRow, type ContactRow } from "@/lib/email-matcher";
 import { simpleParser, Attachment } from "mailparser";
 
 // Map IMAP folder names to our normalized folder enum
@@ -97,6 +97,32 @@ export async function POST(request: NextRequest) {
 
     await client.connect();
 
+    // Pre-fetch job matching cache (once for entire sync)
+    const { data: jobsData } = await supabase
+      .from("jobs")
+      .select("id, job_number, claim_number, property_address, contact_id, adjuster_contact_id")
+      .not("status", "eq", "cancelled");
+
+    const jobs = (jobsData || []) as JobRow[];
+
+    const contactIds = new Set<string>();
+    for (const job of jobs) {
+      contactIds.add(job.contact_id);
+      if (job.adjuster_contact_id) contactIds.add(job.adjuster_contact_id);
+    }
+
+    let contacts: ContactRow[] = [];
+    if (contactIds.size > 0) {
+      const { data: contactsData } = await supabase
+        .from("contacts")
+        .select("id, email")
+        .in("id", Array.from(contactIds))
+        .not("email", "is", null);
+      contacts = (contactsData || []) as ContactRow[];
+    }
+
+    const matcherCache: MatcherCache = { jobs, contacts };
+
     // Discover available folders
     const folders = await client.list();
     const folderPaths = folders.map((f) => f.path);
@@ -118,6 +144,14 @@ export async function POST(request: NextRequest) {
       try {
         const mailbox = await client.mailboxOpen(folderPath);
         const folder = mapFolder(folderPath);
+
+        // Batch fetch known message IDs for dedup
+        const { data: knownEmails } = await supabase
+          .from("emails")
+          .select("message_id")
+          .eq("account_id", accountId)
+          .eq("folder", folder);
+        const knownMessageIds = new Set((knownEmails || []).map((e: { message_id: string }) => e.message_id));
 
         // Determine fetch range
         let range: string;
@@ -149,6 +183,26 @@ export async function POST(request: NextRequest) {
           // Empty range
         }
 
+        // Parse all messages first
+        interface ParsedEmail {
+          uid: number;
+          messageId: string;
+          threadId: string;
+          fromAddr: string;
+          fromName: string | null;
+          toAddresses: { email: string; name?: string }[];
+          ccAddresses: { email: string; name?: string }[];
+          subject: string;
+          bodyText: string | null;
+          bodyHtml: string | null;
+          snippet: string | null;
+          hasAttachments: boolean;
+          receivedAt: Date;
+          parsedAttachments: Attachment[];
+        }
+
+        const parsed: ParsedEmail[] = [];
+
         for (const msg of messages) {
           try {
             const uid = msg.uid;
@@ -156,32 +210,22 @@ export async function POST(request: NextRequest) {
 
             const messageId = msg.envelope?.messageId || "uid-" + uid + "-" + folderPath;
 
-            // Dedup check — same message can exist in different folders (sent + inbox)
-            const { data: existing } = await supabase
-              .from("emails")
-              .select("id")
-              .eq("message_id", messageId)
-              .eq("account_id", accountId)
-              .eq("folder", folder)
-              .maybeSingle();
+            // In-memory dedup check
+            if (knownMessageIds.has(messageId)) continue;
 
-            if (existing) continue;
-
-            // Parse full message
             let bodyText = "";
             let bodyHtml = "";
             let hasAttachments = false;
-            let parsedAttachments: Attachment[] = [];
+            let msgAttachments: Attachment[] = [];
 
             if (msg.source) {
-              const parsed = await simpleParser(msg.source);
-              bodyText = parsed.text || "";
-              bodyHtml = typeof parsed.html === "string" ? parsed.html : "";
-              parsedAttachments = parsed.attachments || [];
-              hasAttachments = parsedAttachments.length > 0;
+              const parsedMsg = await simpleParser(msg.source);
+              bodyText = parsedMsg.text || "";
+              bodyHtml = typeof parsedMsg.html === "string" ? parsedMsg.html : "";
+              msgAttachments = parsedMsg.attachments || [];
+              hasAttachments = msgAttachments.length > 0;
             }
 
-            // Also check bodyStructure for attachments
             if (!hasAttachments && msg.bodyStructure) {
               hasAttachments = checkAttachments(msg.bodyStructure);
             }
@@ -194,7 +238,6 @@ export async function POST(request: NextRequest) {
             const subject = envelope.subject || "";
             const date = envelope.date || new Date();
 
-            // Build address arrays
             const toAddresses = (envelope.to || []).map((a) => ({
               email: a.address || "",
               name: a.name || undefined,
@@ -204,82 +247,110 @@ export async function POST(request: NextRequest) {
               name: a.name || undefined,
             }));
 
-            // Compute thread_id from References/In-Reply-To
             const threadId = envelope.inReplyTo || messageId;
-
-            // Snippet
             const snippet = bodyText
               .replace(/\r?\n/g, " ")
               .replace(/\s+/g, " ")
               .trim()
               .slice(0, 200);
 
-            // Try to match to a job
-            const match = await matchEmailToJob(
-              supabase,
-              { from_address: fromAddr, to_addresses: toAddresses, subject, body_text: bodyText },
+            parsed.push({
+              uid,
+              messageId,
+              threadId,
+              fromAddr,
+              fromName: fromName || null,
+              toAddresses,
+              ccAddresses,
+              subject,
+              bodyText: bodyText || null,
+              bodyHtml: bodyHtml || null,
+              snippet: snippet || null,
+              hasAttachments,
+              receivedAt: date,
+              parsedAttachments: msgAttachments,
+            });
+          } catch (msgErr) {
+            errors.push(folderPath + ": " + (msgErr instanceof Error ? msgErr.message : "unknown"));
+          }
+        }
+
+        // Batch insert emails
+        if (parsed.length > 0) {
+          const rows = parsed.map((p) => {
+            const match = matchEmailToJob(
+              matcherCache,
+              { from_address: p.fromAddr, to_addresses: p.toAddresses, subject: p.subject, body_text: p.bodyText },
               account.email_address
             );
 
-            const { data: insertedEmail, error: insertError } = await supabase
-              .from("emails")
-              .insert({
-                account_id: accountId,
-                job_id: match?.job_id || null,
-                message_id: messageId,
-                thread_id: threadId,
-                folder,
-                from_address: fromAddr,
-                from_name: fromName || null,
-                to_addresses: toAddresses,
-                cc_addresses: ccAddresses,
-                bcc_addresses: [],
-                subject,
-                body_text: bodyText || null,
-                body_html: bodyHtml || null,
-                snippet: snippet || null,
-                is_read: folder === "sent" || folder === "drafts",
-                is_starred: false,
-                has_attachments: hasAttachments,
-                matched_by: match?.matched_by || null,
-                uid,
-                received_at: date,
-              })
-              .select("id")
-              .single();
+            return {
+              account_id: accountId,
+              job_id: match?.job_id || null,
+              message_id: p.messageId,
+              thread_id: p.threadId,
+              folder,
+              from_address: p.fromAddr,
+              from_name: p.fromName,
+              to_addresses: p.toAddresses,
+              cc_addresses: p.ccAddresses,
+              bcc_addresses: [],
+              subject: p.subject,
+              body_text: p.bodyText,
+              body_html: p.bodyHtml,
+              snippet: p.snippet,
+              is_read: folder === "sent" || folder === "drafts",
+              is_starred: false,
+              has_attachments: p.hasAttachments,
+              matched_by: match?.matched_by || null,
+              uid: p.uid,
+              received_at: p.receivedAt,
+            };
+          });
 
-            if (insertError) {
-              errors.push(folderPath + " UID " + uid + ": " + insertError.message);
-            } else {
-              totalSynced++;
-              if (match) totalMatched++;
+          const { data: insertedEmails, error: insertError } = await supabase
+            .from("emails")
+            .insert(rows)
+            .select("id, message_id");
 
-              // Save attachments to storage + metadata table
-              if (insertedEmail && parsedAttachments.length > 0) {
-                for (const att of parsedAttachments) {
-                  try {
-                    const storagePath = `${accountId}/${insertedEmail.id}/${att.filename || "attachment"}`;
-                    await supabase.storage
-                      .from("email-attachments")
-                      .upload(storagePath, att.content, {
-                        contentType: att.contentType || "application/octet-stream",
-                        upsert: true,
-                      });
-                    await supabase.from("email_attachments").insert({
-                      email_id: insertedEmail.id,
-                      filename: att.filename || "attachment",
-                      content_type: att.contentType || null,
-                      file_size: att.size || null,
-                      storage_path: storagePath,
+          if (insertError) {
+            errors.push(folderPath + " batch insert: " + insertError.message);
+          } else if (insertedEmails) {
+            totalSynced += insertedEmails.length;
+            const matchedCount = rows.filter((r) => r.job_id).length;
+            totalMatched += matchedCount;
+
+            // Save attachments for emails that have them
+            const emailIdByMessageId = new Map(
+              insertedEmails.map((e: { id: string; message_id: string }) => [e.message_id, e.id])
+            );
+
+            for (const p of parsed) {
+              if (p.parsedAttachments.length === 0) continue;
+              const emailId = emailIdByMessageId.get(p.messageId);
+              if (!emailId) continue;
+
+              for (const att of p.parsedAttachments) {
+                try {
+                  const storagePath = `${accountId}/${emailId}/${att.filename || "attachment"}`;
+                  await supabase.storage
+                    .from("email-attachments")
+                    .upload(storagePath, att.content, {
+                      contentType: att.contentType || "application/octet-stream",
+                      upsert: true,
                     });
-                  } catch {
-                    // Non-fatal: skip attachment save errors
-                  }
+                  await supabase.from("email_attachments").insert({
+                    email_id: emailId,
+                    filename: att.filename || "attachment",
+                    content_type: att.contentType || null,
+                    file_size: att.size || null,
+                    storage_path: storagePath,
+                  });
+                } catch {
+                  // Non-fatal: skip attachment save errors
                 }
               }
             }
-          } catch (msgErr) {
-            errors.push(folderPath + ": " + (msgErr instanceof Error ? msgErr.message : "unknown"));
           }
         }
 
