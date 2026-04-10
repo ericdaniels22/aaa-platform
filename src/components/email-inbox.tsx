@@ -97,6 +97,35 @@ export default function EmailInbox() {
     } catch {}
   }, [sidebarWidth, listWidth]);
 
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === emails.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(emails.map((e) => e.id)));
+    }
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  // Clear selection when navigating
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [folder, selectedAccountId, searchDebounced, page]);
+
   // Compose state
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeMode, setComposeMode] = useState<"compose" | "reply" | "forward">("compose");
@@ -360,6 +389,7 @@ export default function EmailInbox() {
     setFolder(key);
     setPage(1);
     setSelectedEmailId(null);
+    setSelectedIds(new Set());
   }
 
   return (
@@ -489,7 +519,13 @@ export default function EmailInbox() {
         >
           {/* List header */}
           <div className="px-4 py-2 border-b border-border/50 text-xs text-muted-foreground/60 flex items-center justify-between">
-            <span>
+            <span className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={emails.length > 0 && selectedIds.size === emails.length}
+                onChange={toggleSelectAll}
+                className="rounded border-border accent-primary"
+              />
               {total} email{total !== 1 ? "s" : ""}
               {folder !== "starred" && counts[folder]?.unread
                 ? ` (${counts[folder].unread} unread)`
@@ -534,11 +570,13 @@ export default function EmailInbox() {
                   key={email.id}
                   email={email}
                   isSelected={email.id === selectedEmailId}
+                  isChecked={selectedIds.has(email.id)}
                   folder={folder}
                   onSelect={() => handleSelectEmail(email)}
                   onStar={() =>
                     handleStarToggle(email.id, !email.is_starred)
                   }
+                  onToggleCheck={() => toggleSelect(email.id)}
                 />
               ))
             )}
@@ -658,15 +696,19 @@ function ResizeHandle({
 function EmailRow({
   email,
   isSelected,
+  isChecked,
   folder,
   onSelect,
   onStar,
+  onToggleCheck,
 }: {
   email: Email;
   isSelected: boolean;
+  isChecked: boolean;
   folder: string;
   onSelect: () => void;
   onStar: () => void;
+  onToggleCheck: () => void;
 }) {
   // Show recipient for sent/drafts, sender for everything else
   const isSentView = folder === "sent" || folder === "drafts";
@@ -685,6 +727,18 @@ function EmailRow({
           : "bg-primary/5 hover:bg-primary/10"
       }`}
     >
+      {/* Checkbox */}
+      <input
+        type="checkbox"
+        checked={isChecked}
+        onChange={(e) => {
+          e.stopPropagation();
+          onToggleCheck();
+        }}
+        onClick={(e) => e.stopPropagation()}
+        className="mt-1 shrink-0 rounded border-border accent-primary"
+      />
+
       {/* Star */}
       <button
         onClick={(e) => {
