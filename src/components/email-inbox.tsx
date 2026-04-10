@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import {
   Inbox,
@@ -68,6 +68,34 @@ export default function EmailInbox() {
   const [counts, setCounts] = useState<FolderCounts>({});
 
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+
+  // Resizable pane widths
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    if (typeof window === "undefined") return 208;
+    try {
+      const saved = localStorage.getItem("email-pane-widths");
+      if (saved) return JSON.parse(saved).sidebar ?? 208;
+    } catch {}
+    return 208;
+  });
+  const [listWidth, setListWidth] = useState(() => {
+    if (typeof window === "undefined") return 384;
+    try {
+      const saved = localStorage.getItem("email-pane-widths");
+      if (saved) return JSON.parse(saved).list ?? 384;
+    } catch {}
+    return 384;
+  });
+
+  // Persist widths to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "email-pane-widths",
+        JSON.stringify({ sidebar: sidebarWidth, list: listWidth })
+      );
+    } catch {}
+  }, [sidebarWidth, listWidth]);
 
   // Compose state
   const [composeOpen, setComposeOpen] = useState(false);
@@ -413,7 +441,7 @@ export default function EmailInbox() {
       {/* 3-column layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Column 1: Folder sidebar */}
-        <div className="w-52 border-r border-border bg-muted/50 shrink-0 flex flex-col">
+        <div style={{ width: sidebarWidth }} className="border-r border-border bg-muted/50 shrink-0 flex flex-col">
           <nav className="flex-1 py-2">
             {FOLDERS.map(({ key, label, icon: Icon }) => {
               const isActive = folder === key;
@@ -446,9 +474,16 @@ export default function EmailInbox() {
           </nav>
         </div>
 
+        <ResizeHandle
+          onResize={(delta) => {
+            setSidebarWidth((prev: number) => Math.min(300, Math.max(160, prev + delta)));
+          }}
+        />
+
         {/* Column 2: Email list */}
         <div
-          className={`w-96 border-r border-border flex flex-col bg-card shrink-0 ${
+          style={{ width: listWidth }}
+          className={`border-r border-border flex flex-col bg-card shrink-0 ${
             selectedEmailId ? "hidden lg:flex" : "flex"
           }`}
         >
@@ -531,6 +566,12 @@ export default function EmailInbox() {
           </div>
         </div>
 
+        <ResizeHandle
+          onResize={(delta) => {
+            setListWidth((prev: number) => Math.min(600, Math.max(280, prev + delta)));
+          }}
+        />
+
         {/* Column 3: Reading pane */}
         <div
           className={`flex-1 bg-muted/50 ${
@@ -575,6 +616,41 @@ export default function EmailInbox() {
         }}
       />
     </div>
+  );
+}
+
+function ResizeHandle({
+  onResize,
+}: {
+  onResize: (delta: number) => void;
+}) {
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    let lastX = e.clientX;
+    const parent = (e.target as HTMLElement).closest(".flex");
+    if (parent) parent.classList.add("select-none");
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - lastX;
+      lastX = moveEvent.clientX;
+      onResize(delta);
+    };
+
+    const handleMouseUp = () => {
+      if (parent) parent.classList.remove("select-none");
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      className="w-1 shrink-0 cursor-col-resize hover:bg-primary/20 transition-colors"
+    />
   );
 }
 
