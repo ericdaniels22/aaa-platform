@@ -4,17 +4,13 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import {
   Inbox,
-  Send,
-  FileEdit,
   Trash2,
   Archive,
-  AlertCircle,
   Star,
   Search,
   RefreshCw,
   Paperclip,
   Briefcase,
-  MailPlus,
   MailCheck,
   ChevronDown,
   Settings,
@@ -24,6 +20,9 @@ import { toast } from "sonner";
 import type { Email, EmailAccount } from "@/lib/types";
 import EmailReader from "@/components/email-reader";
 import ComposeEmailModal from "@/components/compose-email";
+import IconRail from "@/components/email/icon-rail";
+import CategoryTabs from "@/components/email/category-tabs";
+import type { Category } from "@/lib/email-categorizer";
 
 interface FolderCounts {
   [key: string]: { total: number; unread: number };
@@ -36,15 +35,6 @@ interface ListResponse {
   hasMore: boolean;
 }
 
-const FOLDERS = [
-  { key: "inbox", label: "Inbox", icon: Inbox },
-  { key: "sent", label: "Sent", icon: Send },
-  { key: "drafts", label: "Drafts", icon: FileEdit },
-  { key: "trash", label: "Trash", icon: Trash2 },
-  { key: "archive", label: "Archive", icon: Archive },
-  { key: "spam", label: "Spam", icon: AlertCircle },
-  { key: "starred", label: "Starred", icon: Star },
-];
 
 function formatEmailDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -70,15 +60,16 @@ export default function EmailInbox() {
 
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
 
-  // Resizable pane widths
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    if (typeof window === "undefined") return 208;
-    try {
-      const saved = localStorage.getItem("email-pane-widths");
-      if (saved) return JSON.parse(saved).sidebar ?? 208;
-    } catch {}
-    return 208;
+  // Category filter (inbox only)
+  const [category, setCategory] = useState<Category>("general");
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({
+    general: 0,
+    promotions: 0,
+    social: 0,
+    purchases: 0,
   });
+
+  // Resizable pane widths
   const [listWidth, setListWidth] = useState(() => {
     if (typeof window === "undefined") return 384;
     try {
@@ -88,15 +79,15 @@ export default function EmailInbox() {
     return 384;
   });
 
-  // Persist widths to localStorage
+  // Persist list width to localStorage
   useEffect(() => {
     try {
       localStorage.setItem(
         "email-pane-widths",
-        JSON.stringify({ sidebar: sidebarWidth, list: listWidth })
+        JSON.stringify({ list: listWidth })
       );
     } catch {}
-  }, [sidebarWidth, listWidth]);
+  }, [listWidth]);
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -236,6 +227,7 @@ export default function EmailInbox() {
       if (selectedAccountId) params.set("accountId", selectedAccountId);
       if (searchDebounced) params.set("search", searchDebounced);
       params.set("page", page.toString());
+      if (folder === "inbox") params.set("category", category);
 
       const res = await fetch(`/api/email/list?${params}`);
       const data: ListResponse = await res.json();
@@ -246,7 +238,7 @@ export default function EmailInbox() {
       toast.error("Failed to load emails");
     }
     setLoading(false);
-  }, [folder, selectedAccountId, searchDebounced, page]);
+  }, [folder, selectedAccountId, searchDebounced, page, category]);
 
   useEffect(() => {
     loadEmails();
@@ -261,6 +253,9 @@ export default function EmailInbox() {
       const res = await fetch(`/api/email/counts${params}`);
       const data = await res.json();
       setCounts(data);
+      if (data.categoryUnread) {
+        setCategoryCounts(data.categoryUnread);
+      }
     } catch {
       // silent
     }
@@ -468,6 +463,14 @@ export default function EmailInbox() {
     setPage(1);
     setSelectedEmailId(null);
     setSelectedIds(new Set());
+    setCategory("general");
+  }
+
+  function handleCategoryChange(cat: Category) {
+    setCategory(cat);
+    setPage(1);
+    setSelectedEmailId(null);
+    setSelectedIds(new Set());
   }
 
   return (
@@ -529,13 +532,6 @@ export default function EmailInbox() {
             />
             {syncing ? "Syncing..." : "Sync"}
           </button>
-          <button
-            onClick={handleCompose}
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-[image:var(--gradient-primary)] text-white rounded-lg text-sm font-medium shadow-sm hover:brightness-110 hover:shadow-md transition-all"
-          >
-            <MailPlus size={14} />
-            Compose
-          </button>
           <a
             href="/settings/email"
             className="p-1.5 text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent rounded"
@@ -548,44 +544,12 @@ export default function EmailInbox() {
 
       {/* 3-column layout */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Column 1: Folder sidebar */}
-        <div style={{ width: sidebarWidth }} className="border-r border-border bg-muted/50 shrink-0 flex flex-col">
-          <nav className="flex-1 py-2">
-            {FOLDERS.map(({ key, label, icon: Icon }) => {
-              const isActive = folder === key;
-              const unread = counts[key]?.unread || 0;
-              const total2 = counts[key]?.total || 0;
-
-              return (
-                <button
-                  key={key}
-                  onClick={() => handleFolderChange(key)}
-                  className={`w-full flex items-center gap-2.5 px-4 py-2 text-sm transition-colors ${
-                    isActive
-                      ? "bg-primary/10 text-primary font-medium"
-                      : "text-muted-foreground hover:bg-primary/5"
-                  }`}
-                >
-                  <Icon size={16} />
-                  <span className="flex-1 text-left">{label}</span>
-                  {key === "starred" && total2 > 0 && (
-                    <span className="text-xs text-muted-foreground/60">{total2}</span>
-                  )}
-                  {key !== "starred" && unread > 0 && (
-                    <span className="text-xs font-bold text-primary bg-primary/10 rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
-                      {unread}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-
-        <ResizeHandle
-          onResize={(delta) => {
-            setSidebarWidth((prev: number) => Math.min(300, Math.max(160, prev + delta)));
-          }}
+        {/* Column 1: Icon rail */}
+        <IconRail
+          folder={folder}
+          counts={counts}
+          onFolderChange={handleFolderChange}
+          onCompose={handleCompose}
         />
 
         {/* Column 2: Email list */}
@@ -595,6 +559,14 @@ export default function EmailInbox() {
             selectedEmailId ? "hidden lg:flex" : "flex"
           }`}
         >
+          {folder === "inbox" && (
+            <CategoryTabs
+              category={category}
+              categoryCounts={categoryCounts}
+              onChange={handleCategoryChange}
+            />
+          )}
+
           {/* List header / Bulk action bar */}
           <div className="px-4 py-2 border-b border-border/50 text-xs text-muted-foreground/60 flex items-center justify-between">
             {selectedIds.size > 0 ? (
