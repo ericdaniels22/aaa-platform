@@ -6,6 +6,7 @@ import { ThemeProvider } from "next-themes";
 import BrandColorsProvider from "@/components/brand-colors-provider";
 import { ConfigProvider } from "@/lib/config-context";
 import { AuthProvider } from "@/lib/auth-context";
+import { NavOrderProvider } from "@/lib/nav-order-context";
 import AppShell from "@/components/app-shell";
 
 const inter = Inter({
@@ -29,9 +30,11 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <AuthProvider>
             <ConfigProvider>
-              <BrandColorsProvider />
-              <AppShell>{children}</AppShell>
-              <Toaster />
+              <NavOrderProvider>
+                <BrandColorsProvider />
+                <AppShell>{children}</AppShell>
+                <Toaster />
+              </NavOrderProvider>
             </ConfigProvider>
           </AuthProvider>
         </ThemeProvider>
