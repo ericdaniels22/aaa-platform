@@ -4,6 +4,7 @@ import { decrypt } from "@/lib/encryption";
 import { ImapFlow, FetchMessageObject } from "imapflow";
 import { matchEmailToJob, type MatcherCache, type JobRow, type ContactRow } from "@/lib/email-matcher";
 import { simpleParser, Attachment } from "mailparser";
+import { categorizeEmail, type CategoryRule, type Category } from "@/lib/email-categorizer";
 
 interface ParsedEmail {
   uid: number;
@@ -20,6 +21,7 @@ interface ParsedEmail {
   hasAttachments: boolean;
   receivedAt: Date;
   parsedAttachments: Attachment[];
+  headers: Record<string, string>;
 }
 
 // Map IMAP folder names to our normalized folder enum
@@ -137,9 +139,173 @@ export async function POST(request: NextRequest) {
 
     const matcherCache: MatcherCache = { jobs, contacts };
 
-    // Discover available folders
+    // Pre-fetch category rules (once for entire sync)
+    const { data: rulesData } = await supabase
+      .from("category_rules")
+      .select("match_type, match_value, category")
+      .eq("is_active", true);
+    const categoryRules = (rulesData || []) as CategoryRule[];
+
+    // Discover available IMAP folders up front (needed for backfill Pass 2
+    // which re-fetches headers, as well as for the main folder loop below).
     const folders = await client.list();
     const folderPaths = folders.map((f) => f.path);
+
+    // One-time per-account backfill of historical emails.
+    // Paginates by keyset (id) because the category filter shrinks as rows
+    // get updated — offset-based pagination would skip rows.
+    //
+    // Pass 1: use stored from_address/subject/body_text (fast, no IMAP)
+    // Pass 2: re-fetch headers from IMAP for any remaining general emails
+    //         (catches List-Unsubscribe and other header-based rules)
+    if (!account.category_backfill_completed_at) {
+      // ---- Pass 1: body/subject/domain-based backfill ----
+      let lastId: string | null = null;
+      while (true) {
+        let batchQuery = supabase
+          .from("emails")
+          .select("id, from_address, subject, body_text")
+          .eq("account_id", accountId)
+          .eq("category", "general")
+          .order("id", { ascending: true })
+          .limit(200);
+
+        if (lastId) {
+          batchQuery = batchQuery.gt("id", lastId);
+        }
+
+        const { data: oldEmails } = await batchQuery;
+
+        if (!oldEmails || oldEmails.length === 0) break;
+
+        const byCategory = new Map<Category, string[]>();
+        for (const e of oldEmails as { id: string; from_address: string; subject: string; body_text: string | null }[]) {
+          const cat = categorizeEmail(
+            { from_address: e.from_address, subject: e.subject, body_text: e.body_text },
+            categoryRules
+          );
+          if (cat !== "general") {
+            if (!byCategory.has(cat)) byCategory.set(cat, []);
+            byCategory.get(cat)!.push(e.id);
+          }
+        }
+
+        for (const [cat, ids] of byCategory) {
+          await supabase.from("emails").update({ category: cat }).in("id", ids);
+        }
+
+        // Advance the keyset cursor to the last id we saw.
+        lastId = (oldEmails[oldEmails.length - 1] as { id: string }).id;
+
+        if (oldEmails.length < 200) break;
+      }
+
+      // ---- Pass 2: IMAP header re-fetch for remaining general emails ----
+      // Only needed if we have header-based rules (e.g. list-unsubscribe).
+      // Cap at 500 re-fetches per sync to bound runtime.
+      const hasHeaderRules = categoryRules.some((r) => r.match_type === "header");
+      if (hasHeaderRules) {
+        const { data: remainingEmails } = await supabase
+          .from("emails")
+          .select("id, from_address, subject, body_text, folder, uid")
+          .eq("account_id", accountId)
+          .eq("category", "general")
+          .not("uid", "is", null)
+          .order("id", { ascending: true })
+          .limit(500);
+
+        if (remainingEmails && remainingEmails.length > 0) {
+          // Group by IMAP folder so we only open each mailbox once
+          const byFolder = new Map<string, { id: string; uid: number; fromAddr: string; subject: string; bodyText: string | null }[]>();
+          for (const e of remainingEmails as { id: string; from_address: string; subject: string; body_text: string | null; folder: string; uid: number }[]) {
+            if (!byFolder.has(e.folder)) byFolder.set(e.folder, []);
+            byFolder.get(e.folder)!.push({
+              id: e.id,
+              uid: e.uid,
+              fromAddr: e.from_address,
+              subject: e.subject,
+              bodyText: e.body_text,
+            });
+          }
+
+          // Map our normalized folder name back to an IMAP path we can open
+          const imapFolderPath = new Map<string, string>();
+          for (const path of folderPaths) {
+            const mapped = mapFolder(path);
+            if (!imapFolderPath.has(mapped)) imapFolderPath.set(mapped, path);
+          }
+
+          for (const [folderName, emails] of byFolder) {
+            const imapPath = imapFolderPath.get(folderName);
+            if (!imapPath) continue;
+
+            try {
+              await client.mailboxOpen(imapPath);
+              const uidsToFetch = emails.map((e) => e.uid).join(",");
+              const emailByUid = new Map(emails.map((e) => [e.uid, e]));
+              const updatesByCategory = new Map<Category, string[]>();
+
+              try {
+                for await (const msg of client.fetch(
+                  uidsToFetch,
+                  { uid: true, headers: true },
+                  { uid: true }
+                )) {
+                  const matchedEmail = emailByUid.get(msg.uid);
+                  if (!matchedEmail) continue;
+
+                  // Parse headers — ImapFlow returns a Buffer or Headers map
+                  const msgHeaders: Record<string, string> = {};
+                  if (msg.headers) {
+                    const raw = msg.headers.toString("utf-8");
+                    for (const line of raw.split(/\r?\n/)) {
+                      const idx = line.indexOf(":");
+                      if (idx > 0) {
+                        const key = line.slice(0, idx).trim().toLowerCase();
+                        const value = line.slice(idx + 1).trim();
+                        if (key && !(key in msgHeaders)) {
+                          msgHeaders[key] = value;
+                        }
+                      }
+                    }
+                  }
+
+                  const cat = categorizeEmail(
+                    {
+                      from_address: matchedEmail.fromAddr,
+                      subject: matchedEmail.subject,
+                      headers: msgHeaders,
+                      body_text: matchedEmail.bodyText,
+                    },
+                    categoryRules
+                  );
+
+                  if (cat !== "general") {
+                    if (!updatesByCategory.has(cat)) updatesByCategory.set(cat, []);
+                    updatesByCategory.get(cat)!.push(matchedEmail.id);
+                  }
+                }
+              } catch {
+                // Folder fetch error — skip this folder
+              }
+
+              for (const [cat, ids] of updatesByCategory) {
+                await supabase.from("emails").update({ category: cat }).in("id", ids);
+              }
+
+              await client.mailboxClose();
+            } catch {
+              // Folder open error — skip
+            }
+          }
+        }
+      }
+
+      await supabase
+        .from("email_accounts")
+        .update({ category_backfill_completed_at: new Date().toISOString() })
+        .eq("id", accountId);
+    }
 
     // Determine which folders to sync
     const foldersToSync: string[] = [];
@@ -207,12 +373,19 @@ export async function POST(request: NextRequest) {
             let hasAttachments = false;
             let msgAttachments: Attachment[] = [];
 
+            const msgHeaders: Record<string, string> = {};
             if (msg.source) {
               const parsedMsg = await simpleParser(msg.source);
               bodyText = parsedMsg.text || "";
               bodyHtml = typeof parsedMsg.html === "string" ? parsedMsg.html : "";
               msgAttachments = parsedMsg.attachments || [];
               hasAttachments = msgAttachments.length > 0;
+              // Flatten mailparser headers Map to a lowercased plain object
+              if (parsedMsg.headers) {
+                for (const [key, value] of parsedMsg.headers) {
+                  msgHeaders[key.toLowerCase()] = String(value);
+                }
+              }
             }
 
             if (!hasAttachments && msg.bodyStructure) {
@@ -258,6 +431,7 @@ export async function POST(request: NextRequest) {
               hasAttachments,
               receivedAt: date,
               parsedAttachments: msgAttachments,
+              headers: msgHeaders,
             });
           } catch (msgErr) {
             errors.push(folderPath + ": " + (msgErr instanceof Error ? msgErr.message : "unknown"));
@@ -271,6 +445,11 @@ export async function POST(request: NextRequest) {
               matcherCache,
               { from_address: p.fromAddr, to_addresses: p.toAddresses, subject: p.subject, body_text: p.bodyText },
               account.email_address
+            );
+
+            const category = categorizeEmail(
+              { from_address: p.fromAddr, subject: p.subject, headers: p.headers },
+              categoryRules
             );
 
             return {
@@ -294,6 +473,7 @@ export async function POST(request: NextRequest) {
               matched_by: match?.matched_by || null,
               uid: p.uid,
               received_at: p.receivedAt,
+              category,
             };
           });
 
