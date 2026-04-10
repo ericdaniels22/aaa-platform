@@ -3,38 +3,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  LayoutDashboard,
-  ClipboardPlus,
-  Briefcase,
-  Users,
-  Camera,
-  FileText,
-  Mail,
-  Settings,
-  Menu,
-  X,
-  LogOut,
-  Sparkles,
-  Megaphone,
-} from "lucide-react";
+import { Menu, X, LogOut } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import NotificationBell from "@/components/notification-bell";
-
-const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/jarvis", label: "Jarvis", icon: Sparkles },
-  { href: "/marketing", label: "Marketing", icon: Megaphone },
-  { href: "/intake", label: "New Intake", icon: ClipboardPlus },
-  { href: "/jobs", label: "Jobs", icon: Briefcase },
-  { href: "/photos", label: "Photos", icon: Camera },
-  { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/contacts", label: "Contacts", icon: Users },
-  { href: "/email", label: "Email", icon: Mail },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
+import { navItems } from "@/lib/nav-items";
 
 export default function Sidebar() {
   const pathname = usePathname();
