@@ -46,7 +46,7 @@ export default function EmailSettingsPage() {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [syncResults, setSyncResults] = useState<Record<string, { total_synced: number; total_matched: number; error?: string }>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState({ label: "", display_name: "", signature: "" });
+  const [editValues, setEditValues] = useState({ label: "", display_name: "", signature: "", password: "" });
 
   // Form state
   const [form, setForm] = useState({
@@ -121,14 +121,22 @@ export default function EmailSettingsPage() {
 
   function startEditing(account: EmailAccount) {
     setEditingId(account.id);
-    setEditValues({ label: account.label, display_name: account.display_name || "", signature: account.signature || "" });
+    setEditValues({ label: account.label, display_name: account.display_name || "", signature: account.signature || "", password: "" });
   }
 
   async function handleSaveEdit(id: string) {
+    const payload: Record<string, string> = {
+      label: editValues.label,
+      display_name: editValues.display_name,
+      signature: editValues.signature,
+    };
+    if (editValues.password) {
+      payload.password = editValues.password;
+    }
     await fetch(`/api/email/accounts/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editValues),
+      body: JSON.stringify(payload),
     });
     setEditingId(null);
     fetchAccounts();
@@ -234,6 +242,16 @@ export default function EmailSettingsPage() {
                           placeholder="Eric Daniels&#10;AAA Disaster Recovery&#10;(512) 555-1234"
                           rows={4}
                           className="w-full border border-border rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground/60 mb-0.5">Password <span className="text-muted-foreground/40">(leave blank to keep current)</span></label>
+                        <input
+                          type="password"
+                          value={editValues.password}
+                          onChange={(e) => setEditValues({ ...editValues, password: e.target.value })}
+                          placeholder="••••••••"
+                          className="border border-border rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                         />
                       </div>
                       <div className="flex items-center gap-2">
