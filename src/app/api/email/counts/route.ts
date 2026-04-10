@@ -49,5 +49,30 @@ export async function GET(request: NextRequest) {
   const starredResult = await starredQuery;
   counts.starred = { total: starredResult.count || 0, unread: 0 };
 
-  return NextResponse.json(counts);
+  // Category unread counts for inbox only
+  let categoryQuery = supabase
+    .from("emails")
+    .select("category")
+    .eq("folder", "inbox")
+    .eq("is_read", false);
+
+  if (accountId) {
+    categoryQuery = categoryQuery.eq("account_id", accountId);
+  }
+
+  const { data: categoryData } = await categoryQuery;
+
+  const categoryUnread: Record<string, number> = {
+    general: 0,
+    promotions: 0,
+    social: 0,
+    purchases: 0,
+  };
+
+  for (const row of (categoryData || []) as { category: string | null }[]) {
+    const cat = row.category || "general";
+    if (cat in categoryUnread) categoryUnread[cat]++;
+  }
+
+  return NextResponse.json({ ...counts, categoryUnread });
 }
