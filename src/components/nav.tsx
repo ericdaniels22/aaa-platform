@@ -11,6 +11,7 @@ import NotificationBell from "@/components/notification-bell";
 import { navItems } from "@/lib/nav-items";
 import { useNavOrder } from "@/lib/nav-order-context";
 import { useSidebarCollapse } from "@/lib/sidebar-collapse-context";
+import { Tooltip } from "@base-ui/react/tooltip";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -69,15 +70,16 @@ export default function Sidebar() {
       )}
 
       {/* Sidebar */}
-      <aside
-        className={cn(
-          "fixed top-0 left-0 z-40 h-full gradient-sidebar flex flex-col transition-[transform,width] duration-200 ease-out",
-          "lg:translate-x-0",
-          mobileOpen ? "translate-x-0" : "-translate-x-full",
-          // Mobile overlay is always full sidebar width. Collapse only applies at lg+.
-          collapsed ? "w-52 lg:w-16" : "w-52",
-        )}
-      >
+      <Tooltip.Provider delay={300}>
+        <aside
+          className={cn(
+            "fixed top-0 left-0 z-40 h-full gradient-sidebar flex flex-col transition-[transform,width] duration-200 ease-out",
+            "lg:translate-x-0",
+            mobileOpen ? "translate-x-0" : "-translate-x-full",
+            // Mobile overlay is always full sidebar width. Collapse only applies at lg+.
+            collapsed ? "w-52 lg:w-16" : "w-52",
+          )}
+        >
         {/* Logo area */}
         {collapsed ? (
           <div className="px-2 py-2 border-b border-white/10 flex flex-col items-center gap-1.5 overflow-hidden">
@@ -132,28 +134,54 @@ export default function Sidebar() {
                 ? pathname === "/"
                 : pathname.startsWith(item.href);
 
-            // In collapsed mode on desktop, we render an icon-only square centered
-            // in the rail. On mobile, the sidebar is always full-width (the mobile
-            // overlay ignores `collapsed`), so we keep the expanded layout there.
+            const linkClassName = cn(
+              "rounded-lg text-sm font-medium transition-all duration-200",
+              isActive
+                ? "bg-[image:var(--gradient-primary)] text-white shadow-lg shadow-[oklch(0.45_0.18_165_/_25%)]"
+                : "text-white/60 hover:text-white hover:bg-white/10",
+              collapsed
+                ? "flex items-center justify-center w-10 h-10 mx-auto"
+                : "flex items-center gap-2.5 px-2.5 py-2",
+            );
+
+            if (!collapsed) {
+              // Expanded mode: no tooltip — the visible label is the accessible name.
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={linkClassName}
+                >
+                  <item.icon size={18} />
+                  {item.label}
+                </Link>
+              );
+            }
+
+            // Collapsed mode: wrap the Link as a Tooltip.Trigger render target.
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                aria-label={collapsed ? item.label : undefined}
-                className={cn(
-                  "rounded-lg text-sm font-medium transition-all duration-200",
-                  isActive
-                    ? "bg-[image:var(--gradient-primary)] text-white shadow-lg shadow-[oklch(0.45_0.18_165_/_25%)]"
-                    : "text-white/60 hover:text-white hover:bg-white/10",
-                  collapsed
-                    ? "flex items-center justify-center w-10 h-10 mx-auto"
-                    : "flex items-center gap-2.5 px-2.5 py-2",
-                )}
-              >
-                <item.icon size={18} />
-                {!collapsed && item.label}
-              </Link>
+              <Tooltip.Root key={item.href}>
+                <Tooltip.Trigger
+                  render={
+                    <Link
+                      href={item.href}
+                      onClick={() => setMobileOpen(false)}
+                      aria-label={item.label}
+                      className={linkClassName}
+                    >
+                      <item.icon size={18} />
+                    </Link>
+                  }
+                />
+                <Tooltip.Portal>
+                  <Tooltip.Positioner side="right" sideOffset={8}>
+                    <Tooltip.Popup className="z-50 rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white shadow-lg ring-1 ring-white/10">
+                      {item.label}
+                    </Tooltip.Popup>
+                  </Tooltip.Positioner>
+                </Tooltip.Portal>
+              </Tooltip.Root>
             );
           })}
         </nav>
@@ -169,14 +197,26 @@ export default function Sidebar() {
                 >
                   <span className="text-xs font-semibold text-white">{initials}</span>
                 </div>
-                <button
-                  onClick={handleSignOut}
-                  className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition-colors"
-                  aria-label="Sign out"
-                  title="Sign out"
-                >
-                  <LogOut size={16} />
-                </button>
+                <Tooltip.Root>
+                  <Tooltip.Trigger
+                    render={
+                      <button
+                        onClick={handleSignOut}
+                        className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition-colors"
+                        aria-label="Sign out"
+                      >
+                        <LogOut size={16} />
+                      </button>
+                    }
+                  />
+                  <Tooltip.Portal>
+                    <Tooltip.Positioner side="right" sideOffset={8}>
+                      <Tooltip.Popup className="z-50 rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white shadow-lg ring-1 ring-white/10">
+                        Sign out
+                      </Tooltip.Popup>
+                    </Tooltip.Positioner>
+                  </Tooltip.Portal>
+                </Tooltip.Root>
               </div>
             ) : (
               <div className="flex items-center gap-3">
@@ -205,7 +245,8 @@ export default function Sidebar() {
             <p className="text-white/30 text-xs">AAA Platform v1.0</p>
           )}
         </div>
-      </aside>
+        </aside>
+      </Tooltip.Provider>
     </>
   );
 }
