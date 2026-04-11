@@ -103,15 +103,14 @@ export default function Sidebar() {
             </div>
           </div>
         ) : (
-          <div className="shrink-0 px-4 py-1 border-b border-white/10 flex items-center justify-between overflow-hidden">
+          <div className="shrink-0 px-3 py-2 border-b border-white/10 flex items-center justify-between gap-2 overflow-hidden">
             <Image
               src="/logo.png"
               alt="AAA Disaster Recovery"
-              width={140}
-              height={51}
-              className="-my-2"
+              width={120}
+              height={120}
             />
-            <div className="hidden lg:flex items-center gap-1">
+            <div className="hidden lg:flex flex-col items-center gap-1 shrink-0">
               <NotificationBell />
               <button
                 type="button"
