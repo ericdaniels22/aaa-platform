@@ -201,6 +201,16 @@ export interface EmailAttachment {
   created_at: string;
 }
 
+export interface JobFile {
+  id: string;
+  job_id: string;
+  filename: string;
+  storage_path: string;
+  size_bytes: number;
+  mime_type: string;
+  created_at: string;
+}
+
 export interface EmailAccount {
   id: string;
   label: string;

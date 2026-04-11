@@ -21,6 +21,7 @@ import PhotoDetailModal from "@/components/photo-detail";
 import PhotoAnnotator from "@/components/photo-annotator";
 import ComposeEmailModal from "@/components/compose-email";
 import JarvisJobPanel from "@/components/jarvis/JarvisJobPanel";
+import JobFiles from "@/components/job-files";
 import {
   MapPin,
   Home,
@@ -626,6 +627,8 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         initialPhotoIndex={photos.findIndex((p) => p.id === annotatorPhoto?.id)}
         onSaved={fetchData}
       />
+
+      <JobFiles jobId={jobId} />
 
       {/* Reports */}
       {reports.length > 0 && (
