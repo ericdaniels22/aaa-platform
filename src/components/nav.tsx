@@ -126,7 +126,7 @@ export default function Sidebar() {
         )}
 
         {/* Navigation */}
-        <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-1">
+        <nav className="scrollbar-subtle flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 py-4 space-y-1">
           {sortedNavItems.map((item) => {
             const isActive =
               item.href === "/"
