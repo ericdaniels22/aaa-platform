@@ -727,6 +727,9 @@ Then replace the entire `<nav>` block that was written in Task 4:
         ? pathname === "/"
         : pathname.startsWith(item.href);
 
+    // In collapsed mode on desktop, we render an icon-only square centered
+    // in the rail. On mobile, the sidebar is always full-width (the mobile
+    // overlay ignores `collapsed`), so we keep the expanded layout there.
     return (
       <Link
         key={item.href}
@@ -739,7 +742,7 @@ Then replace the entire `<nav>` block that was written in Task 4:
             ? "bg-[image:var(--gradient-primary)] text-white shadow-lg shadow-[oklch(0.45_0.18_165_/_25%)]"
             : "text-white/60 hover:text-white hover:bg-white/10",
           collapsed
-            ? "flex items-center justify-center w-10 h-10 mx-auto lg:w-10 lg:h-10"
+            ? "flex items-center justify-center w-10 h-10 mx-auto"
             : "flex items-center gap-2.5 px-2.5 py-2",
         )}
       >
