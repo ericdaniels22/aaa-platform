@@ -90,6 +90,7 @@ export default function Sidebar() {
               </span>
             </div>
             <div className="hidden lg:flex flex-col items-center gap-1">
+              <NotificationBell />
               <button
                 type="button"
                 onClick={toggle}
@@ -99,7 +100,6 @@ export default function Sidebar() {
               >
                 <PanelLeftOpen size={18} />
               </button>
-              <NotificationBell />
             </div>
           </div>
         ) : (
