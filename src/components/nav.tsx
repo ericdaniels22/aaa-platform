@@ -82,7 +82,7 @@ export default function Sidebar() {
         >
         {/* Logo area */}
         {collapsed ? (
-          <div className="px-2 py-2 border-b border-white/10 flex flex-col items-center gap-1.5 overflow-hidden">
+          <div className="shrink-0 px-2 py-2 border-b border-white/10 flex flex-col items-center gap-1.5 overflow-hidden">
             {/* Logo mark (AAA initials square) */}
             <div className="w-10 h-10 rounded-lg bg-[image:var(--gradient-primary)] flex items-center justify-center shrink-0 shadow-sm">
               <span className="text-[11px] font-bold text-white tracking-tight">
@@ -103,7 +103,7 @@ export default function Sidebar() {
             </div>
           </div>
         ) : (
-          <div className="px-4 py-1 border-b border-white/10 flex items-center justify-between overflow-hidden">
+          <div className="shrink-0 px-4 py-1 border-b border-white/10 flex items-center justify-between overflow-hidden">
             <Image
               src="/logo.png"
               alt="AAA Disaster Recovery"
@@ -127,7 +127,7 @@ export default function Sidebar() {
         )}
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-1">
           {sortedNavItems.map((item) => {
             const isActive =
               item.href === "/"
@@ -187,7 +187,7 @@ export default function Sidebar() {
         </nav>
 
         {/* User footer */}
-        <div className="px-3 py-3 border-t border-white/10">
+        <div className="shrink-0 px-3 py-3 border-t border-white/10">
           {profile ? (
             collapsed ? (
               <div className="flex flex-col items-center gap-2">
