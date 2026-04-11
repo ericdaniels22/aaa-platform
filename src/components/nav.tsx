@@ -79,21 +79,50 @@ export default function Sidebar() {
         )}
       >
         {/* Logo area */}
-        <div className="px-4 py-1 border-b border-white/10 flex items-center justify-between overflow-hidden">
-          <Image src="/logo.png" alt="AAA Disaster Recovery" width={140} height={51} className="-my-2" />
-          <div className="hidden lg:flex items-center gap-1">
-            <NotificationBell />
-            <button
-              type="button"
-              onClick={toggle}
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              aria-expanded={!collapsed}
-              className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-            >
-              {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-            </button>
+        {collapsed ? (
+          <div className="px-2 py-2 border-b border-white/10 flex flex-col items-center gap-1.5 overflow-hidden">
+            {/* Logo mark (AAA initials square) */}
+            <div className="w-10 h-10 rounded-lg bg-[image:var(--gradient-primary)] flex items-center justify-center shrink-0 shadow-sm">
+              <span className="text-[11px] font-bold text-white tracking-tight">
+                AAA
+              </span>
+            </div>
+            <div className="hidden lg:flex flex-col items-center gap-1">
+              <button
+                type="button"
+                onClick={toggle}
+                aria-label="Expand sidebar"
+                aria-expanded={false}
+                className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <PanelLeftOpen size={18} />
+              </button>
+              <NotificationBell />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="px-4 py-1 border-b border-white/10 flex items-center justify-between overflow-hidden">
+            <Image
+              src="/logo.png"
+              alt="AAA Disaster Recovery"
+              width={140}
+              height={51}
+              className="-my-2"
+            />
+            <div className="hidden lg:flex items-center gap-1">
+              <NotificationBell />
+              <button
+                type="button"
+                onClick={toggle}
+                aria-label="Collapse sidebar"
+                aria-expanded={true}
+                className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <PanelLeftClose size={18} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1">
@@ -132,22 +161,46 @@ export default function Sidebar() {
         {/* User footer */}
         <div className="px-3 py-3 border-t border-white/10">
           {profile ? (
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[image:var(--gradient-primary)] flex items-center justify-center shrink-0 shadow-sm">
-                <span className="text-xs font-semibold text-white">{initials}</span>
+            collapsed ? (
+              <div className="flex flex-col items-center gap-2">
+                <div
+                  className="w-8 h-8 rounded-full bg-[image:var(--gradient-primary)] flex items-center justify-center shrink-0 shadow-sm"
+                  title={`${profile.full_name} — ${profile.role.replace("_", " ")}`}
+                >
+                  <span className="text-xs font-semibold text-white">{initials}</span>
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition-colors"
+                  aria-label="Sign out"
+                  title="Sign out"
+                >
+                  <LogOut size={16} />
+                </button>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white/90 truncate">{profile.full_name}</p>
-                <p className="text-[10px] text-white/40 capitalize">{profile.role.replace("_", " ")}</p>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-[image:var(--gradient-primary)] flex items-center justify-center shrink-0 shadow-sm">
+                  <span className="text-xs font-semibold text-white">{initials}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white/90 truncate">
+                    {profile.full_name}
+                  </p>
+                  <p className="text-[10px] text-white/40 capitalize">
+                    {profile.role.replace("_", " ")}
+                  </p>
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition-colors"
+                  aria-label="Sign out"
+                  title="Sign out"
+                >
+                  <LogOut size={16} />
+                </button>
               </div>
-              <button
-                onClick={handleSignOut}
-                className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition-colors"
-                title="Sign out"
-              >
-                <LogOut size={16} />
-              </button>
-            </div>
+            )
           ) : (
             <p className="text-white/30 text-xs">AAA Platform v1.0</p>
           )}
