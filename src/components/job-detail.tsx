@@ -35,8 +35,6 @@ import {
   User,
   ArrowLeft,
   Droplets,
-  Camera,
-  Image as ImageIcon,
   Pencil,
   Inbox,
   Send,
@@ -625,58 +623,6 @@ export default function JobDetail({ jobId }: { jobId: string }) {
                 </div>
               ))}
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Photo Preview */}
-      <div className="bg-card rounded-xl border border-border p-5 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-foreground">
-            <Camera size={16} className="inline mr-2 -mt-0.5" />
-            Photos
-          </h3>
-          <div className="flex items-center gap-3">
-            {photos.length > 0 && (
-              <Link
-                href={`/reports/new?jobId=${jobId}`}
-                className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 border border-gray-200 bg-white text-primary hover:bg-[#E8F0FE] transition-colors gap-1.5"
-              >
-                <FileText size={14} />
-                Generate Report
-              </Link>
-            )}
-            <button
-              onClick={() => setActiveTab("photos")}
-              className="text-sm font-medium text-[#2B5EA7] hover:underline"
-            >
-              View all {photoCount} photos →
-            </button>
-          </div>
-        </div>
-        {photos.length === 0 ? (
-          <div className="text-center py-8">
-            <ImageIcon size={40} className="mx-auto text-muted-foreground/40 mb-2" />
-            <p className="text-sm text-muted-foreground/60">No photos yet.</p>
-            <p className="text-xs text-muted-foreground/40 mt-1">
-              Switch to the Photos tab to upload.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-1.5">
-            {photos.slice(0, 12).map((photo) => (
-              <button
-                key={photo.id}
-                onClick={() => setSelectedPhoto(photo)}
-                className="aspect-square bg-muted rounded-md overflow-hidden"
-              >
-                <img
-                  src={`${supabaseUrl}/storage/v1/object/public/photos/${photo.annotated_path || photo.storage_path}`}
-                  alt={photo.caption || "Job photo"}
-                  className="w-full h-full object-cover"
-                />
-              </button>
-            ))}
           </div>
         )}
       </div>
