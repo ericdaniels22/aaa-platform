@@ -55,6 +55,8 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
+import JobPhotosTab from "@/components/job-photos-tab";
 
 const propertyTypeLabels: Record<string, string> = {
   single_family: "Single Family",
@@ -86,13 +88,28 @@ export default function JobDetail({ jobId }: { jobId: string }) {
   const [editContactOpen, setEditContactOpen] = useState(false);
   const [editInsuranceOpen, setEditInsuranceOpen] = useState(false);
   const [addAdjusterOpen, setAddAdjusterOpen] = useState(false);
+  const [photoCount, setPhotoCount] = useState(0);
+
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const activeTab = searchParams.get("tab") || "overview";
+
+  const setActiveTab = (tab: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === "overview") {
+      params.delete("tab");
+    } else {
+      params.set("tab", tab);
+    }
+    router.push(`?${params.toString()}`, { scroll: false });
+  };
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
   const fetchData = useCallback(async () => {
     const supabase = createClient();
 
-    const [jobRes, activitiesRes, paymentsRes, photosRes, tagsRes, reportsRes, emailsRes] = await Promise.all([
+    const [jobRes, activitiesRes, paymentsRes, photosRes, photoCountRes, tagsRes, reportsRes, emailsRes] = await Promise.all([
       supabase
         .from("jobs")
         .select("*, contact:contacts!contact_id(*), job_adjusters(*, adjuster:contacts!contact_id(*))")
@@ -112,7 +129,12 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         .from("photos")
         .select("*")
         .eq("job_id", jobId)
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: false })
+        .limit(12),
+      supabase
+        .from("photos")
+        .select("id", { count: "exact", head: true })
+        .eq("job_id", jobId),
       supabase.from("photo_tags").select("*").order("name"),
       supabase
         .from("photo_reports")
@@ -130,6 +152,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
     if (activitiesRes.data) setActivities(activitiesRes.data as JobActivity[]);
     if (paymentsRes.data) setPayments(paymentsRes.data as Payment[]);
     if (photosRes.data) setPhotos(photosRes.data as Photo[]);
+    if (photoCountRes.count != null) setPhotoCount(photoCountRes.count);
     if (tagsRes.data) setTags(tagsRes.data as PhotoTag[]);
     if (reportsRes.data) setReports(reportsRes.data as PhotoReport[]);
     if (emailsRes.data) setEmails(emailsRes.data as Email[]);
@@ -261,6 +284,42 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         </div>
       </div>
 
+      {/* Tab bar */}
+      <div className="flex gap-0 border-b-2 border-border mb-6">
+        <button
+          onClick={() => setActiveTab("overview")}
+          className={cn(
+            "px-6 py-2.5 text-sm font-medium -mb-[2px] border-b-2 transition-colors",
+            activeTab === "overview"
+              ? "text-[#2B5EA7] border-[#2B5EA7] font-semibold"
+              : "text-muted-foreground border-transparent hover:text-foreground"
+          )}
+        >
+          Overview
+        </button>
+        <button
+          onClick={() => setActiveTab("photos")}
+          className={cn(
+            "px-6 py-2.5 text-sm font-medium -mb-[2px] border-b-2 transition-colors flex items-center gap-1.5",
+            activeTab === "photos"
+              ? "text-[#2B5EA7] border-[#2B5EA7] font-semibold"
+              : "text-muted-foreground border-transparent hover:text-foreground"
+          )}
+        >
+          Photos
+          <span className={cn(
+            "text-[11px] px-1.5 py-0 rounded-full",
+            activeTab === "photos"
+              ? "bg-[#dbeafe] text-[#2B5EA7]"
+              : "bg-muted text-muted-foreground"
+          )}>
+            {photoCount}
+          </span>
+        </button>
+      </div>
+
+      {activeTab === "overview" ? (
+      <>
       {/* Info card — 3 columns */}
       <div className="rounded-xl border border-border bg-card p-6 mb-6">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr_1px_1fr] gap-0">
@@ -570,14 +629,14 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         )}
       </div>
 
-      {/* Photos */}
+      {/* Photo Preview */}
       <div className="bg-card rounded-xl border border-border p-5 mb-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold text-foreground">
             <Camera size={16} className="inline mr-2 -mt-0.5" />
-            Photos ({photos.length})
+            Photos
           </h3>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
             {photos.length > 0 && (
               <Link
                 href={`/reports/new?jobId=${jobId}`}
@@ -588,107 +647,39 @@ export default function JobDetail({ jobId }: { jobId: string }) {
               </Link>
             )}
             <button
-              onClick={() => setPhotoUploadOpen(true)}
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md transition-colors"
+              onClick={() => setActiveTab("photos")}
+              className="text-sm font-medium text-[#2B5EA7] hover:underline"
             >
-              + Upload Photos
+              View all {photoCount} photos →
             </button>
           </div>
         </div>
-        <PhotoUploadModal
-          open={photoUploadOpen}
-          onOpenChange={setPhotoUploadOpen}
-          jobId={jobId}
-          tags={tags}
-          onPhotosAdded={fetchData}
-        />
         {photos.length === 0 ? (
           <div className="text-center py-8">
             <ImageIcon size={40} className="mx-auto text-muted-foreground/40 mb-2" />
             <p className="text-sm text-muted-foreground/60">No photos yet.</p>
             <p className="text-xs text-muted-foreground/40 mt-1">
-              Upload photos using the button above.
+              Switch to the Photos tab to upload.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {photos.map((photo) => (
+          <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-1.5">
+            {photos.slice(0, 12).map((photo) => (
               <button
                 key={photo.id}
                 onClick={() => setSelectedPhoto(photo)}
-                className="aspect-square bg-muted rounded-lg overflow-hidden relative group text-left"
+                className="aspect-square bg-muted rounded-md overflow-hidden"
               >
                 <img
                   src={`${supabaseUrl}/storage/v1/object/public/photos/${photo.annotated_path || photo.storage_path}`}
                   alt={photo.caption || "Job photo"}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                  className="w-full h-full object-cover"
                 />
-                {photo.caption && (
-                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <p className="text-xs text-white truncate">
-                      {photo.caption}
-                    </p>
-                  </div>
-                )}
-                {photo.before_after_role && (
-                  <Badge
-                    className={cn(
-                      "absolute top-2 left-2 text-[10px] px-1.5 py-0 rounded",
-                      photo.before_after_role === "before"
-                        ? "bg-[#FCEBEB] text-[#791F1F]"
-                        : "bg-[#E1F5EE] text-[#085041]"
-                    )}
-                  >
-                    {photo.before_after_role === "before" ? "Before" : "After"}
-                  </Badge>
-                )}
-                {photo.annotated_path && (
-                  <div className="absolute bottom-2 right-2 bg-black/60 rounded px-1.5 py-0.5 flex items-center gap-1">
-                    <Pencil size={10} className="text-white" />
-                    <span className="text-[10px] text-white font-medium">Edited</span>
-                  </div>
-                )}
               </button>
             ))}
           </div>
         )}
       </div>
-      <PhotoDetailModal
-        open={!!selectedPhoto}
-        onOpenChange={(open) => {
-          if (!open) setSelectedPhoto(null);
-        }}
-        photo={selectedPhoto}
-        allTags={tags}
-        photoUrl={
-          selectedPhoto
-            ? `${supabaseUrl}/storage/v1/object/public/photos/${selectedPhoto.annotated_path || selectedPhoto.storage_path}`
-            : ""
-        }
-        onUpdated={() => {
-          setSelectedPhoto(null);
-          fetchData();
-        }}
-        onAnnotate={(photo, url) => {
-          setAnnotatorPhoto(photo);
-          setAnnotatorUrl(url);
-          setSelectedPhoto(null);
-          setAnnotatorOpen(true);
-        }}
-      />
-      <PhotoAnnotator
-        open={annotatorOpen}
-        onOpenChange={(val) => {
-          setAnnotatorOpen(val);
-          if (!val) {
-            setAnnotatorPhoto(null);
-            setAnnotatorUrl("");
-          }
-        }}
-        photos={photos}
-        initialPhotoIndex={photos.findIndex((p) => p.id === annotatorPhoto?.id)}
-        onSaved={fetchData}
-      />
 
       <JobFiles jobId={jobId} />
 
@@ -840,6 +831,62 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         activities={activities}
         jobId={jobId}
         onActivityAdded={fetchData}
+      />
+      </>
+      ) : (
+        <JobPhotosTab
+          jobId={jobId}
+          tags={tags}
+          supabaseUrl={supabaseUrl}
+          onPhotosAdded={fetchData}
+          onPhotoUpdated={fetchData}
+          onSelectPhoto={(photo) => setSelectedPhoto(photo)}
+        />
+      )}
+
+      {/* Photo modals — always rendered regardless of tab */}
+      <PhotoUploadModal
+        open={photoUploadOpen}
+        onOpenChange={setPhotoUploadOpen}
+        jobId={jobId}
+        tags={tags}
+        onPhotosAdded={fetchData}
+      />
+      <PhotoDetailModal
+        open={!!selectedPhoto}
+        onOpenChange={(open) => {
+          if (!open) setSelectedPhoto(null);
+        }}
+        photo={selectedPhoto}
+        allTags={tags}
+        photoUrl={
+          selectedPhoto
+            ? `${supabaseUrl}/storage/v1/object/public/photos/${selectedPhoto.annotated_path || selectedPhoto.storage_path}`
+            : ""
+        }
+        onUpdated={() => {
+          setSelectedPhoto(null);
+          fetchData();
+        }}
+        onAnnotate={(photo, url) => {
+          setAnnotatorPhoto(photo);
+          setAnnotatorUrl(url);
+          setSelectedPhoto(null);
+          setAnnotatorOpen(true);
+        }}
+      />
+      <PhotoAnnotator
+        open={annotatorOpen}
+        onOpenChange={(val) => {
+          setAnnotatorOpen(val);
+          if (!val) {
+            setAnnotatorPhoto(null);
+            setAnnotatorUrl("");
+          }
+        }}
+        photos={photos}
+        initialPhotoIndex={photos.findIndex((p) => p.id === annotatorPhoto?.id)}
+        onSaved={fetchData}
       />
     </div>
   );
