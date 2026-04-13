@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
     // Pre-fetch job matching cache (once for entire sync)
     const { data: jobsData } = await supabase
       .from("jobs")
-      .select("id, job_number, claim_number, property_address, contact_id, adjuster_contact_id")
+      .select("id, job_number, claim_number, property_address, contact_id, job_adjusters(contact_id)")
       .not("status", "eq", "cancelled");
 
     const jobs = (jobsData || []) as JobRow[];
@@ -124,7 +124,11 @@ export async function POST(request: NextRequest) {
     const contactIds = new Set<string>();
     for (const job of jobs) {
       contactIds.add(job.contact_id);
-      if (job.adjuster_contact_id) contactIds.add(job.adjuster_contact_id);
+      if (job.job_adjusters) {
+        for (const ja of job.job_adjusters) {
+          contactIds.add(ja.contact_id);
+        }
+      }
     }
 
     let contacts: ContactRow[] = [];
