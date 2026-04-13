@@ -6,6 +6,7 @@ export interface Contact {
   email: string | null;
   role: "homeowner" | "tenant" | "property_manager" | "adjuster" | "insurance";
   company: string | null;
+  title: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -26,12 +27,27 @@ export interface Job {
   affected_areas: string | null;
   insurance_company: string | null;
   claim_number: string | null;
-  adjuster_contact_id: string | null;
+  policy_number: string | null;
+  date_of_loss: string | null;
+  deductible: number | null;
+  hoa_name: string | null;
+  hoa_contact_name: string | null;
+  hoa_contact_phone: string | null;
+  hoa_contact_email: string | null;
   access_notes: string | null;
   created_at: string;
   updated_at: string;
   // Joined fields
   contact?: Contact;
+  job_adjusters?: JobAdjuster[];
+}
+
+export interface JobAdjuster {
+  id: string;
+  job_id: string;
+  contact_id: string;
+  is_primary: boolean;
+  created_at: string;
   adjuster?: Contact;
 }
 

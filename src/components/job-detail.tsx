@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
-import { Job, JobActivity, Payment, Photo, PhotoTag, PhotoReport, Email } from "@/lib/types";
+import { Job, JobAdjuster, Contact, JobActivity, Payment, Photo, PhotoTag, PhotoReport, Email } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +84,8 @@ export default function JobDetail({ jobId }: { jobId: string }) {
   const [annotatorUrl, setAnnotatorUrl] = useState("");
   const [editJobOpen, setEditJobOpen] = useState(false);
   const [editContactOpen, setEditContactOpen] = useState(false);
+  const [editInsuranceOpen, setEditInsuranceOpen] = useState(false);
+  const [addAdjusterOpen, setAddAdjusterOpen] = useState(false);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
@@ -93,7 +95,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
     const [jobRes, activitiesRes, paymentsRes, photosRes, tagsRes, reportsRes, emailsRes] = await Promise.all([
       supabase
         .from("jobs")
-        .select("*, contact:contacts!contact_id(*), adjuster:contacts!adjuster_contact_id(*)")
+        .select("*, contact:contacts!contact_id(*), job_adjusters(*, adjuster:contacts!contact_id(*))")
         .eq("id", jobId)
         .single(),
       supabase
@@ -259,121 +261,163 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         </div>
       </div>
 
-      {/* Info grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* Job Info */}
-        <div className="bg-card rounded-xl border border-border p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-foreground">
-              Job Info
-            </h3>
-            <button
-              onClick={() => setEditJobOpen(true)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              title="Edit Job Info"
-            >
-              <Pencil size={14} />
-            </button>
-          </div>
-          <div className="space-y-3 text-sm">
-            <InfoRow icon={MapPin} label="Address" value={job.property_address} />
-            {job.property_type && (
-              <InfoRow
-                icon={Home}
-                label="Property Type"
-                value={propertyTypeLabels[job.property_type] || job.property_type}
-              />
-            )}
-            {job.property_sqft && (
-              <InfoRow icon={Ruler} label="Sq Ft" value={`${job.property_sqft.toLocaleString()} sq ft`} />
-            )}
-            {job.property_stories && (
-              <InfoRow icon={Layers} label="Stories" value={String(job.property_stories)} />
-            )}
-            {job.damage_source && (
-              <InfoRow icon={Droplets} label="Damage Source" value={job.damage_source} />
-            )}
-            {job.affected_areas && (
-              <InfoRow icon={MapPin} label="Affected Areas" value={job.affected_areas} />
-            )}
-            {job.access_notes && (
-              <InfoRow icon={KeyRound} label="Access Notes" value={job.access_notes} />
-            )}
-            <InfoRow
-              icon={FileText}
-              label="Intake Date"
-              value={format(new Date(job.created_at), "MMM d, yyyy 'at' h:mm a")}
-            />
-          </div>
-        </div>
-
-        {/* Contact & Insurance */}
-        <div className="bg-card rounded-xl border border-border p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-foreground">
-              Contact & Insurance
-            </h3>
-            <button
-              onClick={() => setEditContactOpen(true)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              title="Edit Contact & Insurance"
-            >
-              <Pencil size={14} />
-            </button>
-          </div>
-          <div className="space-y-3 text-sm">
-            <InfoRow icon={User} label="Contact" value={contactName} />
-            {job.contact?.phone && (
-              <InfoRow icon={Phone} label="Phone" value={job.contact.phone} />
-            )}
-            {job.contact?.email && (
-              <InfoRow icon={Mail} label="Email" value={job.contact.email} />
-            )}
-            {job.contact?.role && (
-              <InfoRow
-                icon={User}
-                label="Relationship"
-                value={job.contact.role.replace("_", " ")}
-              />
-            )}
-
-            {(job.insurance_company || job.claim_number) && (
-              <>
-                <div className="border-t border-border/50 pt-3 mt-3" />
-                {job.insurance_company && (
-                  <InfoRow
-                    icon={Building}
-                    label="Insurance"
-                    value={job.insurance_company}
-                  />
-                )}
-                {job.claim_number && (
-                  <InfoRow
-                    icon={FileText}
-                    label="Claim #"
-                    value={job.claim_number}
-                  />
-                )}
-              </>
-            )}
-
-            {job.adjuster && (
-              <>
-                <div className="border-t border-border/50 pt-3 mt-3" />
+      {/* Info card — 3 columns */}
+      <div className="rounded-xl border border-border bg-card p-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr_1px_1fr] gap-0">
+          {/* Column 1: Job Info */}
+          <div className="pr-0 lg:pr-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-foreground">Job Info</h3>
+              <button
+                onClick={() => setEditJobOpen(true)}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                title="Edit Job Info"
+              >
+                <Pencil size={14} />
+              </button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <InfoRow icon={MapPin} label="Address" value={job.property_address} />
+              {job.property_type && (
                 <InfoRow
-                  icon={User}
-                  label="Adjuster"
-                  value={`${job.adjuster.first_name} ${job.adjuster.last_name}`}
+                  icon={Home}
+                  label="Property Type"
+                  value={propertyTypeLabels[job.property_type] || job.property_type}
                 />
-                {job.adjuster.phone && (
-                  <InfoRow
-                    icon={Phone}
-                    label="Adjuster Phone"
-                    value={job.adjuster.phone}
-                  />
-                )}
-              </>
+              )}
+              {job.damage_source && (
+                <InfoRow icon={Droplets} label="Damage Source" value={job.damage_source} />
+              )}
+              {job.affected_areas && (
+                <InfoRow icon={MapPin} label="Affected Areas" value={job.affected_areas} />
+              )}
+              <InfoRow
+                icon={FileText}
+                label="Intake Date"
+                value={format(new Date(job.created_at), "MMM d, yyyy 'at' h:mm a")}
+              />
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="hidden lg:block bg-border/50" />
+
+          {/* Column 2: Contact + Adjusters */}
+          <div className="px-0 lg:px-6 pt-6 lg:pt-0">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-foreground">Contact</h3>
+              <button
+                onClick={() => setEditContactOpen(true)}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                title="Edit Contact"
+              >
+                <Pencil size={14} />
+              </button>
+            </div>
+
+            {/* Condensed homeowner card */}
+            {job.contact && (
+              <div className="rounded-lg border border-border bg-background/50 p-3 mb-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-foreground">
+                    {job.contact.first_name} {job.contact.last_name}
+                  </span>
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 uppercase">
+                    {job.contact.role === "property_manager" ? "Prop Manager" : job.contact.role}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {[job.contact.phone, job.contact.email].filter(Boolean).join(" \u00b7 ")}
+                </p>
+              </div>
             )}
+
+            {/* Adjusters sub-section */}
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Adjusters</span>
+                <button
+                  onClick={() => setAddAdjusterOpen(true)}
+                  className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                  title="Add Adjuster"
+                >
+                  +
+                </button>
+              </div>
+              {(job.job_adjusters && job.job_adjusters.length > 0) ? (
+                <div className="space-y-2">
+                  {[...job.job_adjusters]
+                    .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))
+                    .map((ja) => (
+                      <AdjusterCard key={ja.id} jobAdjuster={ja} jobId={jobId} onUpdated={fetchData} />
+                    ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground/60 py-2">No adjusters assigned</p>
+              )}
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="hidden lg:block bg-border/50" />
+
+          {/* Column 3: Insurance + HOA */}
+          <div className="pl-0 lg:pl-6 pt-6 lg:pt-0">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-foreground">Insurance</h3>
+              <button
+                onClick={() => setEditInsuranceOpen(true)}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                title="Edit Insurance"
+              >
+                <Pencil size={14} />
+              </button>
+            </div>
+
+            {/* Insurance card */}
+            {(job.insurance_company || job.claim_number || job.policy_number) ? (
+              <div className="rounded-lg border border-border bg-background/50 p-3 mb-3">
+                {job.insurance_company && (
+                  <p className="text-sm font-medium text-foreground mb-1">{job.insurance_company}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {[
+                    job.claim_number ? `Claim: ${job.claim_number}` : null,
+                    job.policy_number ? `Policy: ${job.policy_number}` : null,
+                  ].filter(Boolean).join(" \u00b7 ")}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {[
+                    job.date_of_loss ? `DOL: ${format(new Date(job.date_of_loss), "MMM d, yyyy")}` : null,
+                    job.deductible != null ? `Deductible: $${Number(job.deductible).toLocaleString()}` : null,
+                  ].filter(Boolean).join(" \u00b7 ")}
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground/60 py-2">No insurance info</p>
+            )}
+
+            {/* HOA sub-section */}
+            <div className="mt-4">
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">HOA</span>
+              {(job.hoa_name || job.hoa_contact_name) ? (
+                <div className="rounded-lg border border-border bg-background/50 p-3 mt-2">
+                  {job.hoa_name && (
+                    <p className="text-sm font-medium text-foreground mb-1">{job.hoa_name}</p>
+                  )}
+                  {job.hoa_contact_name && (
+                    <p className="text-xs text-muted-foreground">
+                      {[job.hoa_contact_name, job.hoa_contact_phone].filter(Boolean).join(" \u00b7 ")}
+                    </p>
+                  )}
+                  {job.hoa_contact_email && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{job.hoa_contact_email}</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground/60 py-2">No HOA info</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -387,12 +431,30 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         onSaved={fetchData}
       />
 
-      {/* Edit Contact & Insurance Dialog */}
+      {/* Edit Contact Dialog */}
       <EditContactDialog
         open={editContactOpen}
         onOpenChange={setEditContactOpen}
         job={job}
         jobId={jobId}
+        onSaved={fetchData}
+      />
+
+      {/* Edit Insurance Dialog */}
+      <EditInsuranceDialog
+        open={editInsuranceOpen}
+        onOpenChange={setEditInsuranceOpen}
+        job={job}
+        jobId={jobId}
+        onSaved={fetchData}
+      />
+
+      {/* Add Adjuster Dialog */}
+      <AddAdjusterDialog
+        open={addAdjusterOpen}
+        onOpenChange={setAddAdjusterOpen}
+        jobId={jobId}
+        existingAdjusterIds={(job.job_adjusters || []).map((ja) => ja.contact_id)}
         onSaved={fetchData}
       />
 
@@ -705,7 +767,8 @@ export default function JobDetail({ jobId }: { jobId: string }) {
           </h3>
           <button
             onClick={() => {
-              const defaultTo = job.contact?.email || job.adjuster?.email || "";
+              const primaryAdj = (job.job_adjusters || []).find((ja) => ja.is_primary)?.adjuster;
+              const defaultTo = job.contact?.email || primaryAdj?.email || "";
               const defaultSubject = job.job_number ? `Re: ${job.job_number}` : "";
               setComposeDefaults({ to: defaultTo, subject: defaultSubject, replyToMessageId: "" });
               setComposeOpen(true);
@@ -798,6 +861,72 @@ function InfoRow({
         <p className="text-xs text-muted-foreground">{label}</p>
         <p className="text-foreground">{value}</p>
       </div>
+    </div>
+  );
+}
+
+function AdjusterCard({
+  jobAdjuster,
+  jobId,
+  onUpdated,
+}: {
+  jobAdjuster: JobAdjuster;
+  jobId: string;
+  onUpdated: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const adj = jobAdjuster.adjuster;
+  if (!adj) return null;
+
+  const handleSetPrimary = async () => {
+    const supabase = createClient();
+    await supabase.from("job_adjusters").update({ is_primary: false }).eq("job_id", jobId);
+    await supabase.from("job_adjusters").update({ is_primary: true }).eq("id", jobAdjuster.id);
+    setMenuOpen(false);
+    onUpdated();
+  };
+
+  const handleRemove = async () => {
+    const supabase = createClient();
+    await supabase.from("job_adjusters").delete().eq("id", jobAdjuster.id);
+    setMenuOpen(false);
+    onUpdated();
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-background/50 p-3 group relative">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-sm font-medium text-foreground">
+          {adj.first_name} {adj.last_name}
+        </span>
+        <div className="flex items-center gap-1.5">
+          {jobAdjuster.is_primary && (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase">
+              Primary
+            </span>
+          )}
+          <div className="relative">
+            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={() => setMenuOpen(!menuOpen)}>
+              <span className="text-muted-foreground text-xs">&bull;&bull;&bull;</span>
+            </Button>
+            {menuOpen && (
+              <div className="absolute right-0 top-7 z-50 bg-popover border border-border rounded-md shadow-lg py-1 min-w-[140px]">
+                {!jobAdjuster.is_primary && (
+                  <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent text-foreground" onClick={handleSetPrimary}>
+                    Set as Primary
+                  </button>
+                )}
+                <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent text-destructive" onClick={handleRemove}>
+                  Remove
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">{[adj.title, adj.company].filter(Boolean).join(" \u00b7 ")}</p>
+      <p className="text-xs text-muted-foreground mt-0.5">{[adj.phone, adj.email].filter(Boolean).join(" \u00b7 ")}</p>
     </div>
   );
 }
@@ -912,8 +1041,6 @@ function EditJobInfoDialog({
     damage_source: "",
     affected_areas: "",
     access_notes: "",
-    insurance_company: "",
-    claim_number: "",
   });
 
   useEffect(() => {
@@ -926,8 +1053,6 @@ function EditJobInfoDialog({
         damage_source: job.damage_source || "",
         affected_areas: job.affected_areas || "",
         access_notes: job.access_notes || "",
-        insurance_company: job.insurance_company || "",
-        claim_number: job.claim_number || "",
       });
     }
   }, [open, job]);
@@ -949,8 +1074,6 @@ function EditJobInfoDialog({
         damage_source: form.damage_source.trim() || null,
         affected_areas: form.affected_areas.trim() || null,
         access_notes: form.access_notes.trim() || null,
-        insurance_company: form.insurance_company.trim() || null,
-        claim_number: form.claim_number.trim() || null,
       })
       .eq("id", jobId);
 
@@ -1016,19 +1139,6 @@ function EditJobInfoDialog({
           <div>
             <label className="block text-sm font-medium text-muted-foreground mb-1">Access Notes</label>
             <Textarea value={form.access_notes} onChange={(e) => update("access_notes", e.target.value)} rows={2} placeholder="Gate code, lockbox, etc." />
-          </div>
-          <div className="border-t border-border/50 pt-4">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Insurance</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-1">Insurance Company</label>
-                <Input value={form.insurance_company} onChange={(e) => update("insurance_company", e.target.value)} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-1">Claim #</label>
-                <Input value={form.claim_number} onChange={(e) => update("claim_number", e.target.value)} />
-              </div>
-            </div>
           </div>
         </div>
         <DialogFooter>
@@ -1162,6 +1272,373 @@ function EditContactDialog({
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── Edit Insurance Dialog ── */
+
+function EditInsuranceDialog({
+  open,
+  onOpenChange,
+  job,
+  jobId,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  job: Job;
+  jobId: string;
+  onSaved: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    insurance_company: "",
+    claim_number: "",
+    policy_number: "",
+    date_of_loss: "",
+    deductible: "",
+    hoa_name: "",
+    hoa_contact_name: "",
+    hoa_contact_phone: "",
+    hoa_contact_email: "",
+  });
+
+  useEffect(() => {
+    if (open) {
+      setForm({
+        insurance_company: job.insurance_company || "",
+        claim_number: job.claim_number || "",
+        policy_number: job.policy_number || "",
+        date_of_loss: job.date_of_loss || "",
+        deductible: job.deductible != null ? String(job.deductible) : "",
+        hoa_name: job.hoa_name || "",
+        hoa_contact_name: job.hoa_contact_name || "",
+        hoa_contact_phone: job.hoa_contact_phone || "",
+        hoa_contact_email: job.hoa_contact_email || "",
+      });
+    }
+  }, [open, job]);
+
+  async function handleSave() {
+    setSaving(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("jobs")
+      .update({
+        insurance_company: form.insurance_company.trim() || null,
+        claim_number: form.claim_number.trim() || null,
+        policy_number: form.policy_number.trim() || null,
+        date_of_loss: form.date_of_loss || null,
+        deductible: form.deductible ? Number(form.deductible) : null,
+        hoa_name: form.hoa_name.trim() || null,
+        hoa_contact_name: form.hoa_contact_name.trim() || null,
+        hoa_contact_phone: form.hoa_contact_phone.trim() || null,
+        hoa_contact_email: form.hoa_contact_email.trim() || null,
+      })
+      .eq("id", jobId);
+
+    if (error) {
+      toast.error("Failed to update insurance info.");
+    } else {
+      toast.success("Insurance info updated.");
+      onOpenChange(false);
+      onSaved();
+    }
+    setSaving(false);
+  }
+
+  function update(field: string, value: string) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit Insurance &amp; HOA</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2 max-h-[70vh] overflow-y-auto">
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-1">Insurance Company</label>
+            <Input value={form.insurance_company} onChange={(e) => update("insurance_company", e.target.value)} placeholder="e.g. State Farm" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Claim #</label>
+              <Input value={form.claim_number} onChange={(e) => update("claim_number", e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Policy #</label>
+              <Input value={form.policy_number} onChange={(e) => update("policy_number", e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Date of Loss</label>
+              <Input type="date" value={form.date_of_loss} onChange={(e) => update("date_of_loss", e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Deductible</label>
+              <Input type="number" value={form.deductible} onChange={(e) => update("deductible", e.target.value)} placeholder="e.g. 1000" />
+            </div>
+          </div>
+          <div className="border-t border-border/50 pt-4">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">HOA</p>
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">HOA Name</label>
+              <Input value={form.hoa_name} onChange={(e) => update("hoa_name", e.target.value)} placeholder="e.g. Lakewood HOA" />
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-1">Contact Name</label>
+                <Input value={form.hoa_contact_name} onChange={(e) => update("hoa_contact_name", e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-1">Contact Phone</label>
+                <Input type="tel" value={form.hoa_contact_phone} onChange={(e) => update("hoa_contact_phone", e.target.value)} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Contact Email</label>
+              <Input type="email" value={form.hoa_contact_email} onChange={(e) => update("hoa_contact_email", e.target.value)} />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="gradient" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── Add Adjuster Dialog ── */
+
+function AddAdjusterDialog({
+  open,
+  onOpenChange,
+  jobId,
+  existingAdjusterIds,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  jobId: string;
+  existingAdjusterIds: string[];
+  onSaved: () => void;
+}) {
+  const [mode, setMode] = useState<"search" | "create">("search");
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<Contact[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    first_name: "",
+    last_name: "",
+    title: "",
+    company: "",
+    phone: "",
+    email: "",
+  });
+
+  useEffect(() => {
+    if (!open) {
+      setMode("search");
+      setSearch("");
+      setResults([]);
+      setCreateForm({ first_name: "", last_name: "", title: "", company: "", phone: "", email: "" });
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (mode !== "search" || !search.trim()) {
+      setResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      const supabase = createClient();
+      const term = `%${search.trim()}%`;
+      const { data } = await supabase
+        .from("contacts")
+        .select("*")
+        .eq("role", "adjuster")
+        .or(`first_name.ilike.${term},last_name.ilike.${term},company.ilike.${term},email.ilike.${term}`)
+        .limit(10);
+      if (data) {
+        setResults(data.filter((c: Contact) => !existingAdjusterIds.includes(c.id)));
+      }
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, mode, existingAdjusterIds]);
+
+  async function linkAdjuster(contactId: string) {
+    setSaving(true);
+    const supabase = createClient();
+    const isPrimary = existingAdjusterIds.length === 0;
+    const { error } = await supabase.from("job_adjusters").insert({
+      job_id: jobId,
+      contact_id: contactId,
+      is_primary: isPrimary,
+    });
+    if (error) {
+      toast.error("Failed to add adjuster.");
+    } else {
+      toast.success("Adjuster added.");
+      onOpenChange(false);
+      onSaved();
+    }
+    setSaving(false);
+  }
+
+  async function handleCreate() {
+    if (!createForm.first_name.trim() || !createForm.last_name.trim()) {
+      toast.error("First and last name are required.");
+      return;
+    }
+    setSaving(true);
+    const supabase = createClient();
+    const { data: newContact, error: contactError } = await supabase
+      .from("contacts")
+      .insert({
+        first_name: createForm.first_name.trim(),
+        last_name: createForm.last_name.trim(),
+        title: createForm.title.trim() || null,
+        company: createForm.company.trim() || null,
+        phone: createForm.phone.trim() || null,
+        email: createForm.email.trim() || null,
+        role: "adjuster",
+      })
+      .select()
+      .single();
+
+    if (contactError || !newContact) {
+      toast.error("Failed to create adjuster contact.");
+      setSaving(false);
+      return;
+    }
+
+    const isPrimary = existingAdjusterIds.length === 0;
+    const { error: linkError } = await supabase.from("job_adjusters").insert({
+      job_id: jobId,
+      contact_id: newContact.id,
+      is_primary: isPrimary,
+    });
+
+    if (linkError) {
+      toast.error("Contact created but failed to link to job.");
+    } else {
+      toast.success("Adjuster created and added.");
+      onOpenChange(false);
+      onSaved();
+    }
+    setSaving(false);
+  }
+
+  function updateCreate(field: string, value: string) {
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add Adjuster</DialogTitle>
+        </DialogHeader>
+
+        {/* Mode tabs */}
+        <div className="flex gap-1 bg-muted rounded-lg p-1">
+          <button
+            className={cn("flex-1 text-sm py-1.5 rounded-md transition-colors", mode === "search" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground")}
+            onClick={() => setMode("search")}
+          >
+            Search Existing
+          </button>
+          <button
+            className={cn("flex-1 text-sm py-1.5 rounded-md transition-colors", mode === "create" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground")}
+            onClick={() => setMode("create")}
+          >
+            Create New
+          </button>
+        </div>
+
+        {mode === "search" ? (
+          <div className="space-y-3">
+            <Input
+              placeholder="Search by name, company, or email..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+            />
+            {searching && (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {!searching && results.length > 0 && (
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {results.map((c) => (
+                  <button
+                    key={c.id}
+                    className="w-full text-left rounded-lg border border-border p-3 hover:bg-accent/50 transition-colors"
+                    onClick={() => linkAdjuster(c.id)}
+                    disabled={saving}
+                  >
+                    <p className="text-sm font-medium text-foreground">{c.first_name} {c.last_name}</p>
+                    <p className="text-xs text-muted-foreground">{[c.title, c.company].filter(Boolean).join(" \u00b7 ")}</p>
+                    <p className="text-xs text-muted-foreground">{[c.phone, c.email].filter(Boolean).join(" \u00b7 ")}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+            {!searching && search.trim() && results.length === 0 && (
+              <p className="text-sm text-muted-foreground/60 text-center py-4">No matching adjusters found</p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-1">First Name *</label>
+                <Input value={createForm.first_name} onChange={(e) => updateCreate("first_name", e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-1">Last Name *</label>
+                <Input value={createForm.last_name} onChange={(e) => updateCreate("last_name", e.target.value)} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-1">Title</label>
+                <Input value={createForm.title} onChange={(e) => updateCreate("title", e.target.value)} placeholder="e.g. Field Adjuster" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-1">Company</label>
+                <Input value={createForm.company} onChange={(e) => updateCreate("company", e.target.value)} placeholder="e.g. State Farm" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Phone</label>
+              <Input type="tel" value={createForm.phone} onChange={(e) => updateCreate("phone", e.target.value)} placeholder="(512) 555-0101" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Email</label>
+              <Input type="email" value={createForm.email} onChange={(e) => updateCreate("email", e.target.value)} placeholder="adjuster@company.com" />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button variant="gradient" onClick={handleCreate} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create & Add"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
