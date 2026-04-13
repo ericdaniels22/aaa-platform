@@ -9,7 +9,7 @@ export interface JobRow {
   claim_number: string | null;
   property_address: string;
   contact_id: string;
-  adjuster_contact_id: string | null;
+  job_adjusters?: { contact_id: string }[];
 }
 
 export interface ContactRow {
@@ -66,7 +66,7 @@ export function matchEmailToJob(
       const job = jobs.find(
         (j) =>
           j.contact_id === matchedContact.id ||
-          j.adjuster_contact_id === matchedContact.id
+          (j.job_adjusters || []).some((ja) => ja.contact_id === matchedContact.id)
       );
       if (job) {
         return { job_id: job.id, matched_by: "contact" };

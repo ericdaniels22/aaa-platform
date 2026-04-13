@@ -281,7 +281,7 @@ async function toolGetJobDetails(
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
     .select(
-      "*, contact:contacts!contact_id(*), adjuster:contacts!adjuster_contact_id(*)"
+      "*, contact:contacts!contact_id(*), job_adjusters(*, adjuster:contacts!contact_id(*))"
     )
     .eq("id", input.job_id)
     .single();
@@ -344,8 +344,9 @@ async function toolGetJobDetails(
   const contactName = job.contact
     ? `${job.contact.first_name} ${job.contact.last_name}`
     : "Unknown";
-  const adjusterName = job.adjuster
-    ? `${job.adjuster.first_name} ${job.adjuster.last_name}`
+  const primaryAdj = job.job_adjusters?.find((ja: any) => ja.is_primary)?.adjuster;
+  const adjusterName = primaryAdj
+    ? `${primaryAdj.first_name} ${primaryAdj.last_name}`
     : null;
 
   return {
@@ -364,8 +365,8 @@ async function toolGetJobDetails(
     insurance_company: job.insurance_company,
     claim_number: job.claim_number,
     adjuster_name: adjusterName,
-    adjuster_phone: job.adjuster?.phone || null,
-    adjuster_email: job.adjuster?.email || null,
+    adjuster_phone: primaryAdj?.phone || null,
+    adjuster_email: primaryAdj?.email || null,
     affected_areas: job.affected_areas,
     access_notes: job.access_notes,
     created_at: job.created_at,

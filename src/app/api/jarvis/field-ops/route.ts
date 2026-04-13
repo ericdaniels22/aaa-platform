@@ -98,7 +98,7 @@ async function executeFieldOpsTool(
         // Get job with contact info
         const { data: job, error: jobError } = await supabase
           .from("jobs")
-          .select("*, contact:contacts(*), adjuster:contacts!adjuster_contact_id(*)")
+          .select("*, contact:contacts(*), job_adjusters(*, adjuster:contacts!contact_id(*))")
           .eq("id", jobId)
           .single();
 

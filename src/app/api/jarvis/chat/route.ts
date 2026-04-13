@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       const { data: job } = await supabase
         .from("jobs")
         .select(
-          "*, contact:contacts!contact_id(first_name, last_name), adjuster:contacts!adjuster_contact_id(first_name, last_name, email)"
+          "*, contact:contacts!contact_id(first_name, last_name), job_adjusters(*, adjuster:contacts!contact_id(first_name, last_name, email))"
         )
         .eq("id", job_id)
         .single();
@@ -90,10 +90,11 @@ export async function POST(request: NextRequest) {
           urgency: job.urgency,
           insuranceCompany: job.insurance_company,
           claimNumber: job.claim_number,
-          adjusterName: job.adjuster
-            ? `${job.adjuster.first_name} ${job.adjuster.last_name}`
-            : null,
-          adjusterEmail: job.adjuster?.email || null,
+          adjusterName: (() => {
+            const adj = job.job_adjusters?.find((ja: any) => ja.is_primary)?.adjuster;
+            return adj ? `${adj.first_name} ${adj.last_name}` : null;
+          })(),
+          adjusterEmail: job.job_adjusters?.find((ja: any) => ja.is_primary)?.adjuster?.email || null,
           createdAt: job.created_at,
         };
       }
