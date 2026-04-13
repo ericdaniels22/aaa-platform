@@ -107,6 +107,7 @@ export default function IntakeForm() {
             last_name: nameParts.slice(1).join(" ") || "",
             phone: getVal("adjuster_phone") || null,
             role: "adjuster",
+            title: getVal("adjuster_title") || null,
           })
           .select()
           .single();
@@ -130,13 +131,24 @@ export default function IntakeForm() {
           urgency: getVal("urgency") || "scheduled",
           insurance_company: getVal("insurance_company") || null,
           claim_number: getVal("claim_number") || null,
-          adjuster_contact_id: adjusterContactId,
           access_notes: getVal("access_notes") || null,
         })
         .select()
         .single();
 
       if (jobErr) throw jobErr;
+
+      // Link adjuster to job via job_adjusters if one was created
+      if (adjusterContactId && job) {
+        const { error: adjLinkErr } = await supabase
+          .from("job_adjusters")
+          .insert({
+            job_id: job.id,
+            contact_id: adjusterContactId,
+            is_primary: true,
+          });
+        if (adjLinkErr) throw adjLinkErr;
+      }
 
       // 4. Save custom fields (fields without maps_to)
       if (formConfig) {
