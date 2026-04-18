@@ -6,11 +6,15 @@ import { useSidebarCollapse } from "@/lib/sidebar-collapse-context";
 import { cn } from "@/lib/utils";
 
 const AUTH_ROUTES = ["/login", "/logout"];
+const FULL_BLEED_ROUTES = ["/email"];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { collapsed } = useSidebarCollapse();
   const isAuthPage = AUTH_ROUTES.some((r) => pathname.startsWith(r));
+  const isFullBleed = FULL_BLEED_ROUTES.some(
+    (r) => pathname === r || pathname.startsWith(`${r}/`),
+  );
 
   if (isAuthPage) {
     return <>{children}</>;
@@ -25,7 +29,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           collapsed ? "lg:ml-16" : "lg:ml-52",
         )}
       >
-        <div className="p-6 lg:p-8">{children}</div>
+        {isFullBleed ? children : <div className="p-6 lg:p-8">{children}</div>}
       </main>
     </>
   );

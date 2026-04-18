@@ -39,7 +39,7 @@ export default function IconRail({
   onCompose,
 }: IconRailProps) {
   return (
-    <div className="w-14 border-r border-border bg-muted/50 shrink-0 flex flex-col items-center py-2 gap-1">
+    <div className="w-14 border-r border-border bg-muted shrink-0 flex flex-col items-center py-2 gap-1">
       {/* Compose button */}
       <button
         onClick={onCompose}
