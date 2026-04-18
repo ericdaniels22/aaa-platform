@@ -7,6 +7,7 @@ const ALL_PERMISSIONS = [
   "view_billing", "record_payments",
   "view_email", "send_email",
   "manage_reports", "access_settings",
+  "manage_contract_templates",
 ];
 
 const ROLE_DEFAULTS: Record<string, string[]> = {
