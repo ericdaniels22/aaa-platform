@@ -272,6 +272,99 @@
   animation: shimmer 1.5s ease-in-out infinite;
 }
 
+/* ============================================
+ * Contract-template merge fields (Build 15a)
+ * ============================================ */
+
+/* Purple pill — used in Tiptap editor, sidebar, and saved content_html. */
+.merge-field-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(127, 119, 221, 0.15);
+  color: #AFA9EC;
+  border: 1px solid rgba(127, 119, 221, 0.25);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.82em;
+  line-height: 1.35;
+  white-space: nowrap;
+  user-select: none;
+  vertical-align: baseline;
+}
+
+/* Pill hover state in the editor (not when static in saved HTML). */
+.ProseMirror .merge-field-pill {
+  cursor: grab;
+}
+.ProseMirror .merge-field-pill:hover {
+  background: rgba(127, 119, 221, 0.22);
+}
+.ProseMirror .merge-field-pill.ProseMirror-selectednode {
+  outline: 2px solid rgba(127, 119, 221, 0.6);
+  outline-offset: 1px;
+}
+
+/* Placeholder for fields without source data when the contract is previewed. */
+.merge-field-unresolved {
+  display: inline-block;
+  min-width: 120px;
+  padding: 0 2px;
+  color: var(--muted-foreground);
+  border-bottom: 1px dashed var(--muted-foreground);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9em;
+  opacity: 0.7;
+  letter-spacing: 0.05em;
+}
+
+/* Tiptap editor surface used by the contract-template editor. Prose defaults
+ * dark-mode OK from prose-invert; these tweaks tighten spacing and make the
+ * heading sizes feel like a document rather than a blog post. */
+.contract-template-prose {
+  min-height: 520px;
+}
+.contract-template-prose h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+.contract-template-prose h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 0.9em;
+  margin-bottom: 0.4em;
+}
+.contract-template-prose h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-top: 0.8em;
+  margin-bottom: 0.35em;
+}
+.contract-template-prose p {
+  margin: 0.45em 0;
+}
+.contract-template-prose hr {
+  margin: 1.1em 0;
+  border-color: var(--border);
+}
+.contract-template-prose ul,
+.contract-template-prose ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+
+/* Tiptap ProseMirror placeholder (from @tiptap/extension-placeholder). */
+.contract-template-prose p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--muted-foreground);
+  opacity: 0.5;
+  pointer-events: none;
+  height: 0;
+}
+
 /* Hide scrollbar for quick actions horizontal scroll */
 .scrollbar-none::-webkit-scrollbar {
   display: none;
