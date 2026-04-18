@@ -31,9 +31,14 @@ export async function GET(request: NextRequest) {
     query = query.eq("account_id", accountId);
   }
 
-  // Filter by category (only applies to inbox)
+  // Filter by category (only applies to inbox). "starred" is a pseudo-category
+  // that filters the inbox to starred emails only.
   if (category && folder === "inbox" && starred !== "true") {
-    query = query.eq("category", category);
+    if (category === "starred") {
+      query = query.eq("is_starred", true);
+    } else {
+      query = query.eq("category", category);
+    }
   }
 
   // Search in subject, from_address, from_name, snippet

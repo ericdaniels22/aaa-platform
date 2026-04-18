@@ -35,6 +35,9 @@ export async function PATCH(request: NextRequest) {
     case "trash":
       updates = { folder: "trash" };
       break;
+    case "spam":
+      updates = { folder: "spam" };
+      break;
     case "assign_job":
       if (!jobId) {
         return NextResponse.json({ error: "jobId required for assign_job" }, { status: 400 });

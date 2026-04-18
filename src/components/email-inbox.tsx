@@ -21,8 +21,7 @@ import type { Email, EmailAccount } from "@/lib/types";
 import EmailReader from "@/components/email-reader";
 import ComposeEmailModal from "@/components/compose-email";
 import IconRail from "@/components/email/icon-rail";
-import CategoryTabs from "@/components/email/category-tabs";
-import type { Category } from "@/lib/email-categorizer";
+import CategoryTabs, { type CategoryFilter } from "@/components/email/category-tabs";
 
 interface FolderCounts {
   [key: string]: { total: number; unread: number };
@@ -61,12 +60,13 @@ export default function EmailInbox() {
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
 
   // Category filter (inbox only)
-  const [category, setCategory] = useState<Category>("general");
+  const [category, setCategory] = useState<CategoryFilter>("general");
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({
     general: 0,
     promotions: 0,
     social: 0,
     purchases: 0,
+    starred: 0,
   });
 
   // Resizable pane widths. Initialize with the default on both server and
@@ -226,9 +226,12 @@ export default function EmailInbox() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  const [loadingMore, setLoadingMore] = useState(false);
+
   // Load emails when folder, account, search, or page changes
   const loadEmails = useCallback(async () => {
-    setLoading(true);
+    if (page === 1) setLoading(true);
+    else setLoadingMore(true);
     try {
       const params = new URLSearchParams();
       if (folder === "starred") {
@@ -243,18 +246,41 @@ export default function EmailInbox() {
 
       const res = await fetch(`/api/email/list?${params}`);
       const data: ListResponse = await res.json();
-      setEmails(data.emails);
+      setEmails((prev) => {
+        const merged = page === 1 ? data.emails : [...prev, ...data.emails];
+        const byId = new Map<string, Email>();
+        for (const e of merged) byId.set(e.id, e);
+        return Array.from(byId.values());
+      });
       setTotal(data.total);
       setHasMore(data.hasMore);
     } catch {
       toast.error("Failed to load emails");
     }
     setLoading(false);
+    setLoadingMore(false);
   }, [folder, selectedAccountId, searchDebounced, page, category]);
 
   useEffect(() => {
     loadEmails();
   }, [loadEmails]);
+
+  // Infinite scroll: bump page when sentinel enters view
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || !hasMore || loading || loadingMore) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setPage((p) => p + 1);
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, [hasMore, loading, loadingMore, emails.length]);
 
   // Load folder counts
   const loadCounts = useCallback(async () => {
@@ -478,7 +504,7 @@ export default function EmailInbox() {
     setCategory("general");
   }
 
-  function handleCategoryChange(cat: Category) {
+  function handleCategoryChange(cat: CategoryFilter) {
     setCategory(cat);
     setPage(1);
     setSelectedEmailId(null);
@@ -486,7 +512,7 @@ export default function EmailInbox() {
   }
 
   return (
-    <div className="h-[calc(100vh-2rem)] flex flex-col">
+    <div className="h-[calc(100vh-3.5rem)] lg:h-screen flex flex-col">
       {/* Top bar */}
       <div className="flex items-center gap-3 px-4 py-3 bg-card border-b border-border shrink-0">
         <h1 className="text-lg font-bold text-foreground mr-2">Email</h1>
@@ -500,6 +526,7 @@ export default function EmailInbox() {
               setPage(1);
             }}
             className="text-sm border border-border rounded-lg pl-3 pr-8 py-1.5 bg-card focus:outline-none focus:ring-2 focus:ring-primary/30 appearance-none"
+            suppressHydrationWarning
           >
             <option value="">All Inboxes</option>
             {accounts.map((acc) => (
@@ -699,14 +726,6 @@ export default function EmailInbox() {
                       Mark all read
                     </button>
                   )}
-                  {hasMore && (
-                    <button
-                      onClick={() => setPage((p) => p + 1)}
-                      className="text-primary hover:underline"
-                    >
-                      Load more
-                    </button>
-                  )}
                 </div>
               </>
             )}
@@ -740,24 +759,13 @@ export default function EmailInbox() {
               ))
             )}
 
-            {/* Pagination */}
-            {!loading && total > 50 && (
-              <div className="flex items-center justify-center gap-2 py-3 border-t border-border/50">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="px-3 py-1 text-xs border border-border rounded disabled:opacity-30 hover:bg-accent"
-                >
-                  Previous
-                </button>
-                <span className="text-xs text-muted-foreground/60">Page {page}</span>
-                <button
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={!hasMore}
-                  className="px-3 py-1 text-xs border border-border rounded disabled:opacity-30 hover:bg-accent"
-                >
-                  Next
-                </button>
+            {/* Infinite scroll sentinel */}
+            {!loading && hasMore && (
+              <div
+                ref={sentinelRef}
+                className="flex items-center justify-center py-3 text-xs text-muted-foreground/60"
+              >
+                {loadingMore ? "Loading more…" : ""}
               </div>
             )}
           </div>
@@ -771,7 +779,7 @@ export default function EmailInbox() {
 
         {/* Column 3: Reading pane */}
         <div
-          className={`flex-1 bg-muted/50 ${
+          className={`flex-1 min-w-0 bg-muted/50 ${
             selectedEmailId ? "flex" : "hidden lg:flex"
           }`}
         >
@@ -783,6 +791,11 @@ export default function EmailInbox() {
               onReplyAll={handleReplyAll}
               onForward={handleForward}
               onStarToggle={handleStarToggle}
+              onActioned={() => {
+                setSelectedEmailId(null);
+                setPage(1);
+                loadCounts();
+              }}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground/60">
@@ -885,35 +898,34 @@ function EmailRow({
           : "bg-primary/5 hover:bg-primary/10"
       }`}
     >
-      {/* Checkbox */}
-      <input
-        type="checkbox"
-        checked={isChecked}
-        onChange={(e) => {
-          e.stopPropagation();
-          onToggleCheck();
-        }}
-        onClick={(e) => e.stopPropagation()}
-        className="mt-1 shrink-0 rounded border-border accent-primary"
-      />
-
-      {/* Star */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onStar();
-        }}
-        className="mt-0.5 shrink-0"
-      >
-        <Star
-          size={14}
-          className={
-            email.is_starred
-              ? "fill-yellow-400 text-yellow-400"
-              : "text-gray-300 hover:text-gray-400"
-          }
+      {/* Checkbox + Star (stacked) */}
+      <div className="flex flex-col items-center gap-1.5 mt-0.5 shrink-0">
+        <input
+          type="checkbox"
+          checked={isChecked}
+          onChange={(e) => {
+            e.stopPropagation();
+            onToggleCheck();
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="rounded border-border accent-primary"
         />
-      </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onStar();
+          }}
+        >
+          <Star
+            size={14}
+            className={
+              email.is_starred
+                ? "fill-yellow-400 text-yellow-400"
+                : "text-gray-300 hover:text-gray-400"
+            }
+          />
+        </button>
+      </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0">

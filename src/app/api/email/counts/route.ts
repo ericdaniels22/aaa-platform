@@ -67,12 +67,28 @@ export async function GET(request: NextRequest) {
     promotions: 0,
     social: 0,
     purchases: 0,
+    starred: 0,
   };
 
   for (const row of (categoryData || []) as { category: string | null }[]) {
     const cat = row.category || "general";
     if (cat in categoryUnread) categoryUnread[cat]++;
   }
+
+  // Starred count for the inbox tab (total, not unread — starred status is
+  // independent of read state and users want to see the full set).
+  let starredInboxQuery = supabase
+    .from("emails")
+    .select("id", { count: "exact", head: true })
+    .eq("folder", "inbox")
+    .eq("is_starred", true);
+
+  if (accountId) {
+    starredInboxQuery = starredInboxQuery.eq("account_id", accountId);
+  }
+
+  const starredInboxResult = await starredInboxQuery;
+  categoryUnread.starred = starredInboxResult.count || 0;
 
   return NextResponse.json({ ...counts, categoryUnread });
 }

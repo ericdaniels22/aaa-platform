@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import {
   ArrowLeft,
@@ -14,8 +14,56 @@ import {
   ChevronUp,
   Download,
   FileIcon,
+  Trash2,
+  ShieldAlert,
+  Search,
 } from "lucide-react";
+import { toast } from "sonner";
 import type { Email } from "@/lib/types";
+
+function EmailBodyFrame({ html }: { html: string }) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(200);
+
+  useEffect(() => {
+    const iframe = ref.current;
+    if (!iframe) return;
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+
+    const baseStyles = `
+      :root { color-scheme: light; }
+      html, body { margin: 0; padding: 0; background: #fff; color: #333;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 14px; line-height: 1.5; word-wrap: break-word; }
+      img { max-width: 100%; height: auto; }
+      a { color: #2B5EA7; }
+      table { max-width: 100%; }
+    `;
+
+    doc.open();
+    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_blank"><style>${baseStyles}</style></head><body>${html}</body></html>`);
+    doc.close();
+
+    const resize = () => {
+      if (!doc.body) return;
+      setHeight(doc.body.scrollHeight + 16);
+    };
+    resize();
+    const obs = new ResizeObserver(resize);
+    if (doc.body) obs.observe(doc.body);
+    return () => obs.disconnect();
+  }, [html]);
+
+  return (
+    <iframe
+      ref={ref}
+      title="Email body"
+      sandbox="allow-same-origin allow-popups"
+      style={{ width: "100%", height, border: 0, display: "block" }}
+    />
+  );
+}
 
 interface EmailReaderProps {
   emailId: string;
@@ -24,6 +72,13 @@ interface EmailReaderProps {
   onReplyAll: (email: Email) => void;
   onForward: (email: Email) => void;
   onStarToggle: (id: string, starred: boolean) => void;
+  onActioned?: () => void;
+}
+
+interface JobOption {
+  id: string;
+  job_number: string;
+  property_address: string;
 }
 
 export default function EmailReader({
@@ -33,10 +88,16 @@ export default function EmailReader({
   onReplyAll,
   onForward,
   onStarToggle,
+  onActioned,
 }: EmailReaderProps) {
   const [thread, setThread] = useState<Email[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [actionLoading, setActionLoading] = useState(false);
+  const [jobPickerOpen, setJobPickerOpen] = useState(false);
+  const [jobSearch, setJobSearch] = useState("");
+  const [jobResults, setJobResults] = useState<JobOption[]>([]);
+  const jobPickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadThread();
@@ -82,6 +143,56 @@ export default function EmailReader({
     setLoading(false);
   }
 
+  async function runAction(action: string, jobId?: string) {
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/email/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [emailId], action, jobId }),
+      });
+      if (!res.ok) throw new Error("Action failed");
+      if (action === "trash") toast.success("Moved to trash");
+      else if (action === "spam") toast.success("Marked as spam");
+      else if (action === "assign_job") toast.success("Assigned to job");
+      onActioned?.();
+    } catch {
+      toast.error("Action failed");
+    }
+    setActionLoading(false);
+    setJobPickerOpen(false);
+  }
+
+  // Debounced job search
+  useEffect(() => {
+    if (!jobPickerOpen || jobSearch.length < 1) {
+      setJobResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/jobs/search?q=${encodeURIComponent(jobSearch)}&limit=8`);
+        const data = await res.json();
+        setJobResults(data.jobs || []);
+      } catch {
+        setJobResults([]);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [jobSearch, jobPickerOpen]);
+
+  // Close job picker on outside click
+  useEffect(() => {
+    if (!jobPickerOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (jobPickerRef.current && !jobPickerRef.current.contains(e.target as Node)) {
+        setJobPickerOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [jobPickerOpen]);
+
   function toggleExpand(id: string) {
     setExpandedIds((prev) => {
       const next = new Set(prev);
@@ -104,53 +215,124 @@ export default function EmailReader({
   const latestEmail = thread[thread.length - 1];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-w-0">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white shrink-0">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card shrink-0">
         <button
           onClick={onBack}
-          className="lg:hidden p-1 text-[#666] hover:text-[#333] rounded"
+          className="lg:hidden p-1 text-muted-foreground hover:text-foreground rounded"
         >
           <ArrowLeft size={18} />
         </button>
-        <h2 className="text-base font-semibold text-[#333] truncate flex-1">
+        <h2 className="text-base font-semibold text-foreground truncate flex-1 min-w-0">
           {latestEmail.subject || "(no subject)"}
         </h2>
         {thread.length > 1 && (
-          <span className="text-xs text-[#999] bg-gray-100 rounded-full px-2 py-0.5">
+          <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">
             {thread.length} messages
           </span>
         )}
         <button
           onClick={() => onStarToggle(latestEmail.id, !latestEmail.is_starred)}
-          className="p-1 hover:bg-gray-100 rounded"
+          className="p-1 hover:bg-accent rounded"
         >
           <Star
             size={16}
             className={
               latestEmail.is_starred
                 ? "fill-yellow-400 text-yellow-400"
-                : "text-[#ccc]"
+                : "text-muted-foreground/60"
             }
           />
         </button>
+        <div className="relative" ref={jobPickerRef}>
+          <button
+            onClick={() => setJobPickerOpen((v) => !v)}
+            disabled={actionLoading}
+            title={latestEmail.job ? `Job ${latestEmail.job.job_number}` : "Assign to job"}
+            className={`p-1.5 rounded hover:bg-accent disabled:opacity-50 ${
+              latestEmail.job ? "text-primary" : "text-muted-foreground"
+            }`}
+          >
+            <Briefcase size={16} />
+          </button>
+          {jobPickerOpen && (
+            <div className="absolute right-0 top-full mt-1 w-72 bg-popover border border-border rounded-lg shadow-lg z-20 p-2">
+              <div className="relative mb-2">
+                <Search
+                  size={14}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60"
+                />
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Search jobs…"
+                  value={jobSearch}
+                  onChange={(e) => setJobSearch(e.target.value)}
+                  className="w-full pl-8 pr-2 py-1.5 text-sm border border-border rounded bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              {latestEmail.job && (
+                <button
+                  onClick={() => runAction("assign_job", "")}
+                  className="w-full text-left px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent rounded mb-1"
+                >
+                  Unassign from job {latestEmail.job.job_number}
+                </button>
+              )}
+              <div className="max-h-60 overflow-y-auto">
+                {jobResults.length === 0 && jobSearch.length > 0 && (
+                  <p className="text-xs text-muted-foreground/60 px-2 py-2">No matches</p>
+                )}
+                {jobResults.map((job) => (
+                  <button
+                    key={job.id}
+                    onClick={() => runAction("assign_job", job.id)}
+                    className="w-full text-left px-2 py-1.5 text-sm hover:bg-accent rounded"
+                  >
+                    <div className="font-medium text-foreground">{job.job_number}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {job.property_address}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => runAction("trash")}
+          disabled={actionLoading}
+          title="Delete"
+          className="p-1.5 rounded hover:bg-accent text-muted-foreground disabled:opacity-50"
+        >
+          <Trash2 size={16} />
+        </button>
+        <button
+          onClick={() => runAction("spam")}
+          disabled={actionLoading}
+          title="Mark as spam"
+          className="p-1.5 rounded hover:bg-accent text-muted-foreground disabled:opacity-50"
+        >
+          <ShieldAlert size={16} />
+        </button>
         <button
           onClick={() => onReply(latestEmail)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2B5EA7] text-white rounded-lg text-sm font-medium hover:bg-[#234b87]"
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-border text-muted-foreground rounded-lg text-sm font-medium hover:bg-accent"
+          title="Reply"
         >
           <Reply size={14} />
-          Reply
         </button>
         <button
           onClick={() => onReplyAll(latestEmail)}
-          className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-[#666] rounded-lg text-sm font-medium hover:bg-gray-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-border text-muted-foreground rounded-lg text-sm font-medium hover:bg-accent"
           title="Reply All"
         >
           <ReplyAll size={14} />
         </button>
         <button
           onClick={() => onForward(latestEmail)}
-          className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-[#666] rounded-lg text-sm font-medium hover:bg-gray-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-border text-muted-foreground rounded-lg text-sm font-medium hover:bg-accent"
           title="Forward"
         >
           <Forward size={14} />
@@ -243,10 +425,7 @@ export default function EmailReader({
                   {/* Body */}
                   <div className="px-4 py-4">
                     {email.body_html ? (
-                      <div
-                        className="prose prose-sm max-w-none text-[#333] [&_img]:max-w-full [&_a]:text-[#2B5EA7]"
-                        dangerouslySetInnerHTML={{ __html: email.body_html }}
-                      />
+                      <EmailBodyFrame html={email.body_html} />
                     ) : (
                       <pre className="text-sm text-[#333] whitespace-pre-wrap font-sans leading-relaxed">
                         {email.body_text || "(empty)"}

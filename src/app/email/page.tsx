@@ -1,6 +1,10 @@
 "use client";
 
-import EmailInbox from "@/components/email-inbox";
+import dynamic from "next/dynamic";
+
+const EmailInbox = dynamic(() => import("@/components/email-inbox"), {
+  ssr: false,
+});
 
 export default function EmailPage() {
   return <EmailInbox />;
