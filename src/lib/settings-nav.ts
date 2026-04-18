@@ -12,6 +12,7 @@ import {
   Download,
   BookOpen,
   Menu,
+  Send,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
@@ -33,6 +34,7 @@ export const settingsNavItems: SettingsNavItem[] = [
   { href: "/settings/signatures", label: "Email Signatures", icon: FileSignature },
   { href: "/settings/intake-form", label: "Intake Form", icon: ClipboardList },
   { href: "/settings/contract-templates", label: "Contract Templates", icon: FileText },
+  { href: "/settings/contracts", label: "Contracts", icon: Send },
   { href: "/settings/notifications", label: "Notifications", icon: Bell },
   { href: "/settings/reports", label: "Reports", icon: FileText },
   { href: "/settings/export", label: "Data Export", icon: Download },

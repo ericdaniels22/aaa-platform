@@ -35,6 +35,8 @@ export interface Job {
   hoa_contact_phone: string | null;
   hoa_contact_email: string | null;
   access_notes: string | null;
+  has_signed_contract?: boolean;
+  has_pending_contract?: boolean;
   created_at: string;
   updated_at: string;
   // Joined fields

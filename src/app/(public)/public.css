@@ -1,0 +1,112 @@
+/* Scoped light-theme overrides for the public signing experience.
+   The root app layout is dark-themed; this scope re-paints the
+   surfaces and text to the light palette from Section 6 of the v1.6
+   guide without affecting any other route. */
+
+.public-scope {
+  background-color: #f7f8fa;
+  color: #1a1a1a;
+  min-height: 100vh;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+.public-scope .public-card {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.public-scope .public-button-primary {
+  background-color: #0f6e56;
+  color: #ffffff;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 0.15s ease;
+}
+.public-scope .public-button-primary:hover:not(:disabled) {
+  background-color: #0c5a47;
+}
+.public-scope .public-button-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.public-scope .public-button-secondary {
+  background-color: #ffffff;
+  color: #1a1a1a;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.15s ease;
+}
+.public-scope .public-button-secondary:hover {
+  background-color: #f3f4f6;
+}
+
+.public-scope .public-muted {
+  color: #6b7280;
+}
+
+.public-scope a {
+  color: #0f6e56;
+}
+
+.public-scope .signing-pad {
+  border: 2px dashed #d1d5db;
+  background-color: #fafafa;
+  border-radius: 10px;
+}
+
+.public-scope .signing-pad.has-signature {
+  border-style: solid;
+  border-color: #0f6e56;
+}
+
+.public-scope .public-doc-body {
+  color: #1f2937;
+  line-height: 1.6;
+  font-size: 14px;
+}
+.public-scope .public-doc-body h1 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 16px 0 8px;
+  color: #111827;
+}
+.public-scope .public-doc-body h2 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 14px 0 6px;
+  color: #111827;
+}
+.public-scope .public-doc-body h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 12px 0 4px;
+  color: #111827;
+}
+.public-scope .public-doc-body p {
+  margin: 8px 0;
+}
+.public-scope .public-doc-body ul,
+.public-scope .public-doc-body ol {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+.public-scope .public-doc-body hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 16px 0;
+}
+.public-scope .public-doc-body .merge-field-unresolved {
+  display: inline-block;
+  min-width: 120px;
+  border-bottom: 1px solid #9ca3af;
+  color: #6b7280;
+  text-align: center;
+}

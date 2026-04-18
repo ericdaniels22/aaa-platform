@@ -213,35 +213,43 @@ export function applyMergeFieldValues(
   const unresolved = new Set<string>();
   let output = html;
 
+  // A field is "supplied" either by being a standard contract merge field
+  // (in MERGE_FIELDS) or by showing up in the values map. The values-map
+  // escape hatch lets callers (e.g. the email-template resolver) inject
+  // extras like signing_link / document_title without polluting the
+  // contract template field list.
+  const hasValue = (name: string) => {
+    const v = values[name];
+    return v !== undefined && v !== null && v !== "";
+  };
+
   // 1. Replace Tiptap pill spans (wraps both unknown and known).
   output = output.replace(
     /<span\b[^>]*\bdata-field-name="([^"]+)"[^>]*>[\s\S]*?<\/span>/gi,
     (_match, fieldName: string) => {
-      if (!isKnownField(fieldName)) {
+      if (!isKnownField(fieldName) && !(fieldName in values)) {
         unresolved.add(fieldName);
         return UNRESOLVED_SPAN;
       }
-      const v = values[fieldName];
-      if (v === null || v === undefined || v === "") {
+      if (!hasValue(fieldName)) {
         unresolved.add(fieldName);
         return UNRESOLVED_SPAN;
       }
-      return escapeHtml(v);
+      return escapeHtml(values[fieldName] as string);
     },
   );
 
   // 2. Replace any remaining bare {{field_name}} tokens.
   output = output.replace(/\{\{([a-z_][a-z0-9_]*)\}\}/gi, (_match, fieldName: string) => {
-    if (!isKnownField(fieldName)) {
+    if (!isKnownField(fieldName) && !(fieldName in values)) {
       unresolved.add(fieldName);
       return UNRESOLVED_SPAN;
     }
-    const v = values[fieldName];
-    if (v === null || v === undefined || v === "") {
+    if (!hasValue(fieldName)) {
       unresolved.add(fieldName);
       return UNRESOLVED_SPAN;
     }
-    return escapeHtml(v);
+    return escapeHtml(values[fieldName] as string);
   });
 
   return { html: output, unresolvedFields: Array.from(unresolved) };
