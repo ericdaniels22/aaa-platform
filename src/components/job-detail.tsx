@@ -22,6 +22,7 @@ import PhotoAnnotator from "@/components/photo-annotator";
 import ComposeEmailModal from "@/components/compose-email";
 import JarvisJobPanel from "@/components/jarvis/JarvisJobPanel";
 import JobFiles from "@/components/job-files";
+import ContractsSection from "@/components/contracts/contracts-section";
 import {
   MapPin,
   Home,
@@ -256,6 +257,19 @@ export default function JobDetail({ jobId }: { jobId: string }) {
             >
               {statusLabels[job.status]}
             </Badge>
+            {job.has_signed_contract ? (
+              <Badge
+                className="text-xs font-medium px-2 py-0.5 rounded-md bg-[rgba(29,158,117,0.12)] text-[#5DCAA5] border border-[rgba(29,158,117,0.35)]"
+              >
+                Contract signed
+              </Badge>
+            ) : job.has_pending_contract ? (
+              <Badge
+                className="text-xs font-medium px-2 py-0.5 rounded-md bg-[rgba(239,159,39,0.12)] text-[#FAC775] border border-[rgba(239,159,39,0.3)]"
+              >
+                Awaiting signature
+              </Badge>
+            ) : null}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -628,6 +642,13 @@ export default function JobDetail({ jobId }: { jobId: string }) {
       </div>
 
       <JobFiles jobId={jobId} />
+
+      <ContractsSection
+        jobId={jobId}
+        customerName={job.contact ? `${job.contact.first_name} ${job.contact.last_name}` : null}
+        customerEmail={job.contact?.email ?? null}
+        onChanged={fetchData}
+      />
 
       {/* Reports */}
       {reports.length > 0 && (

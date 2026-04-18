@@ -7,16 +7,19 @@ import { cn } from "@/lib/utils";
 
 const AUTH_ROUTES = ["/login", "/logout"];
 const FULL_BLEED_ROUTES = ["/email"];
+// Public customer-facing routes render without the internal app chrome.
+const PUBLIC_ROUTES = ["/sign"];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { collapsed } = useSidebarCollapse();
   const isAuthPage = AUTH_ROUTES.some((r) => pathname.startsWith(r));
+  const isPublicPage = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
   const isFullBleed = FULL_BLEED_ROUTES.some(
     (r) => pathname === r || pathname.startsWith(`${r}/`),
   );
 
-  if (isAuthPage) {
+  if (isAuthPage || isPublicPage) {
     return <>{children}</>;
   }
 
