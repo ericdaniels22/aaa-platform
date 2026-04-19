@@ -77,11 +77,15 @@ export default function TabletSigningForm({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // Dark pen strokes on a transparent canvas. The pad's container below
+    // paints a white card so the customer sees their signature clearly
+    // while drawing, and the captured PNG embeds strong + dark in the
+    // white-background signed PDF.
     const pad = new SignaturePad(canvas, {
       backgroundColor: "rgba(0,0,0,0)",
-      penColor: "#ffffff",
-      minWidth: 1.0,
-      maxWidth: 3.0,
+      penColor: "#111827",
+      minWidth: 1.2,
+      maxWidth: 3.2,
     });
     pad.addEventListener("endStroke", () => setHasSignature(!pad.isEmpty()));
     padRef.current = pad;

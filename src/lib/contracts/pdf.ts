@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { Contract, ContractSigner } from "./types";
+import { recolorSignatureToDarkInk } from "./signature-ink";
 
 export interface CompanyBrand {
   name: string;
@@ -614,16 +615,20 @@ export async function generateSignedPdf(args: GenerateSignedPdfArgs): Promise<Ui
   };
 
   // Embed each signer's PNG once, stash dimensions for drawing.
+  // We recolor every signature to dark ink before embedding so the
+  // stroke prints strong on the PDF's white background regardless of
+  // what pen color signature_pad captured with.
   sigEmbeds.clear();
   const embeds = new Map<string, Uint8Array>();
   for (const entry of args.signatures) {
-    const img = await doc.embedPng(entry.signaturePng);
+    const darkened = await recolorSignatureToDarkInk(entry.signaturePng);
+    const img = await doc.embedPng(darkened);
     sigEmbeds.set(entry.signer.id, {
       image: img,
       width: img.width,
       height: img.height,
     });
-    embeds.set(entry.signer.id, entry.signaturePng);
+    embeds.set(entry.signer.id, darkened);
   }
 
   let cursor = newPage(doc);
