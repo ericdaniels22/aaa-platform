@@ -368,7 +368,7 @@ DECLARE
     'view_billing', 'record_payments',
     'view_email', 'send_email',
     'manage_reports', 'access_settings',
-    'log_expenses', 'manage_vendors', 'manage_expense_categories'
+    'log_expenses', 'manage_vendors', 'manage_contract_templates', 'manage_expense_categories'
   ];
   admin_perms text[] := all_perms;
   lead_perms text[] := ARRAY[
