@@ -12,13 +12,24 @@ interface DbRow {
   link_expires_at: string | null;
   void_reason: string | null;
   signed_pdf_path: string | null;
+  reminder_count: number;
+  next_reminder_at: string | null;
   created_at: string;
-  signers: Array<{ id: string; signer_order: number; name: string | null; ip_address: string | null }>;
+  signers: Array<{
+    id: string;
+    signer_order: number;
+    name: string | null;
+    role_label: string | null;
+    signed_at: string | null;
+    ip_address: string | null;
+  }>;
 }
 
-// GET /api/contracts/by-job/[jobId] — list contracts for the job detail
-// Overview tab's Contracts section. Includes just enough signer metadata
-// for the status-driven row rendering (name + truncated IP for signed).
+// GET /api/contracts/by-job/[jobId] — contracts for the Contracts section
+// on the job detail Overview tab. Build 15c extends the returned shape
+// with per-signer status (for multi-signer sequential UI) and the auto-
+// reminder counters (for the "reminders sent: N" indicator on the job
+// header).
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ jobId: string }> },
@@ -29,8 +40,9 @@ export async function GET(
     .from("contracts")
     .select(
       `id, title, status, sent_at, first_viewed_at, signed_at,
-       link_expires_at, void_reason, signed_pdf_path, created_at,
-       signers:contract_signers(id, signer_order, name, ip_address)`,
+       link_expires_at, void_reason, signed_pdf_path, reminder_count,
+       next_reminder_at, created_at,
+       signers:contract_signers(id, signer_order, name, role_label, signed_at, ip_address)`,
     )
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
@@ -39,7 +51,10 @@ export async function GET(
 
   const rows: ContractListItem[] = (data ?? []).map((row) => {
     const r = row as unknown as DbRow;
-    const primary = (r.signers ?? []).find((s) => s.signer_order === 1) ?? r.signers?.[0];
+    const ordered = [...(r.signers ?? [])].sort(
+      (a, b) => a.signer_order - b.signer_order,
+    );
+    const primary = ordered[0];
     return {
       id: r.id,
       title: r.title,
@@ -52,7 +67,16 @@ export async function GET(
       signed_pdf_path: r.signed_pdf_path,
       primary_signer_name: primary?.name ?? null,
       primary_signer_ip: primary?.ip_address ?? null,
-      signer_count: r.signers?.length ?? 0,
+      signer_count: ordered.length,
+      signers: ordered.map((s) => ({
+        id: s.id,
+        signer_order: s.signer_order,
+        name: s.name,
+        role_label: s.role_label,
+        signed_at: s.signed_at,
+      })),
+      reminder_count: r.reminder_count ?? 0,
+      next_reminder_at: r.next_reminder_at,
       created_at: r.created_at,
     };
   });

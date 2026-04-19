@@ -14,11 +14,13 @@ import {
   Trash2,
   Ban,
   Pencil,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import SendContractModal from "./send-contract-modal";
+import SignInPersonModal from "./sign-in-person-modal";
 import VoidContractDialog from "./void-contract-dialog";
-import type { ContractListItem } from "@/lib/contracts/types";
+import type { ContractListItem, ContractListSigner } from "@/lib/contracts/types";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -31,6 +33,7 @@ interface Props {
 export default function ContractsSection({ jobId, customerEmail, customerName, onChanged }: Props) {
   const [rows, setRows] = useState<ContractListItem[] | null>(null);
   const [sendOpen, setSendOpen] = useState(false);
+  const [inPersonOpen, setInPersonOpen] = useState(false);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [voidTarget, setVoidTarget] = useState<ContractListItem | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -39,9 +42,6 @@ export default function ContractsSection({ jobId, customerEmail, customerName, o
     const res = await fetch(`/api/contracts/by-job/${jobId}`);
     if (res.ok) {
       const data = (await res.json()) as ContractListItem[];
-      // Client-side lazy-expiry: if a row is still 'sent' or 'viewed' but
-      // its link is past expiry, render as expired until the next page
-      // load when the server catches up.
       const now = Date.now();
       const decorated = data.map((r) => {
         if (
@@ -72,10 +72,34 @@ export default function ContractsSection({ jobId, customerEmail, customerName, o
     return () => document.removeEventListener("mousedown", onDoc);
   }, [menuId]);
 
+  async function handleRemind(id: string) {
+    setBusyId(id);
+    try {
+      const res = await fetch(`/api/contracts/${id}/remind`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Reminder failed");
+      toast.success(`Reminder sent to ${data.sentTo || "signer"}`);
+      await refresh();
+      onChanged?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Reminder failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleResend(id: string) {
     setBusyId(id);
     try {
-      const res = await fetch(`/api/contracts/${id}/resend`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const res = await fetch(`/api/contracts/${id}/resend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Resend failed");
       toast.success("Signing link re-sent");
@@ -91,7 +115,6 @@ export default function ContractsSection({ jobId, customerEmail, customerName, o
   async function handleDiscard(id: string) {
     setBusyId(id);
     try {
-      // A draft with no audit history can simply be voided with no email.
       const res = await fetch(`/api/contracts/${id}/void`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -131,9 +154,8 @@ export default function ContractsSection({ jobId, customerEmail, customerName, o
         <div className="flex items-center gap-2">
           <button
             type="button"
-            disabled
-            title="Coming in Build 15c"
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 border border-border text-muted-foreground/60 cursor-not-allowed gap-1.5"
+            onClick={() => setInPersonOpen(true)}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 border border-border text-foreground hover:bg-accent transition-colors gap-1.5"
           >
             <Users size={14} />
             Sign In Person
@@ -155,7 +177,7 @@ export default function ContractsSection({ jobId, customerEmail, customerName, o
         </div>
       ) : rows.length === 0 ? (
         <div className="text-sm text-muted-foreground text-center py-6 border border-dashed border-border/70 rounded-lg">
-          No contracts yet. Click <span className="text-foreground font-medium">Send for Signature</span> to create one.
+          No contracts yet. Click <span className="text-foreground font-medium">Send for Signature</span> or <span className="text-foreground font-medium">Sign In Person</span> to create one.
         </div>
       ) : (
         <div className="space-y-2">
@@ -168,6 +190,7 @@ export default function ContractsSection({ jobId, customerEmail, customerName, o
               onMenuToggle={() => setMenuId(menuId === row.id ? null : row.id)}
               onClose={() => setMenuId(null)}
               onResend={() => handleResend(row.id)}
+              onRemind={() => handleRemind(row.id)}
               onDiscard={() => handleDiscard(row.id)}
               onVoid={() => {
                 setVoidTarget(row);
@@ -188,6 +211,14 @@ export default function ContractsSection({ jobId, customerEmail, customerName, o
           await refresh();
           onChanged?.();
         }}
+      />
+
+      <SignInPersonModal
+        open={inPersonOpen}
+        onOpenChange={setInPersonOpen}
+        jobId={jobId}
+        defaultSignerName={customerName}
+        defaultSignerEmail={customerEmail}
       />
 
       <VoidContractDialog
@@ -212,6 +243,7 @@ interface RowProps {
   onMenuToggle: () => void;
   onClose: () => void;
   onResend: () => void;
+  onRemind: () => void;
   onDiscard: () => void;
   onVoid: () => void;
 }
@@ -255,11 +287,13 @@ function ContractRow({
   menuOpen,
   onMenuToggle,
   onResend,
+  onRemind,
   onDiscard,
   onVoid,
 }: RowProps) {
   const style = STATUS_STYLES[row.status];
   const isVoided = row.status === "voided";
+  const isMultiSigner = row.signer_count > 1;
 
   return (
     <div
@@ -286,6 +320,11 @@ function ContractRow({
           >
             {style.label}
           </span>
+          {row.reminder_count > 0 && (row.status === "sent" || row.status === "viewed") && (
+            <span className="text-[10px] text-muted-foreground">
+              · {row.reminder_count} reminder{row.reminder_count === 1 ? "" : "s"} sent
+            </span>
+          )}
         </div>
         <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
           {row.status === "signed" && (
@@ -305,6 +344,9 @@ function ContractRow({
                 <> · Expires {formatDateTime(row.link_expires_at)}</>
               )}
             </div>
+          )}
+          {isMultiSigner && row.status !== "draft" && (
+            <MultiSignerStatus signers={row.signers} />
           )}
           {row.status === "draft" && (
             <div>Draft — send failed or not yet dispatched.</div>
@@ -349,7 +391,7 @@ function ContractRow({
         {(row.status === "sent" || row.status === "viewed") && (
           <button
             type="button"
-            onClick={onResend}
+            onClick={onRemind}
             disabled={busy}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
@@ -397,7 +439,7 @@ function ContractRow({
                   <button
                     type="button"
                     disabled
-                    title="Edit flow lands in 15c"
+                    title="Edit flow lands post-15c"
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground/60 cursor-not-allowed"
                   >
                     <Pencil size={14} /> Edit
@@ -412,6 +454,28 @@ function ContractRow({
   );
 }
 
+function MultiSignerStatus({ signers }: { signers: ContractListSigner[] }) {
+  if (!signers?.length) return null;
+  return (
+    <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[11px]">
+      {signers.map((s) => (
+        <span key={s.id} className="inline-flex items-center gap-1">
+          <span className="text-muted-foreground/80">
+            Signer {s.signer_order}:
+          </span>
+          {s.signed_at ? (
+            <span className="text-[#5DCAA5] inline-flex items-center gap-0.5">
+              <Check size={11} /> Signed {formatDate(s.signed_at)}
+            </span>
+          ) : (
+            <span className="text-[#FAC775]">Awaiting signature</span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function formatDateTime(iso: string): string {
   try {
     const d = new Date(iso);
@@ -421,6 +485,14 @@ function formatDateTime(iso: string): string {
       hour: "numeric",
       minute: "2-digit",
     });
+  } catch {
+    return iso;
+  }
+}
+
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   } catch {
     return iso;
   }

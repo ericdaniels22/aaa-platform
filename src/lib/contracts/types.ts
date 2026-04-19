@@ -138,6 +138,16 @@ export interface ContractEmailSettings {
   updated_at: string;
 }
 
+// Per-signer slice surfaced on list rows so the Contracts section on the
+// job detail tab can render sequential status for multi-signer contracts.
+export interface ContractListSigner {
+  id: string;
+  signer_order: number;
+  name: string | null;
+  role_label: string | null;
+  signed_at: string | null;
+}
+
 // Row shape returned by /api/contracts/by-job for the Contracts section
 // on the job-detail Overview tab.
 export interface ContractListItem {
@@ -153,6 +163,9 @@ export interface ContractListItem {
   primary_signer_name: string | null;
   primary_signer_ip: string | null;
   signer_count: number;
+  signers: ContractListSigner[];
+  reminder_count: number;
+  next_reminder_at: string | null;
   created_at: string;
 }
 
