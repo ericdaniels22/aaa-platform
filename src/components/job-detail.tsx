@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
-import { Job, JobAdjuster, Contact, JobActivity, Payment, Photo, PhotoTag, PhotoReport, Email } from "@/lib/types";
+import { Job, JobAdjuster, Contact, JobActivity, Payment, Invoice, Photo, PhotoTag, PhotoReport, Email } from "@/lib/types";
+import FinancialsTab from "@/components/job-detail/financials-tab";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import ActivityTimeline from "@/components/activity-timeline";
-import BillingSection from "@/components/billing/billing-section";
 import PhotoUploadModal from "@/components/photo-upload";
 import PhotoDetailModal from "@/components/photo-detail";
 import PhotoAnnotator from "@/components/photo-annotator";
@@ -23,7 +23,6 @@ import ComposeEmailModal from "@/components/compose-email";
 import JarvisJobPanel from "@/components/jarvis/JarvisJobPanel";
 import JobFiles from "@/components/job-files";
 import ContractsSection from "@/components/contracts/contracts-section";
-import ExpensesSection from "@/components/expenses/expenses-section";
 import {
   MapPin,
   Home,
@@ -69,6 +68,8 @@ export default function JobDetail({ jobId }: { jobId: string }) {
   const [job, setJob] = useState<Job | null>(null);
   const [activities, setActivities] = useState<JobActivity[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [expensesTotal, setExpensesTotal] = useState<number>(0);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [tags, setTags] = useState<PhotoTag[]>([]);
   const [reports, setReports] = useState<PhotoReport[]>([]);
@@ -109,7 +110,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
   const fetchData = useCallback(async () => {
     const supabase = createClient();
 
-    const [jobRes, activitiesRes, paymentsRes, photosRes, photoCountRes, tagsRes, reportsRes, emailsRes] = await Promise.all([
+    const [jobRes, activitiesRes, paymentsRes, invoicesRes, photosRes, photoCountRes, tagsRes, reportsRes, emailsRes] = await Promise.all([
       supabase
         .from("jobs")
         .select("*, contact:contacts!contact_id(*), job_adjusters(*, adjuster:contacts!contact_id(*))")
@@ -125,6 +126,10 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         .select("*")
         .eq("job_id", jobId)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("invoices")
+        .select("id, total_amount")
+        .eq("job_id", jobId),
       supabase
         .from("photos")
         .select("*")
@@ -151,6 +156,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
     if (jobRes.data) setJob(jobRes.data as Job);
     if (activitiesRes.data) setActivities(activitiesRes.data as JobActivity[]);
     if (paymentsRes.data) setPayments(paymentsRes.data as Payment[]);
+    if (invoicesRes.data) setInvoices(invoicesRes.data as Invoice[]);
     if (photosRes.data) setPhotos(photosRes.data as Photo[]);
     if (photoCountRes.count != null) setPhotoCount(photoCountRes.count);
     if (tagsRes.data) setTags(tagsRes.data as PhotoTag[]);
@@ -163,6 +169,15 @@ export default function JobDetail({ jobId }: { jobId: string }) {
       .select("field_key, field_value")
       .eq("job_id", jobId);
     if (cfData) setCustomFields(cfData);
+
+    // Fetch expenses total for summary pills
+    const { data: expData } = await supabase
+      .from("expenses")
+      .select("amount")
+      .eq("job_id", jobId);
+    if (expData) {
+      setExpensesTotal(expData.reduce((sum: number, e: { amount: number }) => sum + Number(e.amount), 0));
+    }
 
     // Aggregate reminder count across any sent/viewed contracts for the
     // "· N reminders sent" indicator next to the Awaiting-signature pill.
@@ -326,6 +341,17 @@ export default function JobDetail({ jobId }: { jobId: string }) {
           Overview
         </button>
         <button
+          onClick={() => setActiveTab("financials")}
+          className={cn(
+            "px-6 py-2.5 text-sm font-medium -mb-[2px] border-b-2 transition-colors",
+            activeTab === "financials"
+              ? "text-[#2B5EA7] border-[#2B5EA7] font-semibold"
+              : "text-muted-foreground border-transparent hover:text-foreground"
+          )}
+        >
+          Financials
+        </button>
+        <button
           onClick={() => setActiveTab("photos")}
           className={cn(
             "px-6 py-2.5 text-sm font-medium -mb-[2px] border-b-2 transition-colors flex items-center gap-1.5",
@@ -346,7 +372,33 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         </button>
       </div>
 
-      {activeTab === "overview" ? (
+      {activeTab === "financials" && (() => {
+        const collected = payments
+          .filter((p) => p.status === "received")
+          .reduce((sum, p) => sum + Number(p.amount), 0);
+        const invoiced = invoices.reduce((sum, inv) => sum + Number(inv.total_amount), 0);
+        const crewLabor = job.estimated_crew_labor_cost ?? 0;
+        const gross_margin = collected - expensesTotal - crewLabor;
+        const margin_pct = collected > 0 ? (gross_margin / collected) * 100 : null;
+        return (
+          <FinancialsTab
+            jobId={jobId}
+            payments={payments}
+            summary={{
+              invoiced,
+              collected,
+              expenses: expensesTotal,
+              gross_margin,
+              margin_pct,
+              in_progress: job.status !== "completed",
+            }}
+            onPaymentRecorded={fetchData}
+            onExpenseLogged={fetchData}
+          />
+        );
+      })()}
+
+      {activeTab === "overview" && (
       <>
       {/* Info card — 3 columns */}
       <div className="rounded-xl border border-border bg-card p-6 mb-6">
@@ -545,13 +597,6 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         onSaved={fetchData}
       />
 
-      {/* Billing */}
-      <BillingSection
-        jobId={jobId}
-        payments={payments}
-        onPaymentRecorded={fetchData}
-      />
-
       <JobFiles jobId={jobId} />
 
       <ContractsSection
@@ -560,8 +605,6 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         customerEmail={job.contact?.email ?? null}
         onChanged={fetchData}
       />
-
-      <ExpensesSection jobId={jobId} onChanged={fetchData} />
 
       {/* Reports */}
       {reports.length > 0 && (
@@ -713,7 +756,9 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         onActivityAdded={fetchData}
       />
       </>
-      ) : (
+      )}
+
+      {activeTab === "photos" && (
         <JobPhotosTab
           jobId={jobId}
           tags={tags}
