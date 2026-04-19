@@ -1,7 +1,7 @@
 # Build 16a — Expenses, Vendors, and Receipt Capture — Design
 
 **Date:** 2026-04-18
-**Status:** Draft, pending user approval
+**Status:** Approved, pending implementation plan
 **Source spec:** AAA Platform Build Guide v1.5 Section 5 (Build 16a) + Section 4 (schema additions). v1.5 is not in the repo; the authoritative text is the spec embedded in the implementation prompt on 2026-04-18. v1.6 Section 7 (SaaS Readiness Principles) applies.
 
 ## Overview
@@ -112,19 +112,19 @@ Indexes: `(job_id, expense_date desc)` for the per-job list; `(category_id)` for
 
 ### Expense-category seed data
 
-Exact labels, colors, and `sort_order` as specified. All seeded with `is_default = true`. `icon` is null for all (leaving category icons for a later polish pass; keeps this build focused).
+Exact labels, colors, and `sort_order` as specified. All seeded with `is_default = true`. Icons are Lucide names rendered at the same sizes as damage-type icons.
 
-| `name`              | `display_label`     | `bg_color` | `text_color` | `sort_order` |
-|---------------------|---------------------|------------|--------------|--------------|
-| materials           | Materials           | `#E6F1FB`  | `#0C447C`    | 1            |
-| sub_labor           | Subcontractor Labor | `#EEEDFE`  | `#3C3489`    | 2            |
-| equipment_rental    | Equipment Rental    | `#FAEEDA`  | `#633806`    | 3            |
-| fuel_mileage        | Fuel/Mileage        | `#FAECE7`  | `#712B13`    | 4            |
-| permits             | Permits             | `#F1EFE8`  | `#5F5E5A`    | 5            |
-| disposal_dumpster   | Disposal/Dumpster   | `#EAF3DE`  | `#27500A`    | 6            |
-| lodging             | Lodging             | `#FBEAF0`  | `#72243E`    | 7            |
-| meals               | Meals               | `#FBEAF0`  | `#72243E`    | 8            |
-| other               | Other               | `#F1EFE8`  | `#5F5E5A`    | 9            |
+| `name`              | `display_label`     | `bg_color` | `text_color` | `icon`      | `sort_order` |
+|---------------------|---------------------|------------|--------------|-------------|--------------|
+| materials           | Materials           | `#E6F1FB`  | `#0C447C`    | `Hammer`    | 1            |
+| sub_labor           | Subcontractor Labor | `#EEEDFE`  | `#3C3489`    | `Users`     | 2            |
+| equipment_rental    | Equipment Rental    | `#FAEEDA`  | `#633806`    | `Wrench`    | 3            |
+| fuel_mileage        | Fuel/Mileage        | `#FAECE7`  | `#712B13`    | `Fuel`      | 4            |
+| permits             | Permits             | `#F1EFE8`  | `#5F5E5A`    | `FileText`  | 5            |
+| disposal_dumpster   | Disposal/Dumpster   | `#EAF3DE`  | `#27500A`    | `Trash2`    | 6            |
+| lodging             | Lodging             | `#FBEAF0`  | `#72243E`    | `Bed`       | 7            |
+| meals               | Meals               | `#FBEAF0`  | `#72243E`    | `Utensils`  | 8            |
+| other               | Other               | `#F1EFE8`  | `#5F5E5A`    | `null`      | 9            |
 
 ### RLS
 
@@ -327,7 +327,7 @@ The Log Expense modal accepts an optional `existing: Expense` prop. If provided:
 ### Delete
 
 - Confirm dialog: "Delete this expense? This will also remove the activity log entry and receipt files. This cannot be undone."
-- Client: `DELETE /api/expenses/{id}` → server calls RPC `delete_expense_cascade(id)` (removes `job_activities` row via `activity_id` FK, then the expense row in one txn) and deletes both storage objects. Both-or-neither: if storage removal fails mid-way, the endpoint rolls back the DB transaction via `savepoint` or — simpler — deletes storage *first*, then the DB row, with orphaned-row recovery being the acceptable worst case. **Decision: DB-first, then storage.** If storage delete fails after DB delete, we log and swallow (storage orphans are recoverable by batch cleanup; broken DB state is not). This trades the "both-or-neither" wording in the spec for the simpler and safer failure mode; flagged as an open item (§ Open questions).
+- Client: `DELETE /api/expenses/{id}` → server calls RPC `delete_expense_cascade(id)` (removes the paired `job_activities` row and the `expenses` row in one transaction), **then** deletes both storage objects. If either storage delete fails after the DB transaction committed, the orphaned file is logged and swallowed — storage orphans are recoverable via batch cleanup; broken DB state isn't. This intentionally trades the "both-or-neither" wording in the spec for the safer failure mode.
 
 ## Activity log integration
 
@@ -363,7 +363,9 @@ All server routes use `createApiClient()` (service role) and explicitly check th
 
 - `GET  /api/settings/vendors` — list. Query params: `q` (fuzzy name match), `active` (`true`/`false`/omitted), `type` (one of the five), `is_1099` (`true`/omitted).
 - `POST /api/settings/vendors` — create. Requires `manage_vendors`.
-- `PATCH /api/settings/vendors/[id]` — edit or deactivate (sets `is_active=false` when `action=deactivate`). Requires `manage_vendors`.
+- `PATCH /api/settings/vendors/[id]` — edit the editable fields (name, type, default_category, tax_id, is_1099, notes). **Does not** touch `is_active`. Requires `manage_vendors`.
+- `POST /api/settings/vendors/[id]/deactivate` — sets `is_active = false`. Requires `manage_vendors`.
+- `POST /api/settings/vendors/[id]/reactivate` — sets `is_active = true`. Requires `manage_vendors`. The Active toggle in the vendor table calls whichever of the two matches the direction of the flip.
 - `GET  /api/settings/expense-categories` — list ordered by `sort_order`.
 - `POST /api/settings/expense-categories` — create custom. Requires `manage_expense_categories`.
 - `PUT  /api/settings/expense-categories` — bulk sort update (fork of damage-types PUT).
@@ -373,8 +375,8 @@ All server routes use `createApiClient()` (service role) and explicitly check th
 
 - `GET  /api/expenses/by-job/[jobId]` — returns expenses joined to vendor + category, ordered by `expense_date desc, created_at desc`.
 - `POST /api/expenses` — create. Requires `log_expenses`. Body includes uploaded-file paths.
-- `PATCH /api/expenses/[id]` — edit. Permission: `log_expenses` AND (submitter OR `manage_vendors`). Simplifying assumption for this build: any authenticated user with `log_expenses` can edit; revisit once finance review cadence is established.
-- `DELETE /api/expenses/[id]` — delete. Same permission model as edit. Server deletes both storage objects after the DB transaction commits.
+- `PATCH /api/expenses/[id]` — edit. Permission: `log_expenses` AND (the current user is the original `submitted_by`, OR `user_profiles.role === 'admin'`). Returns 403 otherwise.
+- `DELETE /api/expenses/[id]` — delete. Same permission model as edit. Server deletes the DB rows in one transaction, **then** deletes both storage objects. If the storage delete fails after the DB delete succeeds, the orphaned files are logged and swallowed (recoverable by later batch cleanup; broken DB state is not).
 - `GET  /api/expenses/[id]/receipt-url` — returns `{ url, expiresAt }` for the original receipt (600s signed).
 - `GET  /api/expenses/[id]/thumbnail-url` — returns `{ url, expiresAt }` for the thumbnail (600s signed). Called per-row in the Expenses section.
 
@@ -439,10 +441,6 @@ Per project memory, this repo has no jest/vitest/playwright setup. "Testing" for
 2. Manual verification via `preview_*` tools: log → view → edit → delete a receipt on a real job, on both desktop and a mobile viewport.
 3. Migration applied manually in Supabase SQL editor per project convention, against the shared dev/prod project.
 
-## Open questions
+## Deferred
 
-1. **Delete atomicity wording** — spec says "both the receipt and thumbnail … must be deleted, or neither." The design uses DB-first-then-storage because it gives the safer failure mode (orphan storage is recoverable; broken DB isn't). Acceptable?
-2. **Edit permission scope** — any user with `log_expenses` can edit/delete any expense, or should edit/delete be restricted to the original submitter (plus admins)? Current design picks the permissive option — easy to tighten later.
-3. **Category icons** — seed rows leave `icon` null. Want a first pass of icon assignments (e.g. `Hammer` for materials, `Fuel` for fuel_mileage)?
-4. **Fuel filter tab** — currently rolled into Other per the spec. If fuel vendor count grows, it'll want its own tab.
-5. **PATCH semantics for vendor edit** — uses a single `PATCH /api/settings/vendors/[id]`. Deactivate is a partial update (`{ is_active: false }`). The "Deactivate" row action and the Active toggle both hit the same endpoint. Works, but is a `POST /api/settings/vendors/[id]/deactivate` route preferred for clarity?
+- **Fuel filter tab** — intentionally rolled into **Other** for this build to keep the filter list small. Worth revisiting if fuel vendor volume grows enough to warrant its own tab.
