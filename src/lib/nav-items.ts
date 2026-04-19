@@ -9,6 +9,7 @@ import {
   Settings,
   Sparkles,
   Megaphone,
+  Calculator,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
@@ -37,6 +38,7 @@ export const navItems: NavItem[] = [
   { href: "/photos",    label: "Photos",     icon: Camera },
   { href: "/reports",   label: "Reports",    icon: FileText },
   { href: "/contacts",  label: "Contacts",   icon: Users },
-  { href: "/email",     label: "Email",      icon: Mail },
-  { href: "/settings",  label: "Settings",   icon: Settings },
+  { href: "/email",      label: "Email",      icon: Mail },
+  { href: "/accounting", label: "Accounting", icon: Calculator },
+  { href: "/settings",   label: "Settings",   icon: Settings },
 ];
