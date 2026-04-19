@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { format, isToday, isYesterday } from "date-fns";
 import {
   Inbox,
@@ -203,6 +204,28 @@ export default function EmailInbox() {
     draftId?: string;
     accountId?: string;
   } | null>(null);
+
+  // Consume compose query params (e.g. from AR aging Nudge button)
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("compose") === "1") {
+      const subject = searchParams.get("subject") || "";
+      const body = searchParams.get("body") || "";
+      const jobId = searchParams.get("jobId") || "";
+      setComposeMode("compose");
+      setReplyTo({
+        to: "",
+        cc: "",
+        bcc: "",
+        subject,
+        body,
+        messageId: "",
+        jobId,
+      });
+      setComposeOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load accounts on mount
   useEffect(() => {

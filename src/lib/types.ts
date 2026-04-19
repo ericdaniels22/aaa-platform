@@ -28,8 +28,10 @@ export interface Job {
   insurance_company: string | null;
   claim_number: string | null;
   policy_number: string | null;
+  payer_type: "insurance" | "homeowner" | "mixed" | null;
   date_of_loss: string | null;
   deductible: number | null;
+  estimated_crew_labor_cost: number | null;
   hoa_name: string | null;
   hoa_contact_name: string | null;
   hoa_contact_phone: string | null;
