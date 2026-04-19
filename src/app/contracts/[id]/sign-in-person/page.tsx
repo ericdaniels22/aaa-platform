@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
 import type { Contract, ContractSigner } from "@/lib/contracts/types";
@@ -83,6 +85,13 @@ export default async function SignInPersonPage({
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="max-w-4xl mx-auto px-6 py-8">
+        <Link
+          href={`/jobs/${contract.job_id}`}
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-4"
+        >
+          <ArrowLeft size={14} />
+          Back to job
+        </Link>
         <HeaderBlock
           company={company}
           title={contract.title}
