@@ -56,6 +56,7 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import JobPhotosTab from "@/components/job-photos-tab";
+import { useAuth } from "@/lib/auth-context";
 
 const propertyTypeLabels: Record<string, string> = {
   single_family: "Single Family",
@@ -65,6 +66,7 @@ const propertyTypeLabels: Record<string, string> = {
 };
 
 export default function JobDetail({ jobId }: { jobId: string }) {
+  const { hasPermission } = useAuth();
   const [job, setJob] = useState<Job | null>(null);
   const [activities, setActivities] = useState<JobActivity[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -90,6 +92,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
   const [addAdjusterOpen, setAddAdjusterOpen] = useState(false);
   const [photoCount, setPhotoCount] = useState(0);
   const [pendingReminderTotal, setPendingReminderTotal] = useState(0);
+  const [editingCrewLabor, setEditingCrewLabor] = useState(false);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -227,6 +230,23 @@ export default function JobDetail({ jobId }: { jobId: string }) {
       toast.error("Failed to update status.");
     } else {
       toast.success(`Status updated to ${statusLabels[newStatus]}.`);
+      fetchData();
+    }
+  }
+
+  async function saveCrewLabor(raw: string) {
+    const value = raw === "" ? null : Number(raw);
+    if (value !== null && (Number.isNaN(value) || value < 0)) {
+      setEditingCrewLabor(false);
+      return;
+    }
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("jobs")
+      .update({ estimated_crew_labor_cost: value })
+      .eq("id", jobId);
+    setEditingCrewLabor(false);
+    if (!error) {
       fetchData();
     }
   }
@@ -447,6 +467,46 @@ export default function JobDetail({ jobId }: { jobId: string }) {
                 label="Intake Date"
                 value={format(new Date(job.created_at), "MMM d, yyyy 'at' h:mm a")}
               />
+              {/* Estimated crew labor cost — inline edit gated by edit_jobs */}
+              <div className="flex items-start gap-3">
+                <Layers size={16} className="text-primary/60 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Estimated crew labor cost</p>
+                  {editingCrewLabor && hasPermission("edit_jobs") ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      defaultValue={job.estimated_crew_labor_cost ?? ""}
+                      onBlur={(e) => saveCrewLabor(e.currentTarget.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                        if (e.key === "Escape") { setEditingCrewLabor(false); }
+                      }}
+                      autoFocus
+                      className="rounded bg-neutral-800 px-2 py-0.5 text-right w-32 text-sm text-foreground"
+                    />
+                  ) : job.estimated_crew_labor_cost !== null && job.estimated_crew_labor_cost !== undefined ? (
+                    <button
+                      type="button"
+                      disabled={!hasPermission("edit_jobs")}
+                      onClick={() => setEditingCrewLabor(true)}
+                      className="text-foreground hover:underline disabled:cursor-default disabled:hover:no-underline"
+                    >
+                      {Number(job.estimated_crew_labor_cost).toLocaleString("en-US", { style: "currency", currency: "USD" })}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!hasPermission("edit_jobs")}
+                      onClick={() => setEditingCrewLabor(true)}
+                      className="text-muted-foreground italic hover:underline disabled:cursor-default disabled:hover:no-underline"
+                    >
+                      Not set
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
