@@ -11,6 +11,7 @@
 // mid-job numbers are misleading (expenses landed but collections haven't).
 
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+export { marginPctBand, type MarginBand } from "./margin-bands";
 
 export type JobMargin = {
   jobId: string;
@@ -145,10 +146,5 @@ export async function aggregateMargins(
   return out;
 }
 
-// Color band for Margin %
-export function marginPctBand(pct: number | null): "green" | "amber" | "red" | "none" {
-  if (pct === null) return "none";
-  if (pct >= 30) return "green";
-  if (pct >= 10) return "amber";
-  return "red";
-}
+// Color band for Margin % — re-exported at the top of this file from ./margin-bands
+// (client-safe module). Kept here for backward compat with server imports.

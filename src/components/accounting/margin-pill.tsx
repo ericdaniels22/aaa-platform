@@ -1,6 +1,6 @@
 // src/components/accounting/margin-pill.tsx
 // Color-coded margin-percentage pill. Green ≥30, amber ≥10, red <10, em-dash when null.
-import { marginPctBand } from "@/lib/accounting/margins";
+import { marginPctBand } from "@/lib/accounting/margin-bands";
 
 export function MarginPctPill({ pct }: { pct: number | null }) {
   const band = marginPctBand(pct);
