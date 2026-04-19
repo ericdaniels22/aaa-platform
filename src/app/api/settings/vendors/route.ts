@@ -48,13 +48,32 @@ export async function GET(request: Request) {
   return NextResponse.json(data);
 }
 
+async function requireLogExpensesOrManageVendors(quickAdd: boolean) {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, response: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
+  const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).maybeSingle();
+  if (profile?.role === "admin") return { ok: true as const };
+  const neededKey = quickAdd ? "log_expenses" : "manage_vendors";
+  const { data: perm } = await supabase.from("user_permissions")
+    .select("granted").eq("user_id", user.id).eq("permission_key", neededKey).maybeSingle();
+  if (perm?.granted) return { ok: true as const };
+  return { ok: false as const, response: NextResponse.json({ error: "Permission denied" }, { status: 403 }) };
+}
+
 // POST — create
 export async function POST(request: Request) {
-  const guard = await requireManageVendors();
-  if (!guard.ok) return guard.response;
-
   const body = await request.json();
   const { name, vendor_type, default_category_id, is_1099, tax_id, notes } = body as Record<string, unknown>;
+
+  const quickAdd =
+    vendor_type === "other" &&
+    (default_category_id == null) &&
+    !is_1099 &&
+    (tax_id == null || tax_id === "") &&
+    (notes == null || notes === "");
+  const guard = await requireLogExpensesOrManageVendors(quickAdd);
+  if (!guard.ok) return guard.response;
 
   if (typeof name !== "string" || !name.trim()) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });

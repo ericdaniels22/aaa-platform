@@ -37,6 +37,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
+  const ALLOWED_PAYMENT_METHODS = ["business_card", "business_ach", "cash", "personal_reimburse", "other"];
+  if (!ALLOWED_PAYMENT_METHODS.includes(body.payment_method)) {
+    return NextResponse.json({ error: "Invalid payment_method" }, { status: 400 });
+  }
+  if (typeof body.expense_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.expense_date) || Number.isNaN(new Date(body.expense_date).getTime())) {
+    return NextResponse.json({ error: "Invalid expense_date (must be YYYY-MM-DD)" }, { status: 400 });
+  }
+
   const service = createServiceClient();
   const { data, error } = await service.rpc("create_expense_with_activity", {
     p_job_id: body.job_id,
