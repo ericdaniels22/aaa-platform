@@ -222,7 +222,7 @@ export async function GET(
     zip.file(`profitability-${preset}.csv`, p);
     zip.file(`ar-aging.csv`, a);
     zip.file(`expenses-${preset}.csv`, e);
-    const buf = await zip.generateAsync({ type: "uint8array" });
+    const buf = await zip.generateAsync({ type: "arraybuffer" });
     return new Response(buf, {
       headers: {
         "content-type": "application/zip",
