@@ -20,11 +20,14 @@ import {
   Flag,
   Shield,
   Wrench,
+  Receipt,
   Plus,
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import type { Expense, ExpenseCategory, Vendor } from "@/lib/types";
+import ReceiptDetailModal from "@/components/expenses/receipt-detail-modal";
 
 const activityTypeConfig: Record<
   string,
@@ -35,7 +38,10 @@ const activityTypeConfig: Record<
   milestone: { icon: Flag, color: "bg-vibrant-red", label: "Milestone" },
   insurance: { icon: Shield, color: "bg-vibrant-purple", label: "Insurance" },
   equipment: { icon: Wrench, color: "bg-vibrant-amber", label: "Equipment" },
+  expense: { icon: Receipt, color: "bg-[#27500A]", label: "Expense" },
 };
+
+type ExpenseWithRelations = Expense & { vendor?: Vendor | null; category?: ExpenseCategory | null };
 
 const activityTypes = [
   { value: "note", label: "Note" },
@@ -59,6 +65,17 @@ export default function ActivityTimeline({
   const [activityType, setActivityType] = useState("note");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<ExpenseWithRelations | null>(null);
+
+  async function handleActivityClick(activityId: string, activity_type: string) {
+    if (activity_type !== "expense") return;
+    const res = await fetch(`/api/expenses/by-activity/${activityId}`);
+    if (!res.ok) { toast.error("Could not load receipt"); return; }
+    const expense = (await res.json()) as ExpenseWithRelations;
+    setSelectedExpense(expense);
+    setReceiptOpen(true);
+  }
 
   async function handleAddActivity() {
     if (!title.trim()) {
@@ -185,8 +202,17 @@ export default function ActivityTimeline({
                 activityTypeConfig.note;
               const Icon = config.icon;
 
+              const isExpense = activity.activity_type === "expense";
+              const InnerWrapper: React.ElementType = isExpense ? "button" : "div";
               return (
-                <div key={activity.id} className="flex gap-3 relative">
+                <InnerWrapper
+                  key={activity.id}
+                  onClick={isExpense ? () => handleActivityClick(activity.id, activity.activity_type) : undefined}
+                  className={cn(
+                    "w-full text-left flex gap-3 relative",
+                    isExpense && "hover:bg-accent/30 rounded-lg -mx-1 px-1 py-0.5 cursor-pointer",
+                  )}
+                >
                   <div
                     className={cn(
                       "w-[30px] h-[30px] rounded-full flex items-center justify-center flex-shrink-0 z-10 shadow-sm",
@@ -216,12 +242,18 @@ export default function ActivityTimeline({
                       {activity.author}
                     </p>
                   </div>
-                </div>
+                </InnerWrapper>
               );
             })}
           </div>
         </div>
       )}
+      <ReceiptDetailModal
+        open={receiptOpen}
+        onOpenChange={setReceiptOpen}
+        expense={selectedExpense}
+        onChanged={() => { onActivityAdded(); setReceiptOpen(false); }}
+      />
     </div>
   );
 }

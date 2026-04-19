@@ -23,6 +23,7 @@ import ComposeEmailModal from "@/components/compose-email";
 import JarvisJobPanel from "@/components/jarvis/JarvisJobPanel";
 import JobFiles from "@/components/job-files";
 import ContractsSection from "@/components/contracts/contracts-section";
+import ExpensesSection from "@/components/expenses/expenses-section";
 import {
   MapPin,
   Home,
@@ -675,6 +676,8 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         customerEmail={job.contact?.email ?? null}
         onChanged={fetchData}
       />
+
+      <ExpensesSection jobId={jobId} onChanged={fetchData} />
 
       {/* Reports */}
       {reports.length > 0 && (
