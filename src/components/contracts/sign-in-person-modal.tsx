@@ -1,22 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import TiptapEditor from "@/components/tiptap-editor";
 import PreviewContractModal from "./preview-contract-modal";
-import { Loader2, Send, FileText, Plus, Trash2 } from "lucide-react";
+import { Loader2, Users, FileText, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { ContractTemplateListItem, ContractEmailSettings } from "@/lib/contracts/types";
-
-interface SignerRow {
-  name: string;
-  email: string;
-}
+import type { ContractTemplateListItem } from "@/lib/contracts/types";
 
 interface Props {
   open: boolean;
@@ -24,7 +19,6 @@ interface Props {
   jobId: string;
   defaultSignerName: string | null;
   defaultSignerEmail: string | null;
-  onSent: () => void | Promise<void>;
 }
 
 interface PreviewData {
@@ -34,62 +28,44 @@ interface PreviewData {
   defaultTitle: string;
 }
 
-export default function SendContractModal({
+interface SignerRow {
+  name: string;
+  email: string;
+}
+
+// Setup modal for the Sign In Person (tablet) flow. Structurally mirrors
+// SendContractModal minus the email composition — when the user clicks
+// Start Signing we POST the draft to /api/contracts/in-person/start and
+// redirect them straight to the full-screen tablet signing view.
+export default function SignInPersonModal({
   open,
   onOpenChange,
   jobId,
   defaultSignerName,
   defaultSignerEmail,
-  onSent,
 }: Props) {
+  const router = useRouter();
   const [templates, setTemplates] = useState<ContractTemplateListItem[] | null>(null);
-  const [settings, setSettings] = useState<ContractEmailSettings | null>(null);
   const [templateId, setTemplateId] = useState<string>("");
-  const [signers, setSigners] = useState<SignerRow[]>([
-    { name: defaultSignerName ?? "", email: defaultSignerEmail ?? "" },
-  ]);
-  const [expiryDays, setExpiryDays] = useState<number>(7);
-  const [emailSubject, setEmailSubject] = useState("");
-  const [emailBody, setEmailBody] = useState("");
+  const [signers, setSigners] = useState<SignerRow[]>([{ name: "", email: "" }]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState<PreviewData | null>(null);
-  const [sending, setSending] = useState(false);
+  const [starting, setStarting] = useState(false);
 
-  // Reset form whenever the modal reopens.
   useEffect(() => {
     if (!open) return;
     setSigners([{ name: defaultSignerName ?? "", email: defaultSignerEmail ?? "" }]);
     setPreview(null);
   }, [open, defaultSignerName, defaultSignerEmail]);
 
-  function updateSigner(idx: number, patch: Partial<SignerRow>) {
-    setSigners((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
-  }
-  function addSigner() {
-    setSigners((prev) => (prev.length < 2 ? [...prev, { name: "", email: "" }] : prev));
-  }
-  function removeSigner(idx: number) {
-    setSigners((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
-  }
-
   const load = useCallback(async () => {
-    const [tRes, sRes] = await Promise.all([
-      fetch("/api/settings/contract-templates"),
-      fetch("/api/settings/contract-email"),
-    ]);
-    if (tRes.ok) {
-      const data = (await tRes.json()) as ContractTemplateListItem[];
+    const res = await fetch("/api/settings/contract-templates");
+    if (res.ok) {
+      const data = (await res.json()) as ContractTemplateListItem[];
       const active = data.filter((t) => t.is_active);
       setTemplates(active);
       if (active.length && !templateId) setTemplateId(active[0].id);
-    }
-    if (sRes.ok) {
-      const data = (await sRes.json()) as ContractEmailSettings;
-      setSettings(data);
-      setExpiryDays(data.default_link_expiry_days);
-      setEmailSubject(data.signing_request_subject_template);
-      setEmailBody(data.signing_request_body_template);
     }
   }, [templateId]);
 
@@ -97,7 +73,17 @@ export default function SendContractModal({
     if (open) load();
   }, [open, load]);
 
-  const setupIncomplete = !!settings && (!settings.send_from_email || !settings.send_from_name);
+  function updateSigner(idx: number, patch: Partial<SignerRow>) {
+    setSigners((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
+  }
+
+  function addSigner() {
+    setSigners((prev) => (prev.length < 2 ? [...prev, { name: "", email: "" }] : prev));
+  }
+
+  function removeSigner(idx: number) {
+    setSigners((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
+  }
 
   async function doPreview() {
     if (!templateId) return;
@@ -119,7 +105,7 @@ export default function SendContractModal({
     }
   }
 
-  async function doSend() {
+  async function startSigning() {
     if (!templateId) {
       toast.error("Pick a template first");
       return;
@@ -130,54 +116,38 @@ export default function SendContractModal({
         return;
       }
     }
-    if (!emailSubject.trim() || !emailBody.trim()) {
-      toast.error("Email subject and body are required");
-      return;
-    }
-    setSending(true);
+    setStarting(true);
     try {
-      const res = await fetch("/api/contracts/send", {
+      const res = await fetch("/api/contracts/in-person/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jobId,
           templateId,
           signers: signers.map((s) => ({ name: s.name.trim(), email: s.email.trim() })),
-          expiryDays,
-          emailSubject,
-          emailBody,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Send failed");
-      toast.success("Contract sent for signature");
-      await onSent();
-      onOpenChange(false);
+      if (!res.ok) throw new Error(data.error || "Unable to start signing");
+      router.push(`/contracts/${data.contractId}/sign-in-person`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Send failed");
+      toast.error(e instanceof Error ? e.message : "Unable to start signing");
     } finally {
-      setSending(false);
+      setStarting(false);
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Send size={18} className="text-[var(--brand-primary)]" />
-            Send for Signature
+            <Users size={18} className="text-[var(--brand-primary)]" />
+            Sign In Person
           </DialogTitle>
         </DialogHeader>
 
-        {setupIncomplete && (
-          <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
-            Contract email settings are incomplete — set a send-from address in Settings → Contracts first.
-          </div>
-        )}
-
         <div className="space-y-4">
-          {/* Template */}
           <div>
             <label className="text-xs font-medium text-muted-foreground">Template</label>
             {templates === null ? (
@@ -203,12 +173,9 @@ export default function SendContractModal({
             )}
           </div>
 
-          {/* Signers */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-medium text-muted-foreground">
-                Signer{signers.length > 1 ? "s" : ""}
-              </label>
+              <label className="text-xs font-medium text-muted-foreground">Signers</label>
               {signers.length < 2 && (
                 <button
                   type="button"
@@ -221,10 +188,7 @@ export default function SendContractModal({
             </div>
             <div className="space-y-2">
               {signers.map((s, idx) => (
-                <div
-                  key={idx}
-                  className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-center"
-                >
+                <div key={idx} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
                   <input
                     type="text"
                     placeholder={`Signer ${idx + 1} full name`}
@@ -254,48 +218,8 @@ export default function SendContractModal({
                 </div>
               ))}
             </div>
-            {signers.length > 1 && (
-              <p className="text-[11px] text-muted-foreground mt-2">
-                The second signer receives their link after the first signs.
-              </p>
-            )}
-          </div>
-
-          {/* Expiry */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Link expiration (days)</label>
-            <input
-              type="number"
-              min={1}
-              max={30}
-              value={expiryDays}
-              onChange={(e) => setExpiryDays(Math.max(1, Math.min(30, Number(e.target.value))))}
-              className="mt-1 w-28 rounded-lg border border-border bg-background/60 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/30"
-            />
-          </div>
-
-          {/* Email subject + body */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Email subject</label>
-            <input
-              type="text"
-              value={emailSubject}
-              onChange={(e) => setEmailSubject(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/30"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Email body</label>
-            <div className="mt-1">
-              <TiptapEditor
-                content={emailBody}
-                onChange={setEmailBody}
-                placeholder="Email body shown to the signer"
-              />
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              {`{{signing_link}}`} and {`{{document_title}}`} resolve automatically when sent.
+            <p className="text-[11px] text-muted-foreground mt-2">
+              Email is used for the signed-confirmation copy. No signing link will be sent for in-person signing.
             </p>
           </div>
         </div>
@@ -320,12 +244,12 @@ export default function SendContractModal({
             </button>
             <button
               type="button"
-              onClick={doSend}
-              disabled={sending || setupIncomplete || !templateId}
+              onClick={startSigning}
+              disabled={starting || !templateId}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 transition-all disabled:opacity-60"
             >
-              {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              Send
+              {starting ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />}
+              Start Signing
             </button>
           </div>
         </div>

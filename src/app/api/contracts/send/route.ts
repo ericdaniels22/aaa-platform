@@ -6,6 +6,7 @@ import { resolveMergeFields } from "@/lib/contracts/merge-fields";
 import { resolveEmailTemplate } from "@/lib/contracts/email-merge-fields";
 import { sendContractEmail } from "@/lib/contracts/email";
 import { generateSigningToken } from "@/lib/contracts/tokens";
+import { computeInitialNextReminderAt } from "@/lib/contracts/reminders";
 import type { ContractEmailSettings } from "@/lib/contracts/types";
 
 interface SendSignerInput {
@@ -31,14 +32,12 @@ function appUrl(): string {
 }
 
 // POST /api/contracts/send
-// Atomic-ish send pipeline:
-//   1. Validate inputs + fetch template + fetch email settings
-//   2. Resolve merge fields into filled HTML + SHA-256 hash
-//   3. RPC create_contract_draft (contract + signer + 'created' event)
-//   4. Send email via Resend or SMTP
-//   5. RPC mark_contract_sent — only after email succeeds
-// A send that fails at step 4 leaves a draft contract the user can Edit or
-// Discard from the Contracts section.
+// Build 15c extensions over 15b:
+//   - Supports up to 2 signers. In multi-signer mode, only signer 1
+//     receives the initial email; signer 2 is emailed after signer 1
+//     completes (see /api/contracts/[id]/sign → activate_next_signer).
+//   - Stamps the initial next_reminder_at so the hourly cron can pick
+//     the contract up once the first offset elapses.
 export async function POST(request: Request) {
   const authClient = await createServerSupabaseClient();
   const { data: { user }, error: authErr } = await authClient.auth.getUser();
@@ -56,19 +55,13 @@ export async function POST(request: Request) {
   if (body.signers.length > 2) {
     return NextResponse.json({ error: "At most 2 signers" }, { status: 400 });
   }
-  // 15b scope: single-signer only; multi-signer sequential flow is 15c.
-  if (body.signers.length > 1) {
-    return NextResponse.json(
-      { error: "Multi-signer contracts will be available in Build 15c" },
-      { status: 400 },
-    );
-  }
-  const primary = body.signers[0];
-  if (!primary.name || !primary.email) {
-    return NextResponse.json(
-      { error: "Signer name and email are required" },
-      { status: 400 },
-    );
+  for (const s of body.signers) {
+    if (!s.name?.trim() || !s.email?.trim()) {
+      return NextResponse.json(
+        { error: "Every signer needs a name and email" },
+        { status: 400 },
+      );
+    }
   }
   if (!body.emailSubject || !body.emailBody) {
     return NextResponse.json(
@@ -79,7 +72,7 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient();
 
-  // --- Fetch settings (must have send-from configured) ---
+  // --- Fetch settings ---
   const { data: settings, error: sErr } = await supabase
     .from("contract_email_settings")
     .select("*")
@@ -93,10 +86,7 @@ export async function POST(request: Request) {
   }
   if (!settings.send_from_email || !settings.send_from_name) {
     return NextResponse.json(
-      {
-        error:
-          "Set a send-from email and display name in Settings → Contracts before sending.",
-      },
+      { error: "Set a send-from email and display name in Settings → Contracts before sending." },
       { status: 400 },
     );
   }
@@ -140,7 +130,10 @@ export async function POST(request: Request) {
 
   // --- Compute IDs, token, expiry ---
   const contractId = randomUUID();
-  const signerId = randomUUID();
+  const signerIds = body.signers.map(() => randomUUID());
+  const primary = body.signers[0];
+  const primarySignerId = signerIds[0];
+
   const expiryDays = Math.max(
     1,
     Math.min(30, body.expiryDays ?? settings.default_link_expiry_days),
@@ -148,16 +141,23 @@ export async function POST(request: Request) {
   const expiresAt = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000);
   const token = generateSigningToken({
     contractId,
-    signerId,
+    signerId: primarySignerId,
     expiresAt,
   });
 
   const title = (body.title?.trim() || `${tpl.name} — ${primary.name}`).slice(0, 200);
 
-  // --- Create draft (atomic RPC) ---
-  const { error: rpcErr } = await supabase.rpc("create_contract_draft", {
+  // --- Create draft + all signer rows atomically ---
+  const signersPayload = body.signers.map((s, idx) => ({
+    id: signerIds[idx],
+    signer_order: idx + 1,
+    role_label: s.roleLabel || tpl.signer_role_label || "Signer",
+    name: s.name.trim(),
+    email: s.email.trim(),
+  }));
+
+  const { error: rpcErr } = await supabase.rpc("create_contract_with_signers", {
     p_contract_id: contractId,
-    p_signer_id: signerId,
     p_job_id: body.jobId,
     p_template_id: tpl.id,
     p_template_version: tpl.version,
@@ -166,11 +166,8 @@ export async function POST(request: Request) {
     p_filled_content_hash: filledHash,
     p_link_token: token,
     p_link_expires_at: expiresAt.toISOString(),
-    p_signer_order: 1,
-    p_signer_role_label: primary.roleLabel || tpl.signer_role_label || "Signer",
-    p_signer_name: primary.name,
-    p_signer_email: primary.email,
     p_sent_by: user.id,
+    p_signers: signersPayload,
   });
   if (rpcErr) {
     return NextResponse.json(
@@ -179,7 +176,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // --- Resolve email body + send ---
+  // --- Resolve email body + send (to signer 1 only) ---
   try {
     const signingLink = `${appUrl()}/sign/${token}`;
     const { subject, html } = await resolveEmailTemplate(
@@ -209,6 +206,18 @@ export async function POST(request: Request) {
         },
         { status: 500 },
       );
+    }
+
+    // --- Schedule first auto-reminder based on settings.reminder_day_offsets ---
+    const firstReminder = computeInitialNextReminderAt(
+      new Date(),
+      settings.reminder_day_offsets,
+    );
+    if (firstReminder) {
+      await supabase.rpc("schedule_first_reminder", {
+        p_contract_id: contractId,
+        p_next_reminder_at: firstReminder.toISOString(),
+      });
     }
 
     return NextResponse.json({ contractId, messageId: sent.messageId });

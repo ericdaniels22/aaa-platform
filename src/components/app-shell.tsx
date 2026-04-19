@@ -9,17 +9,24 @@ const AUTH_ROUTES = ["/login", "/logout"];
 const FULL_BLEED_ROUTES = ["/email"];
 // Public customer-facing routes render without the internal app chrome.
 const PUBLIC_ROUTES = ["/sign"];
+// Internal routes that still require auth (handled in the page itself)
+// but render full-screen without the sidebar — used for the tablet
+// in-person signing handoff where the iPad is given to the customer.
+const INTERNAL_FULLSCREEN_PATTERNS: RegExp[] = [
+  /^\/contracts\/[^/]+\/sign-in-person(\/|$)/,
+];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { collapsed } = useSidebarCollapse();
   const isAuthPage = AUTH_ROUTES.some((r) => pathname.startsWith(r));
   const isPublicPage = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
+  const isInternalFullscreen = INTERNAL_FULLSCREEN_PATTERNS.some((re) => re.test(pathname));
   const isFullBleed = FULL_BLEED_ROUTES.some(
     (r) => pathname === r || pathname.startsWith(`${r}/`),
   );
 
-  if (isAuthPage || isPublicPage) {
+  if (isAuthPage || isPublicPage || isInternalFullscreen) {
     return <>{children}</>;
   }
 

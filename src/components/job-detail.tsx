@@ -88,6 +88,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
   const [editInsuranceOpen, setEditInsuranceOpen] = useState(false);
   const [addAdjusterOpen, setAddAdjusterOpen] = useState(false);
   const [photoCount, setPhotoCount] = useState(0);
+  const [pendingReminderTotal, setPendingReminderTotal] = useState(0);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -162,6 +163,24 @@ export default function JobDetail({ jobId }: { jobId: string }) {
       .select("field_key, field_value")
       .eq("job_id", jobId);
     if (cfData) setCustomFields(cfData);
+
+    // Aggregate reminder count across any sent/viewed contracts for the
+    // "· N reminders sent" indicator next to the Awaiting-signature pill.
+    const { data: pendingContracts } = await supabase
+      .from("contracts")
+      .select("reminder_count")
+      .eq("job_id", jobId)
+      .in("status", ["sent", "viewed"]);
+    if (pendingContracts) {
+      setPendingReminderTotal(
+        pendingContracts.reduce(
+          (sum: number, c: { reminder_count: number | null }) => sum + (c.reminder_count ?? 0),
+          0,
+        ),
+      );
+    } else {
+      setPendingReminderTotal(0);
+    }
 
     setLoading(false);
   }, [jobId]);
@@ -264,11 +283,18 @@ export default function JobDetail({ jobId }: { jobId: string }) {
                 Contract signed
               </Badge>
             ) : job.has_pending_contract ? (
-              <Badge
-                className="text-xs font-medium px-2 py-0.5 rounded-md bg-[rgba(239,159,39,0.12)] text-[#FAC775] border border-[rgba(239,159,39,0.3)]"
-              >
-                Awaiting signature
-              </Badge>
+              <>
+                <Badge
+                  className="text-xs font-medium px-2 py-0.5 rounded-md bg-[rgba(239,159,39,0.12)] text-[#FAC775] border border-[rgba(239,159,39,0.3)]"
+                >
+                  Awaiting signature
+                </Badge>
+                {pendingReminderTotal > 0 && (
+                  <span className="text-[11px] text-muted-foreground">
+                    · {pendingReminderTotal} reminder{pendingReminderTotal === 1 ? "" : "s"} sent
+                  </span>
+                )}
+              </>
             ) : null}
           </div>
         </div>
