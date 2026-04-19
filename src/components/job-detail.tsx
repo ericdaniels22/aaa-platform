@@ -608,6 +608,14 @@ export default function JobDetail({ jobId }: { jobId: string }) {
               <p className="text-xs text-muted-foreground/60 py-2">No insurance info</p>
             )}
 
+            {/* Payer type badge */}
+            {job.payer_type && (
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Payer:</span>
+                <PayerTypeBadge value={job.payer_type} />
+              </div>
+            )}
+
             {/* HOA sub-section */}
             <div className="mt-4">
               <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">HOA</span>
@@ -1685,5 +1693,22 @@ function AddAdjusterDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ── Payer Type Badge ── */
+function PayerTypeBadge({ value }: { value: "insurance" | "homeowner" | "mixed" }) {
+  const styles = {
+    insurance: { bg: "rgba(139, 92, 246, 0.15)", color: "#C4B5FD", border: "rgba(139, 92, 246, 0.35)", label: "Insurance" },
+    homeowner: { bg: "rgba(59, 130, 246, 0.15)", color: "#93C5FD", border: "rgba(59, 130, 246, 0.35)", label: "Homeowner" },
+    mixed: { bg: "rgba(250, 199, 117, 0.15)", color: "#FAC775", border: "rgba(250, 199, 117, 0.35)", label: "Mixed" },
+  }[value];
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+      style={{ background: styles.bg, color: styles.color, border: `1px solid ${styles.border}` }}
+    >
+      {styles.label}
+    </span>
   );
 }
