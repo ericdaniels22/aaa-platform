@@ -204,6 +204,18 @@ export default function JobDetail({ jobId }: { jobId: string }) {
     fetchData();
   }, [fetchData]);
 
+  // Redirect legacy billing deep-links to new Financials tab
+  useEffect(() => {
+    const section = searchParams.get("section");
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (section === "billing" || hash === "#billing") {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("section");
+      params.set("tab", "financials");
+      router.replace(`?${params.toString()}`, { scroll: false });
+    }
+  }, [searchParams, router]);
+
   async function updateStatus(newStatus: string) {
     const supabase = createClient();
     const { error } = await supabase
