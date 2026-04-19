@@ -56,7 +56,7 @@ export interface JobAdjuster {
 export interface JobActivity {
   id: string;
   job_id: string;
-  activity_type: "note" | "photo" | "milestone" | "insurance" | "equipment";
+  activity_type: "note" | "photo" | "milestone" | "insurance" | "equipment" | "expense";
   title: string;
   description: string | null;
   author: string;
@@ -417,6 +417,69 @@ export interface CompanySettings {
   email?: string;
   website?: string;
   license_number?: string;
+}
+
+export type VendorType =
+  | "supplier"
+  | "subcontractor"
+  | "equipment_rental"
+  | "fuel"
+  | "other";
+
+export interface Vendor {
+  id: string;
+  name: string;
+  vendor_type: VendorType;
+  default_category_id: string | null;
+  is_1099: boolean;
+  tax_id: string | null;
+  notes: string | null;
+  is_active: boolean;
+  last_used_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  display_label: string;
+  bg_color: string;
+  text_color: string;
+  icon: string | null;
+  sort_order: number;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PaymentMethod =
+  | "business_card"
+  | "business_ach"
+  | "cash"
+  | "personal_reimburse"
+  | "other";
+
+export interface Expense {
+  id: string;
+  job_id: string;
+  vendor_id: string | null;
+  vendor_name: string;
+  category_id: string;
+  amount: number;
+  expense_date: string;
+  payment_method: PaymentMethod;
+  description: string | null;
+  receipt_path: string | null;
+  thumbnail_path: string | null;
+  submitted_by: string | null;
+  submitter_name: string;
+  activity_id: string | null;
+  created_at: string;
+  updated_at: string;
+  // joined fields (present on GET responses that join)
+  vendor?: Vendor | null;
+  category?: ExpenseCategory | null;
 }
 
 export const EMAIL_PROVIDERS: Record<string, { label: string; imap_host: string; imap_port: number; smtp_host: string; smtp_port: number }> = {
