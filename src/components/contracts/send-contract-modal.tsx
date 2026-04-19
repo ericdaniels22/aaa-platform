@@ -162,7 +162,7 @@ export default function SendContractModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[min(100vw-2rem,56rem)] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Send size={18} className="text-[var(--brand-primary)]" />
@@ -223,33 +223,33 @@ export default function SendContractModal({
               {signers.map((s, idx) => (
                 <div
                   key={idx}
-                  className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-center"
+                  className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-center"
                 >
                   <input
                     type="text"
                     placeholder={`Signer ${idx + 1} full name`}
                     value={s.name}
                     onChange={(e) => updateSigner(idx, { name: e.target.value })}
-                    className="rounded-lg border border-border bg-background/60 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/30"
+                    className="min-w-0 rounded-lg border border-border bg-background/60 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/30"
                   />
                   <input
                     type="email"
                     placeholder="Email"
                     value={s.email}
                     onChange={(e) => updateSigner(idx, { email: e.target.value })}
-                    className="rounded-lg border border-border bg-background/60 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/30"
+                    className="min-w-0 rounded-lg border border-border bg-background/60 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/30"
                   />
                   {signers.length > 1 ? (
                     <button
                       type="button"
                       onClick={() => removeSigner(idx)}
-                      className="rounded-lg px-2 py-2 text-muted-foreground hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                      className="justify-self-end sm:justify-self-auto rounded-lg px-2 py-2 text-muted-foreground hover:text-red-300 hover:bg-red-500/10 transition-colors"
                       aria-label={`Remove signer ${idx + 1}`}
                     >
                       <Trash2 size={14} />
                     </button>
                   ) : (
-                    <div />
+                    <div className="hidden sm:block" />
                   )}
                 </div>
               ))}
@@ -300,17 +300,17 @@ export default function SendContractModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-2 border-t border-border">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border">
           <button
             type="button"
             onClick={doPreview}
             disabled={!templateId || previewing}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-foreground bg-muted/40 hover:bg-muted/60 transition-colors disabled:opacity-60"
+            className="order-2 sm:order-1 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-foreground bg-muted/40 hover:bg-muted/60 transition-colors disabled:opacity-60"
           >
             {previewing ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
             Preview Contract
           </button>
-          <div className="flex gap-2">
+          <div className="order-1 sm:order-2 flex gap-2 ml-auto">
             <button
               type="button"
               onClick={() => onOpenChange(false)}
