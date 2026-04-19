@@ -78,10 +78,21 @@ CREATE TRIGGER payments_update_payer_type
   FOR EACH ROW EXECUTE FUNCTION trg_recompute_payer_type();
 
 -- ============================================
--- 4. One-time backfill: payer_type for all existing jobs
+-- 4. One-time backfill: payer_type for all existing jobs.
 -- Must run after the function and trigger are in place.
+--
+-- Loop with PERFORM rather than `UPDATE jobs SET payer_type = recompute_job_payer_type(id)`.
+-- The outer UPDATE would re-enter the same row while the function already did its own
+-- UPDATE inside, triggering Postgres error 27000 "tuple to be updated was already modified".
 -- ============================================
-UPDATE jobs SET payer_type = recompute_job_payer_type(id);
+DO $$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN SELECT id FROM jobs LOOP
+    PERFORM recompute_job_payer_type(r.id);
+  END LOOP;
+END $$;
 
 -- ============================================
 -- 5. Extend set_default_permissions to include view_accounting
