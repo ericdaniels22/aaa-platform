@@ -230,14 +230,17 @@ export default function TabletSigningForm({
         </div>
 
         <div
-          className="relative rounded-xl bg-background/40 border border-dashed border-border/70"
+          className="relative rounded-xl bg-white border border-border shadow-inner overflow-hidden"
           style={{ height: 200 }}
         >
           <canvas ref={canvasRef} className="w-full h-full block touch-none" />
+          <span className="absolute top-2 left-3 text-[10px] uppercase tracking-wider font-semibold text-gray-400 pointer-events-none">
+            Sign here
+          </span>
           <button
             type="button"
             onClick={clearSignature}
-            className="absolute bottom-2 right-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="absolute bottom-2 right-3 text-xs font-medium text-gray-500 hover:text-gray-800 transition-colors"
           >
             Clear
           </button>
