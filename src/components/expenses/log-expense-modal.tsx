@@ -182,13 +182,16 @@ export default function LogExpenseModal({ open, onOpenChange, jobId, existing, o
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn(
-        "p-0 overflow-hidden",
-        "max-w-full h-screen max-h-screen inset-0 translate-x-0 translate-y-0 rounded-none top-0 left-0", // mobile
-        "sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-w-lg sm:h-auto sm:max-h-[90vh] sm:rounded-xl", // desktop
-      )}>
-        <form onSubmit={handleSubmit} className="flex flex-col h-full">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+      <DialogContent
+        showCloseButton={false}
+        className={cn(
+          "p-0 overflow-hidden flex flex-col",
+          "max-w-full h-screen max-h-screen inset-0 translate-x-0 translate-y-0 rounded-none top-0 left-0", // mobile
+          "sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-w-lg sm:h-[min(90vh,720px)] sm:rounded-xl", // desktop: fixed height so inner flex can scroll
+        )}
+      >
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
             <h2 className="text-lg font-semibold text-foreground">{existing ? "Edit Expense" : "Log Expense"}</h2>
             <button type="button" onClick={() => onOpenChange(false)}
               className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent">
@@ -196,7 +199,7 @@ export default function LogExpenseModal({ open, onOpenChange, jobId, existing, o
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4">
             {/* Receipt photo */}
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1.5">Receipt</label>
@@ -300,7 +303,7 @@ export default function LogExpenseModal({ open, onOpenChange, jobId, existing, o
             </div>
           </div>
 
-          <div className="border-t border-border px-5 py-3 flex justify-end gap-2 bg-card">
+          <div className="border-t border-border px-5 py-3 flex justify-end gap-2 bg-card shrink-0">
             <button type="button" onClick={() => onOpenChange(false)}
               className="px-4 h-11 rounded-lg text-sm text-muted-foreground hover:bg-accent">
               Cancel
