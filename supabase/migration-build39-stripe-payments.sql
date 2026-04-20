@@ -91,6 +91,8 @@ create table if not exists stripe_events (
 
 create index if not exists idx_stripe_events_event_type on stripe_events(event_type);
 create index if not exists idx_stripe_events_payment_request_id on stripe_events(payment_request_id);
+create index if not exists idx_stripe_events_unprocessed
+  on stripe_events(received_at) where processed_at is null;
 
 -- ---------------------------------------------------------------------------
 -- Alter existing tables.
@@ -100,24 +102,18 @@ alter table invoices add column if not exists stripe_balance_remaining numeric(1
 alter table jobs add column if not exists has_pending_payment_request boolean not null default false;
 
 -- ---------------------------------------------------------------------------
--- updated_at triggers (reuse the shared function if it exists; otherwise inline).
+-- updated_at triggers — reuse the shared update_updated_at() function
+-- defined in supabase/schema.sql.
 -- ---------------------------------------------------------------------------
-create or replace function set_updated_at() returns trigger language plpgsql as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
-
 drop trigger if exists trg_stripe_connection_updated_at on stripe_connection;
 create trigger trg_stripe_connection_updated_at
   before update on stripe_connection
-  for each row execute function set_updated_at();
+  for each row execute function update_updated_at();
 
 drop trigger if exists trg_payment_requests_updated_at on payment_requests;
 create trigger trg_payment_requests_updated_at
   before update on payment_requests
-  for each row execute function set_updated_at();
+  for each row execute function update_updated_at();
 
 -- ---------------------------------------------------------------------------
 -- RLS — match existing permissive pattern (service role bypasses; anon-gated
