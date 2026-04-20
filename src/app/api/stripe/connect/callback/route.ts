@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { verifyOAuthState, InvalidOAuthStateError } from "@/lib/stripe-oauth";
 import { createServiceClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { encrypt } from "@/lib/encryption";
 
 interface StripeOAuthTokenResponse {
@@ -26,7 +27,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(dest.toString(), { status: 303 });
   };
 
-  if (errorParam) return back(errorParam);
+  if (errorParam) {
+    const safe = errorParam === "access_denied" ? "access_denied" : "oauth_error";
+    if (errorParam !== "access_denied") {
+      console.error("[stripe/connect/callback] upstream error:", errorParam);
+    }
+    return back(safe);
+  }
   if (!code || !stateParam) return back("missing_params");
 
   let payload: ReturnType<typeof verifyOAuthState>;
@@ -37,23 +44,57 @@ export async function GET(req: NextRequest) {
     throw e;
   }
 
+  // Best-effort session match: if we have a session, it must belong to the user
+  // who signed the state. If we have no session (cookies can be stripped on some
+  // external redirects), the HMAC state is still the authoritative gate.
+  try {
+    const auth = await createServerSupabaseClient();
+    const {
+      data: { user: sessionUser },
+    } = await auth.auth.getUser();
+    if (sessionUser && sessionUser.id !== payload.user_id) {
+      return back("session_mismatch");
+    }
+  } catch {
+    // Non-fatal: continue with state as the only gate.
+  }
+
   const platformSecret = process.env.STRIPE_CONNECT_CLIENT_SECRET;
   if (!platformSecret) {
     return back("platform_secret_missing");
   }
 
-  const tokenRes = await fetch("https://connect.stripe.com/oauth/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_secret: platformSecret,
-      code,
-      grant_type: "authorization_code",
-    }),
-  });
+  const ac = new AbortController();
+  const timeoutHandle = setTimeout(() => ac.abort(), 8000);
+  let tokenRes: Response;
+  try {
+    tokenRes = await fetch("https://connect.stripe.com/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_secret: platformSecret,
+        code,
+        grant_type: "authorization_code",
+      }),
+      signal: ac.signal,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      return back("stripe_timeout");
+    }
+    console.error("[stripe/connect/callback] fetch threw:", e);
+    return back("stripe_fetch_failed");
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
   const token = (await tokenRes.json()) as StripeOAuthTokenResponse;
   if (!tokenRes.ok || token.error) {
-    return back(token.error ?? "token_exchange_failed");
+    console.error("[stripe/connect/callback] token exchange failed:", {
+      status: tokenRes.status,
+      error: token.error,
+      error_description: token.error_description,
+    });
+    return back("token_exchange_failed");
   }
 
   const supabase = createServiceClient();
