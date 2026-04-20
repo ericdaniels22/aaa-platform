@@ -7,7 +7,15 @@
 
 import { getQboApiBase } from "./config";
 import type { QbEnvironment } from "./config";
-import type { QbAccount, QbClass, QbCustomerPayload } from "./types";
+import type {
+  QbAccount,
+  QbClass,
+  QbCustomerPayload,
+  QbInvoicePayload,
+  QbInvoiceWriteResult,
+  QbPaymentPayload,
+  QbPaymentWriteResult,
+} from "./types";
 
 // Minimal token context — everything we need for a raw API call.
 // Callers use `ValidToken` from tokens.ts; it's structurally compatible.
@@ -170,4 +178,128 @@ export async function getCustomer(
   } catch {
     return null;
   }
+}
+
+// ---------- Invoices ----------
+
+export async function createInvoice(
+  token: QbApiContext,
+  payload: QbInvoicePayload,
+): Promise<QbInvoiceWriteResult> {
+  const data = await call<{ Invoice?: { Id: string; SyncToken: string } }>(
+    token,
+    "POST",
+    "/invoice",
+    payload,
+  );
+  if (!data.Invoice?.Id) throw new Error("QuickBooks returned no Invoice id");
+  return { id: data.Invoice.Id, syncToken: data.Invoice.SyncToken };
+}
+
+export async function updateInvoice(
+  token: QbApiContext,
+  payload: QbInvoicePayload,
+): Promise<QbInvoiceWriteResult> {
+  if (!payload.Id || !payload.SyncToken) {
+    throw new Error("updateInvoice requires Id and SyncToken");
+  }
+  // QB requires a full update for Invoice (sparse not supported the same way
+  // as Customer), so the payload must be the complete re-computed state.
+  const data = await call<{ Invoice?: { Id: string; SyncToken: string } }>(
+    token,
+    "POST",
+    "/invoice?operation=update",
+    payload,
+  );
+  if (!data.Invoice?.Id) throw new Error("QuickBooks returned no Invoice id");
+  return { id: data.Invoice.Id, syncToken: data.Invoice.SyncToken };
+}
+
+export async function getInvoice(
+  token: QbApiContext,
+  id: string,
+): Promise<{ Id: string; SyncToken: string } | null> {
+  try {
+    const data = await call<{ Invoice?: { Id: string; SyncToken: string } }>(
+      token,
+      "GET",
+      `/invoice/${id}`,
+    );
+    return data.Invoice ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function voidInvoice(
+  token: QbApiContext,
+  id: string,
+  syncToken: string,
+): Promise<void> {
+  await call<unknown>(token, "POST", "/invoice?operation=void", {
+    Id: id,
+    SyncToken: syncToken,
+  });
+}
+
+// ---------- Payments ----------
+
+export async function createPayment(
+  token: QbApiContext,
+  payload: QbPaymentPayload,
+): Promise<QbPaymentWriteResult> {
+  const data = await call<{ Payment?: { Id: string; SyncToken: string } }>(
+    token,
+    "POST",
+    "/payment",
+    payload,
+  );
+  if (!data.Payment?.Id) throw new Error("QuickBooks returned no Payment id");
+  return { id: data.Payment.Id, syncToken: data.Payment.SyncToken };
+}
+
+export async function updatePayment(
+  token: QbApiContext,
+  payload: QbPaymentPayload,
+): Promise<QbPaymentWriteResult> {
+  if (!payload.Id || !payload.SyncToken) {
+    throw new Error("updatePayment requires Id and SyncToken");
+  }
+  const data = await call<{ Payment?: { Id: string; SyncToken: string } }>(
+    token,
+    "POST",
+    "/payment?operation=update",
+    payload,
+  );
+  if (!data.Payment?.Id) throw new Error("QuickBooks returned no Payment id");
+  return { id: data.Payment.Id, syncToken: data.Payment.SyncToken };
+}
+
+export async function getPayment(
+  token: QbApiContext,
+  id: string,
+): Promise<{ Id: string; SyncToken: string } | null> {
+  try {
+    const data = await call<{ Payment?: { Id: string; SyncToken: string } }>(
+      token,
+      "GET",
+      `/payment/${id}`,
+    );
+    return data.Payment ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deletePayment(
+  token: QbApiContext,
+  id: string,
+  syncToken: string,
+): Promise<void> {
+  // QB hard-deletes payments when given `operation=delete` — no void equivalent.
+  // This matches our platform semantics: a payment is either correct or a data error.
+  await call<unknown>(token, "POST", "/payment?operation=delete", {
+    Id: id,
+    SyncToken: syncToken,
+  });
 }
