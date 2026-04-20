@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CreditCard, Copy, Check } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -182,7 +183,165 @@ export default function StripeSettingsClient({ initialConnection }: Props) {
         </CardContent>
       </Card>
 
-      {/* Payment-method toggles, fee surcharge and ACH threshold land in Task 15. */}
+      {/* Payment method toggles */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment methods</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="ach_enabled">ACH (US bank) payments</Label>
+              <p className="text-xs text-muted-foreground">
+                Low fees; typically 0.8% capped at $5. Best for large invoices.
+              </p>
+            </div>
+            <Switch
+              id="ach_enabled"
+              checked={connection.ach_enabled}
+              onCheckedChange={(v) => {
+                if (!v && !connection.card_enabled) {
+                  toast.error("At least one payment method must be enabled");
+                  return;
+                }
+                setConnection({ ...connection, ach_enabled: v });
+                patch("ach_enabled", v, 50);
+              }}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="card_enabled">Card payments</Label>
+              <p className="text-xs text-muted-foreground">
+                Instant; ~2.9% + 30&cent; per transaction.
+              </p>
+            </div>
+            <Switch
+              id="card_enabled"
+              checked={connection.card_enabled}
+              onCheckedChange={(v) => {
+                if (!v && !connection.ach_enabled) {
+                  toast.error("At least one payment method must be enabled");
+                  return;
+                }
+                setConnection({ ...connection, card_enabled: v });
+                patch("card_enabled", v, 50);
+              }}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Card surcharge */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Card processing fee</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="pass_card_fee">Pass card processing fee to customer</Label>
+              <p className="text-xs text-muted-foreground">
+                Adds a surcharge line on card-paid invoices. Confirm legality in your jurisdiction.
+              </p>
+            </div>
+            <Switch
+              id="pass_card_fee"
+              checked={connection.pass_card_fee_to_customer}
+              onCheckedChange={(v) => {
+                setConnection({ ...connection, pass_card_fee_to_customer: v });
+                patch("pass_card_fee_to_customer", v, 50);
+              }}
+            />
+          </div>
+          {connection.pass_card_fee_to_customer && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="card_fee_percent">Surcharge percentage</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="card_fee_percent"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="5"
+                    defaultValue={connection.card_fee_percent}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v) && v >= 0 && v <= 5) {
+                        patch("card_fee_percent", v);
+                      }
+                    }}
+                    className="w-24"
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Preview: $1,000 invoice would charge $
+                  {(1000 + (1000 * Number(connection.card_fee_percent)) / 100).toFixed(2)} on card.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="surcharge_disclosure">Surcharge disclosure</Label>
+                <textarea
+                  id="surcharge_disclosure"
+                  className="min-h-[80px] w-full rounded-md border border-input bg-background p-2 text-sm"
+                  defaultValue={
+                    connection.surcharge_disclosure ??
+                    "We add a surcharge to card payments that is not greater than our cost of acceptance. We do not surcharge ACH/bank payments."
+                  }
+                  onChange={(e) => patch("surcharge_disclosure", e.target.value || null)}
+                />
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ACH threshold */}
+      <Card>
+        <CardHeader>
+          <CardTitle>ACH for large payments</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="ach_threshold_enabled">
+                Require ACH at or above a threshold
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Hides the card option for payments at or above this amount.
+              </p>
+            </div>
+            <Switch
+              id="ach_threshold_enabled"
+              checked={connection.ach_preferred_threshold != null}
+              onCheckedChange={(v) => {
+                const next = v ? 5000 : null;
+                setConnection({ ...connection, ach_preferred_threshold: next });
+                patch("ach_preferred_threshold", next, 50);
+              }}
+            />
+          </div>
+          {connection.ach_preferred_threshold != null && (
+            <div className="space-y-2">
+              <Label htmlFor="ach_threshold">Amount ($)</Label>
+              <Input
+                id="ach_threshold"
+                type="number"
+                step="1"
+                min="0"
+                defaultValue={connection.ach_preferred_threshold}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (Number.isFinite(v) && v >= 0) patch("ach_preferred_threshold", v);
+                }}
+                className="w-32"
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Dialog open={disconnectOpen} onOpenChange={setDisconnectOpen}>
         <DialogContent>
