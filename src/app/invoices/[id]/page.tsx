@@ -15,5 +15,13 @@ export default async function InvoiceDetailPage({
 
   const { id } = await params;
   const { action } = await searchParams;
-  return <InvoiceDetailClient invoiceId={id} autoAction={action ?? null} />;
+
+  const { data: stripeConn } = await supabase
+    .from("stripe_connection")
+    .select("id")
+    .limit(1)
+    .maybeSingle();
+  const stripeConnected = !!stripeConn;
+
+  return <InvoiceDetailClient invoiceId={id} autoAction={action ?? null} stripeConnected={stripeConnected} />;
 }

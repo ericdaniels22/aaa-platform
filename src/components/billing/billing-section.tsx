@@ -6,14 +6,16 @@ import type { Payment } from "@/lib/types";
 import RecordPaymentModal from "@/components/record-payment";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { OnlinePaymentRequestsSubsection } from "@/components/payments/online-payment-requests-subsection";
 
 type Props = {
   jobId: string;
   payments: Payment[];
   onPaymentRecorded: () => void;
+  stripeConnected?: boolean;
 };
 
-export default function BillingSection({ jobId, payments, onPaymentRecorded }: Props) {
+export default function BillingSection({ jobId, payments, onPaymentRecorded, stripeConnected = false }: Props) {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
 
   const totalPaid = payments
@@ -144,6 +146,8 @@ export default function BillingSection({ jobId, payments, onPaymentRecorded }: P
           </div>
         </div>
       )}
+
+      <OnlinePaymentRequestsSubsection jobId={jobId} stripeConnected={stripeConnected} />
     </div>
   );
 }

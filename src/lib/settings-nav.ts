@@ -16,6 +16,7 @@ import {
   Menu,
   Send,
   Link2,
+  CreditCard,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
@@ -42,6 +43,7 @@ export const settingsNavItems: SettingsNavItem[] = [
   { href: "/settings/contracts", label: "Contracts", icon: Send },
   { href: "/settings/notifications", label: "Notifications", icon: Bell },
   { href: "/settings/accounting", label: "Accounting", icon: Link2 },
+  { href: "/settings/stripe", label: "Stripe Payments", icon: CreditCard },
   { href: "/settings/reports", label: "Reports", icon: FileText },
   { href: "/settings/export", label: "Data Export", icon: Download },
   { href: "/settings/knowledge", label: "Knowledge Base", icon: BookOpen },
