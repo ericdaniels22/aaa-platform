@@ -3,8 +3,9 @@ import { createServiceClient } from "@/lib/supabase-api";
 import { processQueue } from "@/lib/qb/sync/processor";
 
 // GET /api/qb/sync-scheduled — Vercel Cron endpoint. Runs daily (Hobby
-// plan cap; 16d will tighten to 5-min on Pro). Authenticates via
-// Authorization: Bearer <CRON_SECRET>, same as /api/contracts/reminders.
+// plan cap). Authenticates via Authorization: Bearer <CRON_SECRET>, same as
+// /api/contracts/reminders. Returns early with reason=already_running when
+// another sync holds the advisory lock (see processor.ts).
 export async function GET(request: Request) {
   const expected = process.env.CRON_SECRET;
   if (!expected) {
