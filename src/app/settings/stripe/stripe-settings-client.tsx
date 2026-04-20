@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,13 @@ interface Props {
 
 function useDebouncedPatch(setConnection: (c: StripeConnectionRow | null) => void) {
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  useEffect(() => {
+    const map = timers.current;
+    return () => {
+      for (const t of map.values()) clearTimeout(t);
+      map.clear();
+    };
+  }, []);
   return useCallback(
     (field: string, value: unknown, delay = 600) => {
       const existing = timers.current.get(field);
@@ -135,7 +142,12 @@ export default function StripeSettingsClient({ initialConnection }: Props) {
               <div className="text-sm text-muted-foreground">Stripe account</div>
               <div className="flex items-center gap-2 font-mono text-sm">
                 <span>{truncatedAccount}</span>
-                <Button variant="ghost" size="icon" onClick={onCopyAccountId}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onCopyAccountId}
+                  aria-label={copied ? "Copied" : "Copy account ID"}
+                >
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
