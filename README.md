@@ -50,6 +50,30 @@ NEXT_PUBLIC_APP_URL=  # e.g. https://aaaplatform.vercel.app — used to build pu
 Missing any of these will cause the send / sign endpoints to fail with a
 clear error rather than silently falling back.
 
+## QuickBooks Online (Build 16c)
+
+QuickBooks Online integration adds four more env vars. Without them, the
+OAuth routes fail fast at request time with a clear message.
+
+```
+QUICKBOOKS_CLIENT_ID=         # From Intuit Developer dashboard → your app
+QUICKBOOKS_CLIENT_SECRET=     # Same dashboard, keep private
+QUICKBOOKS_REDIRECT_URI=      # e.g. https://aaaplatform.vercel.app/api/qb/callback
+QUICKBOOKS_ENVIRONMENT=       # "sandbox" for local dev, "production" for live books
+```
+
+For local dev, create a sandbox company at developer.intuit.com, use the
+sandbox client ID/secret, and set `QUICKBOOKS_ENVIRONMENT=sandbox`. The
+same `ENCRYPTION_KEY` that encrypts email passwords encrypts QB OAuth
+tokens — no additional secret needed.
+
+Build 16c ships with **dry-run mode on by default**. Connect via
+**Settings → Accounting**, complete the setup wizard (sync start date +
+class / deposit-account mappings), and the platform will record every
+intended QB write to `qb_sync_log` without touching QB. Flip to live
+mode only after reviewing the log on the Accounting page's QuickBooks
+Sync tab. Expenses are platform-only and never sync to QB.
+
 ## Build 15b migrations
 
 Run `supabase/migration-build33-contracts.sql` in the Supabase SQL Editor.

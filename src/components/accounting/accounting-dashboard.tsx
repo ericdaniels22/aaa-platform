@@ -11,21 +11,40 @@ import JobProfitabilityTab from "./job-profitability-tab";
 import ArAgingTab from "./ar-aging-tab";
 import GlobalExpensesTab from "./global-expenses-tab";
 import ByDamageTypeTab from "./by-damage-type-tab";
+import QbSyncTab from "./qb-sync-tab";
+import QbExpiredBanner from "./qb-expired-banner";
 
-type Tab = "profitability" | "ar-aging" | "expenses" | "damage-type";
-const TABS: { id: Tab; label: string }[] = [
+type Tab = "profitability" | "ar-aging" | "expenses" | "damage-type" | "quickbooks";
+const BASE_TABS: { id: Tab; label: string }[] = [
   { id: "profitability", label: "Job profitability" },
   { id: "ar-aging", label: "AR aging" },
   { id: "expenses", label: "Expenses" },
   { id: "damage-type", label: "By damage type" },
-  // QuickBooks sync tab is omitted for 16b — added in 16c.
 ];
+const QB_TAB: { id: Tab; label: string } = { id: "quickbooks", label: "QuickBooks sync" };
 
 export default function AccountingDashboard() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [range, setRange] = useState<RangePreset>((searchParams.get("range") as RangePreset) ?? "last_30");
   const [tab, setTab] = useState<Tab>((searchParams.get("tab") as Tab) ?? "profitability");
+  // QB tab visibility gated on an active + setup-complete connection.
+  // Single GET to /api/qb/connection on mount; if it isn't there, the 5th
+  // tab simply doesn't render.
+  const [qbVisible, setQbVisible] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/qb/connection")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.connected && data?.is_active && data?.setup_completed_at) {
+          setQbVisible(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const TABS = qbVisible ? [...BASE_TABS, QB_TAB] : BASE_TABS;
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -36,6 +55,7 @@ export default function AccountingDashboard() {
 
   return (
     <div className="p-6 space-y-6">
+      <QbExpiredBanner />
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Accounting</h1>
@@ -66,6 +86,7 @@ export default function AccountingDashboard() {
       {tab === "ar-aging" && <ArAgingTab />}
       {tab === "expenses" && <GlobalExpensesTab range={range} />}
       {tab === "damage-type" && <ByDamageTypeTab range={range} />}
+      {tab === "quickbooks" && qbVisible && <QbSyncTab />}
     </div>
   );
 }
