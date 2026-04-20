@@ -17,29 +17,18 @@ import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
 import { encrypt } from "../src/lib/encryption";
 
-async function prompt(q: string, { silent = false } = {}): Promise<string> {
+async function prompt(q: string): Promise<string> {
   const rl = createInterface({ input, output });
-  if (silent) {
-    // Best-effort echo suppression — works in most terminals.
-    const origWrite = (output as unknown as { write: (s: string) => boolean }).write.bind(output);
-    (output as unknown as { write: (s: string) => boolean }).write = (s: string) => {
-      if (typeof s === "string" && s.length === 1) return true; // swallow per-char echo
-      return origWrite(s);
-    };
-    try {
-      const answer = await rl.question(q);
-      return answer;
-    } finally {
-      (output as unknown as { write: (s: string) => boolean }).write = origWrite;
-      rl.close();
-      console.log();
-    }
-  }
   try {
     return await rl.question(q);
   } finally {
     rl.close();
   }
+}
+
+function preview(key: string): string {
+  if (key.length < 12) return `<${key.length} chars — too short>`;
+  return `${key.slice(0, 12)}…${key.slice(-4)} (len=${key.length})`;
 }
 
 async function main() {
@@ -54,7 +43,7 @@ async function main() {
   console.log("Stripe connection setup — single-tenant direct-key mode");
   console.log("Paste your Stripe keys. They will be encrypted before storage.\n");
 
-  const secretKey = (await prompt("Secret key (sk_test_... or sk_live_...): ", { silent: true })).trim();
+  const secretKey = (await prompt("Secret key (sk_test_... or sk_live_...): ")).trim();
   if (!secretKey.startsWith("sk_test_") && !secretKey.startsWith("sk_live_")) {
     throw new Error("Secret key must start with sk_test_ or sk_live_");
   }
@@ -72,6 +61,8 @@ async function main() {
     );
   }
 
+  console.log(`\nSecret: ${preview(secretKey)}`);
+  console.log(`Publishable: ${preview(publishableKey)}`);
   console.log(`\nValidating keys against Stripe (${mode} mode)...`);
   const stripe = new Stripe(secretKey, { apiVersion: "2026-03-25.dahlia" });
   const account = await stripe.accounts.retrieveCurrent();
