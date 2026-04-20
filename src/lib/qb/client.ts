@@ -1,0 +1,173 @@
+// Low-level QBO API helpers. Uses plain fetch with a Bearer token —
+// intuit-oauth.makeApiCall was over-encoding query strings and we already
+// have our own refresh logic in tokens.ts, so we don't need the SDK's.
+//
+// Every helper takes a ValidToken from getValidAccessToken(); never call
+// into QBO without one.
+
+import { getQboApiBase } from "./config";
+import type { QbEnvironment } from "./config";
+import type { QbAccount, QbClass, QbCustomerPayload } from "./types";
+
+// Minimal token context — everything we need for a raw API call.
+// Callers use `ValidToken` from tokens.ts; it's structurally compatible.
+export interface QbApiContext {
+  accessToken: string;
+  realmId: string;
+  environment: QbEnvironment;
+}
+
+interface QbApiError extends Error {
+  status?: number;
+  code?: string;
+  detail?: string;
+  raw?: unknown;
+}
+
+function errorFromResponse(status: number, body: unknown): QbApiError {
+  const fault =
+    body && typeof body === "object" && "Fault" in body
+      ? (body as { Fault?: { Error?: Array<{ code?: string; Detail?: string; Message?: string }> } }).Fault
+      : undefined;
+  const first = fault?.Error?.[0];
+  const err: QbApiError = new Error(
+    first?.Message ?? first?.Detail ?? `QuickBooks API error (${status})`,
+  );
+  err.status = status;
+  err.code = first?.code;
+  err.detail = first?.Detail;
+  err.raw = body;
+  return err;
+}
+
+async function call<T>(
+  token: QbApiContext,
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const base = getQboApiBase(token.environment);
+  const url = `${base}/v3/company/${token.realmId}${path}`;
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    Authorization: `Bearer ${token.accessToken}`,
+  };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+
+  const resp = await fetch(url, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  const text = await resp.text();
+  let json: unknown = null;
+  if (text) {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      // non-JSON response (rare for QBO, but guard against it)
+    }
+  }
+
+  if (!resp.ok) {
+    throw errorFromResponse(resp.status, json ?? text);
+  }
+  return (json ?? {}) as T;
+}
+
+// ---------- Company info (used after OAuth to capture display name) ----------
+
+export async function fetchCompanyName(token: QbApiContext): Promise<string | null> {
+  try {
+    const data = await call<{
+      CompanyInfo?: { CompanyName?: string };
+    }>(token, "GET", `/companyinfo/${token.realmId}`);
+    return data.CompanyInfo?.CompanyName ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ---------- Classes (damage-type mapping) ----------
+
+export async function listClasses(token: QbApiContext): Promise<QbClass[]> {
+  const query = "select * from Class where Active = true MAXRESULTS 500";
+  const data = await call<{
+    QueryResponse?: { Class?: QbClass[] };
+  }>(token, "GET", `/query?query=${encodeURIComponent(query)}`);
+  return data.QueryResponse?.Class ?? [];
+}
+
+// ---------- Accounts (payment-method mapping) ----------
+
+export async function listDepositAccounts(token: QbApiContext): Promise<QbAccount[]> {
+  // QBO's query parser rejects parentheses in WHERE clauses, so use IN instead
+  // of (AccountType = 'Bank' OR AccountType = 'Other Current Asset').
+  const query =
+    "select * from Account where AccountType IN ('Bank', 'Other Current Asset') AND Active = true MAXRESULTS 500";
+  const data = await call<{
+    QueryResponse?: { Account?: QbAccount[] };
+  }>(token, "GET", `/query?query=${encodeURIComponent(query)}`);
+  return data.QueryResponse?.Account ?? [];
+}
+
+// ---------- Customers ----------
+
+export interface CustomerWriteResult {
+  id: string;
+  syncToken: string;
+}
+
+export async function createCustomer(
+  token: QbApiContext,
+  payload: QbCustomerPayload,
+): Promise<CustomerWriteResult> {
+  const data = await call<{ Customer?: { Id: string; SyncToken: string } }>(
+    token,
+    "POST",
+    "/customer",
+    payload,
+  );
+  if (!data.Customer?.Id) {
+    throw new Error("QuickBooks returned no Customer id");
+  }
+  return { id: data.Customer.Id, syncToken: data.Customer.SyncToken };
+}
+
+export async function updateCustomer(
+  token: QbApiContext,
+  payload: QbCustomerPayload,
+): Promise<CustomerWriteResult> {
+  if (!payload.Id || !payload.SyncToken) {
+    throw new Error("updateCustomer requires Id and SyncToken on payload");
+  }
+  // QBO requires sparse: true to do partial updates; full updates require a
+  // fresh SyncToken fetched just before the write.
+  const data = await call<{ Customer?: { Id: string; SyncToken: string } }>(
+    token,
+    "POST",
+    "/customer?operation=update",
+    { ...payload, sparse: true },
+  );
+  if (!data.Customer?.Id) {
+    throw new Error("QuickBooks returned no Customer id");
+  }
+  return { id: data.Customer.Id, syncToken: data.Customer.SyncToken };
+}
+
+export async function getCustomer(
+  token: QbApiContext,
+  id: string,
+): Promise<{ Id: string; SyncToken: string } | null> {
+  try {
+    const data = await call<{ Customer?: { Id: string; SyncToken: string } }>(
+      token,
+      "GET",
+      `/customer/${id}`,
+    );
+    return data.Customer ?? null;
+  } catch {
+    return null;
+  }
+}
