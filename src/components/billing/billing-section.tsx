@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { Payment } from "@/lib/types";
 import RecordPaymentModal from "@/components/record-payment";
 import { Badge } from "@/components/ui/badge";
@@ -29,12 +30,20 @@ export default function BillingSection({ jobId, payments, onPaymentRecorded }: P
     <div className="bg-card rounded-xl border border-border p-5 mb-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-base font-semibold text-foreground">Billing</h3>
-        <button
-          onClick={() => setPaymentModalOpen(true)}
-          className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md transition-colors"
-        >
-          + Record Payment
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/invoices/new?jobId=${jobId}`}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 border border-border hover:bg-accent transition-colors"
+          >
+            + Create Invoice
+          </Link>
+          <button
+            onClick={() => setPaymentModalOpen(true)}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium px-3 py-1.5 bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 hover:shadow-md transition-colors"
+          >
+            + Record Payment
+          </button>
+        </div>
       </div>
       <RecordPaymentModal
         open={paymentModalOpen}
