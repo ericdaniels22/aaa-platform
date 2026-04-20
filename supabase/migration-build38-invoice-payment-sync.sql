@@ -9,7 +9,7 @@
 --   4. qb_sync_log extensions ('void' action).
 --   5. invoice_email_settings singleton (mirrors contract_email_settings).
 --   6. qb_connection checklist columns (cpa_cleanup_confirmed, dry_run_review_confirmed).
---   7. Advisory lock RPCs (try_acquire_sync_lock / release_sync_lock).
+--   7. Advisory lock RPCs (try_acquire_advisory_lock / release_advisory_lock).
 --   8. DB triggers on invoices / invoice_line_items / payments that enqueue QB syncs.
 --   9. Trigger + function to recompute invoice status based on payments.
 --
@@ -34,6 +34,12 @@ ALTER TABLE invoices ADD CONSTRAINT invoices_status_check
   CHECK (status IN ('draft', 'sent', 'partial', 'paid', 'voided'));
 
 -- 2. invoice_line_items
+-- Note: supersedes the legacy `line_items` table (see `supabase/schema.sql`).
+-- All new code (Build 16d onward) writes to `invoice_line_items`. The legacy
+-- table is retained for any pre-16d rows but should not be written to.
+-- `invoice_line_items` differs by: (a) storing `amount` explicitly (not a
+-- GENERATED column) so historical rows stay stable if rounding rules change,
+-- and (b) carrying `xactimate_code` for QB line descriptions.
 CREATE TABLE invoice_line_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   invoice_id uuid NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
@@ -62,6 +68,11 @@ ALTER TABLE qb_sync_log ADD CONSTRAINT qb_sync_log_action_check
 
 -- Speed processor candidate scan.
 CREATE INDEX IF NOT EXISTS idx_qb_sync_log_retry ON qb_sync_log(status, next_retry_at);
+
+-- Supports the invoice-status recompute trigger's SUM(amount) WHERE invoice_id = ...
+CREATE INDEX IF NOT EXISTS idx_payments_invoice_id
+  ON payments(invoice_id)
+  WHERE invoice_id IS NOT NULL;
 
 -- 5. invoice_email_settings (singleton, mirrors contract_email_settings)
 CREATE TABLE invoice_email_settings (
@@ -193,7 +204,7 @@ BEGIN
     IF contact_row.qb_customer_id IS NULL THEN
       SELECT id INTO customer_log_id FROM qb_sync_log
         WHERE entity_type = 'customer' AND entity_id = contact_row.id
-          AND status = 'queued' ORDER BY created_at DESC LIMIT 1;
+          AND status IN ('queued', 'failed') ORDER BY created_at DESC LIMIT 1;
       IF customer_log_id IS NULL THEN
         INSERT INTO qb_sync_log (entity_type, entity_id, action, status)
           VALUES ('customer', contact_row.id, 'create', 'queued')
@@ -205,7 +216,7 @@ BEGIN
     IF job_row.qb_subcustomer_id IS NULL THEN
       SELECT id INTO sub_log_id FROM qb_sync_log
         WHERE entity_type = 'sub_customer' AND entity_id = job_row.id
-          AND status = 'queued' ORDER BY created_at DESC LIMIT 1;
+          AND status IN ('queued', 'failed') ORDER BY created_at DESC LIMIT 1;
       IF sub_log_id IS NULL THEN
         INSERT INTO qb_sync_log (entity_type, entity_id, action, status, depends_on_log_id)
           VALUES ('sub_customer', job_row.id, 'create', 'queued', customer_log_id)
@@ -320,7 +331,7 @@ BEGIN
     IF inv.id IS NOT NULL AND inv.qb_invoice_id IS NULL THEN
       SELECT id INTO dep_id FROM qb_sync_log
         WHERE entity_type = 'invoice' AND entity_id = inv.id
-          AND status = 'queued' ORDER BY created_at DESC LIMIT 1;
+          AND status IN ('queued', 'failed') ORDER BY created_at DESC LIMIT 1;
       -- If no queued invoice sync, the payment can't sync yet — leave dep_id
       -- NULL and the sync function will defer.
     END IF;
