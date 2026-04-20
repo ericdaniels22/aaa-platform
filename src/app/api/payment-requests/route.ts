@@ -39,6 +39,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_request_type" }, { status: 400 });
   }
 
+  // Amount must be representable as whole cents (2 decimal places at most).
+  const scaled = Math.round(body.amount * 100);
+  if (Math.abs(scaled / 100 - body.amount) > 1e-9) {
+    return NextResponse.json({ error: "amount_precision" }, { status: 400 });
+  }
+
   let stripeCtx: Awaited<ReturnType<typeof getStripeClient>>;
   try {
     stripeCtx = await getStripeClient();
@@ -116,6 +122,17 @@ export async function POST(req: NextRequest) {
   const paymentRequestId = crypto.randomUUID();
   const expiryDays = body.link_expiry_days ?? DEFAULT_EXPIRY_DAYS;
   const linkExpiresAt = addDays(new Date(), expiryDays);
+
+  // Stripe Checkout Sessions expire at most 24 hours after creation. Our
+  // payment link token may outlive the session — in Build 17b, /pay/[token]
+  // will regenerate a fresh session when a valid token arrives after the
+  // session has expired. Here we cap at 23.5h to stay safely under Stripe's
+  // limit. Do NOT raise this cap without addressing the Stripe API contract.
+  const STRIPE_SESSION_MAX_MS = 23.5 * 60 * 60 * 1000;
+  const stripeSessionExpiresAt = new Date(
+    Math.min(linkExpiresAt.getTime(), Date.now() + STRIPE_SESSION_MAX_MS),
+  );
+
   const token = generatePaymentLinkToken({
     paymentRequestId,
     jobId: body.job_id,
@@ -155,7 +172,7 @@ export async function POST(req: NextRequest) {
     customer_email: customerEmail ?? undefined,
     success_url: `${appUrl}/pay/${token}/success`,
     cancel_url: `${appUrl}/pay/${token}`,
-    expires_at: Math.floor(linkExpiresAt.getTime() / 1000),
+    expires_at: Math.floor(stripeSessionExpiresAt.getTime() / 1000),
   });
 
   const { data: inserted, error: insertErr } = await supabase
@@ -186,15 +203,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: insertErr.message }, { status: 500 });
   }
 
-  await supabase
+  const { error: jobFlagErr } = await supabase
     .from("jobs")
     .update({ has_pending_payment_request: true })
     .eq("id", body.job_id);
+  if (jobFlagErr) {
+    console.error(
+      "[payment-requests] failed to set jobs.has_pending_payment_request:",
+      { job_id: body.job_id, payment_request_id: paymentRequestId, error: jobFlagErr.message },
+    );
+  }
   if (body.invoice_id) {
-    await supabase
+    const { error: invFlagErr } = await supabase
       .from("invoices")
       .update({ has_payment_request: true })
       .eq("id", body.invoice_id);
+    if (invFlagErr) {
+      console.error(
+        "[payment-requests] failed to set invoices.has_payment_request:",
+        { invoice_id: body.invoice_id, payment_request_id: paymentRequestId, error: invFlagErr.message },
+      );
+    }
   }
 
   return NextResponse.json({ payment_request: inserted });
