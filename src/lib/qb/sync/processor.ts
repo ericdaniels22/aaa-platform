@@ -1,30 +1,35 @@
 // Batch processor for qb_sync_log queued rows. Invoked from the cron
 // endpoint (daily) and the manual "Sync now" button.
 //
+// Concurrency: wraps the entire run in a Postgres advisory lock so two
+// invocations never process rows simultaneously. If the lock is held,
+// returns early with reason = "already_running".
+//
 // Ordering rules:
-//   * Customer rows before sub_customer rows.
+//   * customer < sub_customer < invoice < payment
 //   * Within each entity type, oldest first.
 //   * Rows with depends_on_log_id waiting on an unresolved parent are
-//     skipped this tick; they'll get picked up on the next run once
-//     the parent is synced.
+//     skipped this tick.
 //   * Rows with next_retry_at in the future are also skipped.
 //
-// Cap: PROCESS_BATCH_LIMIT rows per invocation. QBO rate limit is 500
-// req/min/company — we stay far under that.
+// Cap: PROCESS_BATCH_LIMIT rows per invocation.
 //
-// Retry policy on failure: exponential backoff in minutes: 2, 4, 8, 16, 32.
-// After retry_count = 5, the row stops auto-retrying; the user must click
-// Retry on the Fix modal.
+// Retry policy: exponential backoff in minutes per spec: 5, 25, 120, 600, 1440.
+// ThrottleExceeded errors override to a flat 5 minutes so we recover fast.
+// After retry_count = 5, the row stops auto-retrying.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getValidAccessToken, getActiveConnection } from "@/lib/qb/tokens";
 import { syncCustomer, syncSubCustomer } from "./customers";
+import { syncInvoice, voidInvoiceSync } from "./invoices";
+import { syncPayment, deletePaymentSync } from "./payments";
 import type { SyncMode } from "./customers";
 import type { QbSyncLogRow } from "@/lib/qb/types";
 
 const PROCESS_BATCH_LIMIT = 50;
 const MAX_RETRIES = 5;
-const BACKOFF_MINUTES = [2, 4, 8, 16, 32];
+const BACKOFF_MINUTES = [5, 25, 120, 600, 1440];
+const SCHEDULER_LOCK_KEY = 4216042;
 
 export interface ProcessResult {
   processed: number;
@@ -32,40 +37,71 @@ export interface ProcessResult {
   skipped: number;
   failed: number;
   deferred: number;
-  reason?: "no_connection" | "setup_incomplete" | "connection_inactive";
+  reason?: "no_connection" | "setup_incomplete" | "connection_inactive" | "already_running";
+}
+
+async function tryLock(supabase: SupabaseClient): Promise<boolean> {
+  const { data } = await supabase.rpc("try_acquire_advisory_lock", {
+    p_key: SCHEDULER_LOCK_KEY,
+  });
+  return data === true;
+}
+
+async function releaseLock(supabase: SupabaseClient): Promise<void> {
+  await supabase.rpc("release_advisory_lock", { p_key: SCHEDULER_LOCK_KEY });
 }
 
 export async function processQueue(
   supabase: SupabaseClient,
 ): Promise<ProcessResult> {
-  const connection = await getActiveConnection(supabase);
-  if (!connection) {
-    return emptyResult("no_connection");
+  const acquired = await tryLock(supabase);
+  if (!acquired) {
+    return emptyResult("already_running");
   }
+  try {
+    return await runInsideLock(supabase);
+  } finally {
+    await releaseLock(supabase);
+  }
+}
+
+async function runInsideLock(supabase: SupabaseClient): Promise<ProcessResult> {
+  const connection = await getActiveConnection(supabase);
+  if (!connection) return emptyResult("no_connection");
   if (!connection.sync_start_date || !connection.setup_completed_at) {
     return emptyResult("setup_incomplete");
   }
 
   const mode: SyncMode = connection.dry_run_mode ? "dry_run" : "live";
-  // Only fetch a token if we're going live. Dry-run never hits QB.
   const token = mode === "live" ? await getValidAccessToken(supabase) : null;
-  if (mode === "live" && !token) {
-    return emptyResult("connection_inactive");
-  }
+  if (mode === "live" && !token) return emptyResult("connection_inactive");
 
   const nowIso = new Date().toISOString();
 
-  // Grab candidates. Customers first (order by created_at), then sub_customers.
+  // Order expression: we want customer < sub_customer < invoice < payment.
+  // Alphabetical sort gives: customer < invoice < payment < sub_customer — wrong.
+  // Fetch all candidates, then sort client-side with an explicit order map.
   const { data: rows } = await supabase
     .from("qb_sync_log")
     .select("*")
     .eq("status", "queued")
     .or(`next_retry_at.is.null,next_retry_at.lte.${nowIso}`)
-    .order("entity_type", { ascending: true }) // 'customer' < 'sub_customer' alphabetically
     .order("created_at", { ascending: true })
-    .limit(PROCESS_BATCH_LIMIT);
+    .limit(PROCESS_BATCH_LIMIT * 2); // oversample — we'll slice after sort
 
-  const queue = (rows ?? []) as QbSyncLogRow[];
+  const typeOrder: Record<string, number> = {
+    customer: 0,
+    sub_customer: 1,
+    invoice: 2,
+    payment: 3,
+  };
+  const queue = ((rows ?? []) as QbSyncLogRow[])
+    .sort((a, b) => {
+      const d = (typeOrder[a.entity_type] ?? 99) - (typeOrder[b.entity_type] ?? 99);
+      if (d !== 0) return d;
+      return a.created_at.localeCompare(b.created_at);
+    })
+    .slice(0, PROCESS_BATCH_LIMIT);
 
   const result: ProcessResult = {
     processed: 0,
@@ -78,7 +114,6 @@ export async function processQueue(
   for (const row of queue) {
     result.processed += 1;
 
-    // Dependency guard — skip if parent still queued / failed.
     if (row.depends_on_log_id) {
       const { data: parent } = await supabase
         .from("qb_sync_log")
@@ -92,21 +127,34 @@ export async function processQueue(
     }
 
     try {
-      const outcome =
-        row.entity_type === "customer"
-          ? await syncCustomer(supabase, token, mode, row.entity_id, row.action)
-          : row.entity_type === "sub_customer"
-            ? await syncSubCustomer(
-                supabase,
-                token,
-                mode,
-                row.entity_id,
-                row.action,
-              )
-            : null;
+      let outcome:
+        | { status: "synced" | "skipped_dry_run" | "deferred"; payload: unknown; qbEntityId?: string; reason?: string }
+        | null = null;
+
+      if (row.entity_type === "customer") {
+        outcome = await syncCustomer(supabase, token, mode, row.entity_id, row.action);
+      } else if (row.entity_type === "sub_customer") {
+        outcome = await syncSubCustomer(supabase, token, mode, row.entity_id, row.action);
+      } else if (row.entity_type === "invoice") {
+        if (row.action === "void") {
+          outcome = await voidInvoiceSync(supabase, token, mode, row.entity_id);
+        } else {
+          outcome = await syncInvoice(supabase, token, mode, row.entity_id, row.action);
+        }
+      } else if (row.entity_type === "payment") {
+        if (row.action === "delete") {
+          const snapshot = row.payload as { qb_payment_id?: string | null } | null;
+          outcome = await deletePaymentSync(
+            token,
+            mode,
+            snapshot?.qb_payment_id ?? row.qb_entity_id ?? null,
+          );
+        } else {
+          outcome = await syncPayment(supabase, token, mode, row.entity_id, row.action);
+        }
+      }
 
       if (!outcome) {
-        // invoice/payment entities reserved for 16d — leave queued.
         result.deferred += 1;
         continue;
       }
@@ -121,9 +169,9 @@ export async function processQueue(
         .update({
           status: outcome.status,
           payload: outcome.payload,
-          qb_entity_id: outcome.qbEntityId ?? null,
+          qb_entity_id: outcome.qbEntityId ?? row.qb_entity_id ?? null,
           synced_at: new Date().toISOString(),
-          error_message: null,
+          error_message: outcome.reason ?? null,
           error_code: null,
         })
         .eq("id", row.id);
@@ -132,12 +180,13 @@ export async function processQueue(
       else result.skipped += 1;
     } catch (err) {
       result.failed += 1;
-      const next = nextRetry(row.retry_count);
       const message = err instanceof Error ? err.message : String(err);
       const code =
         err && typeof err === "object" && "code" in err
           ? String((err as { code?: unknown }).code)
           : null;
+      const isThrottle = code === "ThrottleExceeded" || /429|throttle|rate/i.test(message);
+      const next = nextRetry(row.retry_count, isThrottle);
       await supabase
         .from("qb_sync_log")
         .update({
@@ -148,9 +197,6 @@ export async function processQueue(
           next_retry_at: next,
         })
         .eq("id", row.id);
-      // If we saw an AuthenticationFailure during a live run, the token
-      // helper already marked the connection inactive; abort the rest of
-      // the batch so we don't cascade failures.
       if (code === "AuthenticationFailure") break;
     }
   }
@@ -165,9 +211,9 @@ export async function processQueue(
   return result;
 }
 
-function nextRetry(currentRetryCount: number): string | null {
+function nextRetry(currentRetryCount: number, isThrottle: boolean): string | null {
   if (currentRetryCount >= MAX_RETRIES) return null;
-  const minutes = BACKOFF_MINUTES[currentRetryCount] ?? 32;
+  const minutes = isThrottle ? 5 : (BACKOFF_MINUTES[currentRetryCount] ?? BACKOFF_MINUTES[BACKOFF_MINUTES.length - 1]);
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
