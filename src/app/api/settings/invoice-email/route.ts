@@ -1,12 +1,17 @@
 // GET /api/settings/invoice-email   — returns the singleton row.
 // PATCH /api/settings/invoice-email — updates allowed fields.
+//
+// Auth: admin required. DB access uses the service client so the admin-only
+// RLS policy on invoice_email_settings doesn't need to resolve auth.uid().
 
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServiceClient } from "@/lib/supabase-api";
+import { requireAdmin } from "@/lib/qb/auth";
 import type { InvoiceEmailProvider, InvoiceEmailSettings } from "@/lib/qb/types";
 
 async function getSettings() {
-  const supabase = createApiClient();
+  const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("invoice_email_settings")
     .select("*")
@@ -16,6 +21,10 @@ async function getSettings() {
 }
 
 export async function GET() {
+  const auth = await createServerSupabaseClient();
+  const gate = await requireAdmin(auth);
+  if (!gate.ok) return gate.response;
+
   const { data, error } = await getSettings();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) {
@@ -28,6 +37,10 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
+  const auth = await createServerSupabaseClient();
+  const gate = await requireAdmin(auth);
+  if (!gate.ok) return gate.response;
+
   const body = (await request.json().catch(() => null)) as Partial<InvoiceEmailSettings> | null;
   if (!body) return NextResponse.json({ error: "body required" }, { status: 400 });
 
