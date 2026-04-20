@@ -35,6 +35,9 @@ interface Stats {
   skippedToday: number; // for dry-run label
 }
 
+type EntityFilter = "all" | "customer" | "sub_customer" | "invoice" | "payment" | "void";
+type StatusFilter = "all" | "synced" | "queued" | "failed" | "skipped_dry_run";
+
 export default function QbSyncTab() {
   const [conn, setConn] = useState<ConnectionSummary | null>(null);
   const [stats, setStats] = useState<Stats>({
@@ -48,6 +51,10 @@ export default function QbSyncTab() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [fixingRow, setFixingRow] = useState<QbSyncLogRow | null>(null);
+  const [entityFilter, setEntityFilter] = useState<EntityFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [search, setSearch] = useState("");
+  const [cleaning, setCleaning] = useState(false);
   // Mount timestamp for refresh-expiry check. The banner doesn't need to
   // be precise to the second; re-renders during a long session may show
   // an older boundary, which is fine.
@@ -99,6 +106,20 @@ export default function QbSyncTab() {
     };
   }, []);
 
+  async function handleCleanup() {
+    if (!window.confirm("Delete synced sync-log entries older than 90 days?")) return;
+    setCleaning(true);
+    const res = await fetch("/api/qb/sync-log/cleanup", { method: "POST" });
+    setCleaning(false);
+    if (!res.ok) {
+      toast.error("Cleanup failed");
+      return;
+    }
+    const data = await res.json();
+    toast.success(`Deleted ${data.deleted} log entries`);
+    await refreshAll();
+  }
+
   async function handleSyncNow() {
     setSyncing(true);
     const res = await fetch("/api/qb/sync-now", { method: "POST" });
@@ -147,6 +168,24 @@ export default function QbSyncTab() {
   const expired = conn.refresh_token_expires_at
     ? Date.parse(conn.refresh_token_expires_at) < mountedAt
     : false;
+
+  const filteredRows = rows.filter((r) => {
+    if (entityFilter === "void") {
+      if (r.action !== "void") return false;
+    } else if (entityFilter !== "all") {
+      if (r.entity_type !== entityFilter) return false;
+    }
+    if (statusFilter !== "all" && r.status !== statusFilter) return false;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const hay = [r.entity_id, r.qb_entity_id, r.error_message]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -249,6 +288,48 @@ export default function QbSyncTab() {
         />
       </div>
 
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterGroup
+          value={entityFilter}
+          onChange={(v) => setEntityFilter(v as EntityFilter)}
+          options={[
+            { value: "all", label: "All entities" },
+            { value: "customer", label: "Customers" },
+            { value: "sub_customer", label: "Sub-customers" },
+            { value: "invoice", label: "Invoices" },
+            { value: "payment", label: "Payments" },
+            { value: "void", label: "Voids" },
+          ]}
+        />
+        <FilterGroup
+          value={statusFilter}
+          onChange={(v) => setStatusFilter(v as StatusFilter)}
+          options={[
+            { value: "all", label: "All statuses" },
+            { value: "synced", label: "Synced" },
+            { value: "queued", label: "Queued" },
+            { value: "failed", label: "Failed" },
+            { value: "skipped_dry_run", label: "Dry run" },
+          ]}
+        />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search record / error…"
+          className="ml-auto border border-border rounded-lg px-3 py-1.5 bg-background text-sm w-72"
+        />
+        <button
+          onClick={handleCleanup}
+          disabled={cleaning}
+          className="px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-accent disabled:opacity-50"
+          title="Delete synced logs older than 90 days"
+        >
+          {cleaning ? "Cleaning…" : "Clear old logs"}
+        </button>
+      </div>
+
       {/* Recent activity table */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <div className="p-4 border-b border-border flex items-center justify-between">
@@ -272,14 +353,14 @@ export default function QbSyncTab() {
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && (
+              {filteredRows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="text-center py-8 text-muted-foreground">
-                    No sync activity yet.
+                    No sync activity matches the current filters.
                   </td>
                 </tr>
               )}
-              {rows.map((row) => (
+              {filteredRows.map((row) => (
                 <tr
                   key={row.id}
                   className={`border-t border-border ${row.status === "failed" ? "bg-red-500/5" : ""}`}
@@ -289,6 +370,12 @@ export default function QbSyncTab() {
                   </td>
                   <td className="px-4 py-2 text-foreground">
                     {entityLabel(row.entity_type)}
+                    {row.action === "void" && (
+                      <span className="ml-1 text-xs text-red-600">(void)</span>
+                    )}
+                    {row.action === "delete" && (
+                      <span className="ml-1 text-xs text-muted-foreground">(delete)</span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-muted-foreground">
                     {row.qb_entity_id
@@ -425,4 +512,28 @@ function timeAgo(iso: string): string {
   if (hours < 24) return `${hours} hr ago`;
   const days = Math.round(hours / 24);
   return `${days} days ago`;
+}
+
+function FilterGroup({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="border border-border rounded-lg px-3 py-1.5 bg-background text-sm"
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
 }
