@@ -1,0 +1,156 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { Loader2, Plus } from "lucide-react";
+import { toast } from "sonner";
+import { InvoiceStatusPill } from "./invoice-status-pill";
+import type { InvoiceRow, InvoiceStatus } from "@/lib/invoices/types";
+
+type StatusFilter = "all" | InvoiceStatus;
+
+interface InvoiceWithJob extends InvoiceRow {
+  jobs?: {
+    id: string;
+    job_number: string;
+    property_address: string | null;
+    contacts?: { first_name: string | null; last_name: string | null } | null;
+  };
+}
+
+const FILTER_TABS: StatusFilter[] = ["all", "draft", "sent", "partial", "paid", "voided"];
+
+export default function InvoiceListClient() {
+  const [rows, setRows] = useState<InvoiceWithJob[]>([]);
+  const [filter, setFilter] = useState<StatusFilter>("all");
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (filter !== "all") params.set("status", filter);
+    if (search.trim()) params.set("search", search.trim());
+    params.set("limit", "100");
+    const res = await fetch(`/api/invoices?${params.toString()}`);
+    if (!res.ok) {
+      toast.error("Failed to load invoices");
+      setLoading(false);
+      return;
+    }
+    const data = (await res.json()) as { rows: InvoiceWithJob[] };
+    setRows(data.rows);
+    setLoading(false);
+  }, [filter, search]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return (
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Invoices</h1>
+          <p className="text-sm text-muted-foreground">All invoices across all jobs</p>
+        </div>
+        <Link
+          href="/invoices/new"
+          className="px-4 py-2 rounded-lg bg-[#0F6E56] text-white text-sm font-medium hover:brightness-110 flex items-center gap-2"
+        >
+          <Plus size={14} /> New invoice
+        </Link>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {FILTER_TABS.map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
+              filter === f
+                ? "bg-[#0F6E56] text-white border-[#0F6E56]"
+                : "border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {f === "all" ? "All" : f[0].toUpperCase() + f.slice(1)}
+          </button>
+        ))}
+        <input
+          type="text"
+          placeholder="Search invoice #, memo, notes…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="ml-auto border border-border rounded-lg px-3 py-1.5 bg-background text-sm w-72"
+        />
+      </div>
+
+      {loading ? (
+        <div className="py-12 text-center text-muted-foreground">
+          <Loader2 className="animate-spin mx-auto mb-2" size={22} /> Loading…
+        </div>
+      ) : (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="text-left px-4 py-2 font-medium">Invoice</th>
+                <th className="text-left px-4 py-2 font-medium">Customer</th>
+                <th className="text-left px-4 py-2 font-medium">Job</th>
+                <th className="text-right px-4 py-2 font-medium">Total</th>
+                <th className="text-left px-4 py-2 font-medium">Issued</th>
+                <th className="text-left px-4 py-2 font-medium">Due</th>
+                <th className="text-left px-4 py-2 font-medium">Status</th>
+                <th className="text-left px-4 py-2 font-medium">QB</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="text-center py-8 text-muted-foreground">
+                    No invoices match the current filters.
+                  </td>
+                </tr>
+              )}
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t border-border hover:bg-accent/30">
+                  <td className="px-4 py-2">
+                    <Link href={`/invoices/${r.id}`} className="text-primary hover:underline">
+                      {r.invoice_number}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-2">
+                    {[r.jobs?.contacts?.first_name, r.jobs?.contacts?.last_name]
+                      .filter(Boolean)
+                      .join(" ") || "—"}
+                  </td>
+                  <td className="px-4 py-2 text-muted-foreground">
+                    {r.jobs?.property_address ?? r.jobs?.job_number ?? "—"}
+                  </td>
+                  <td className="px-4 py-2 text-right">${Number(r.total_amount).toFixed(2)}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{formatDate(r.issued_date)}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{formatDate(r.due_date)}</td>
+                  <td className="px-4 py-2">
+                    <InvoiceStatusPill status={r.status} />
+                  </td>
+                  <td className="px-4 py-2 text-xs text-muted-foreground">
+                    {r.qb_invoice_id ? `QB ${r.qb_invoice_id}` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatDate(ts: string | null): string {
+  if (!ts) return "—";
+  return new Date(ts).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
