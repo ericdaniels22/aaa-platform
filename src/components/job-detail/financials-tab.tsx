@@ -17,6 +17,7 @@ type Props = {
   };
   onPaymentRecorded: () => void;
   onExpenseLogged: () => void;
+  stripeConnected?: boolean;
 };
 
 function fmtCurrency(n: number): string {
@@ -37,6 +38,7 @@ export default function FinancialsTab({
   summary,
   onPaymentRecorded,
   onExpenseLogged,
+  stripeConnected = false,
 }: Props) {
   return (
     <div className="space-y-6">
@@ -63,6 +65,7 @@ export default function FinancialsTab({
         jobId={jobId}
         payments={payments}
         onPaymentRecorded={onPaymentRecorded}
+        stripeConnected={stripeConnected}
       />
 
       <ExpensesSection jobId={jobId} onChanged={onExpenseLogged} />

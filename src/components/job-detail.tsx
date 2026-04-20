@@ -76,6 +76,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
   const [tags, setTags] = useState<PhotoTag[]>([]);
   const [reports, setReports] = useState<PhotoReport[]>([]);
   const [emails, setEmails] = useState<Email[]>([]);
+  const [stripeConnected, setStripeConnected] = useState(false);
   const [customFields, setCustomFields] = useState<{ field_key: string; field_value: string }[]>([]);
   const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -172,6 +173,14 @@ export default function JobDetail({ jobId }: { jobId: string }) {
       .select("field_key, field_value")
       .eq("job_id", jobId);
     if (cfData) setCustomFields(cfData);
+
+    // Fetch Stripe connection state (for Online Payment Requests subsection)
+    const { data: stripeConn } = await supabase
+      .from("stripe_connection")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
+    setStripeConnected(!!stripeConn);
 
     // Fetch expenses total for summary pills
     const { data: expData } = await supabase
@@ -426,6 +435,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
             }}
             onPaymentRecorded={fetchData}
             onExpenseLogged={fetchData}
+            stripeConnected={stripeConnected}
           />
         );
       })()}
