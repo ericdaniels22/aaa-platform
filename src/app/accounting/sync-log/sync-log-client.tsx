@@ -12,9 +12,10 @@ export default function SyncLogClient() {
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState<string>("");
+  const [entityType, setEntityType] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
-  // Refetch on offset/status change. Using an inline async function with
+  // Refetch on offset/filter change. Using an inline async function with
   // a cancellation flag keeps the initial setState out of the synchronous
   // effect body (satisfies react-hooks/set-state-in-effect).
   useEffect(() => {
@@ -24,6 +25,7 @@ export default function SyncLogClient() {
       offset: String(offset),
     });
     if (status) params.set("status", status);
+    if (entityType) params.set("entity_type", entityType);
     fetch(`/api/qb/sync-log?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -38,7 +40,7 @@ export default function SyncLogClient() {
     return () => {
       cancelled = true;
     };
-  }, [offset, status]);
+  }, [offset, status, entityType]);
 
   const pageStart = offset + 1;
   const pageEnd = Math.min(offset + PAGE_SIZE, total);
@@ -58,20 +60,36 @@ export default function SyncLogClient() {
             Every QuickBooks sync attempt, newest first within each status.
           </p>
         </div>
-        <select
-          value={status}
-          onChange={(e) => {
-            setOffset(0);
-            setStatus(e.target.value);
-          }}
-          className="border border-border rounded-lg px-3 py-1.5 text-sm bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-        >
-          <option value="">All statuses</option>
-          <option value="failed">Failed only</option>
-          <option value="synced">Synced only</option>
-          <option value="skipped_dry_run">Dry-run only</option>
-          <option value="queued">Pending only</option>
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={entityType}
+            onChange={(e) => {
+              setOffset(0);
+              setEntityType(e.target.value);
+            }}
+            className="border border-border rounded-lg px-3 py-1.5 text-sm bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="">All entities</option>
+            <option value="customer">Customers</option>
+            <option value="sub_customer">Sub-customers</option>
+            <option value="invoice">Invoices</option>
+            <option value="payment">Payments</option>
+          </select>
+          <select
+            value={status}
+            onChange={(e) => {
+              setOffset(0);
+              setStatus(e.target.value);
+            }}
+            className="border border-border rounded-lg px-3 py-1.5 text-sm bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="">All statuses</option>
+            <option value="failed">Failed only</option>
+            <option value="synced">Synced only</option>
+            <option value="skipped_dry_run">Dry-run only</option>
+            <option value="queued">Pending only</option>
+          </select>
+        </div>
       </div>
 
       <div className="bg-card rounded-xl border border-border overflow-hidden">

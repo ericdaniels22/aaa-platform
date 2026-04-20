@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import PreLaunchChecklist from "@/components/accounting/pre-launch-checklist";
 
 interface ConnectionSummary {
   id: string;
@@ -184,6 +185,8 @@ export default function AccountingSettingsClient({
               <div>Setup completed: <span className="text-foreground">{conn.setup_completed_at ? new Date(conn.setup_completed_at).toLocaleDateString() : "—"}</span></div>
             </div>
           </div>
+
+          {conn.dry_run_mode && <PreLaunchChecklist />}
 
           {/* Dry-run toggle */}
           <div className={`bg-card rounded-xl border p-5 ${conn.dry_run_mode ? "border-amber-300" : "border-border"}`}>

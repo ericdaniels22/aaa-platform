@@ -34,6 +34,7 @@ export async function GET(request: Request) {
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50", 10) || 50, 500);
   const offset = Math.max(parseInt(url.searchParams.get("offset") ?? "0", 10) || 0, 0);
   const status = url.searchParams.get("status"); // optional filter
+  const entityType = url.searchParams.get("entity_type"); // optional filter
 
   const service = createServiceClient();
   let query = service
@@ -43,6 +44,7 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
   if (status) query = query.eq("status", status);
+  if (entityType) query = query.eq("entity_type", entityType);
 
   const { data, error, count } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

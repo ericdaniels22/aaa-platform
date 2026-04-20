@@ -3,7 +3,7 @@
 export type QbMappingType = "damage_type" | "payment_method" | "expense_category";
 
 export type QbSyncEntityType = "customer" | "sub_customer" | "invoice" | "payment";
-export type QbSyncAction = "create" | "update" | "delete";
+export type QbSyncAction = "create" | "update" | "delete" | "void";
 export type QbSyncStatus = "queued" | "synced" | "failed" | "skipped_dry_run";
 
 export interface QbConnectionRow {
@@ -20,6 +20,8 @@ export interface QbConnectionRow {
   setup_completed_at: string | null;
   last_sync_at: string | null;
   connected_by: string | null;
+  cpa_cleanup_confirmed: boolean;
+  dry_run_review_confirmed: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -90,4 +92,76 @@ export interface QbAccount {
   AccountType: string;
   AccountSubType?: string;
   Active?: boolean;
+}
+
+// ---------- Invoice ----------
+
+export interface QbInvoiceLine {
+  Amount: number;
+  Description?: string;
+  DetailType: "SalesItemLineDetail";
+  SalesItemLineDetail: {
+    Qty?: number;
+    UnitPrice?: number;
+    ClassRef?: { value: string; name?: string };
+  };
+}
+
+export interface QbInvoicePayload {
+  Id?: string;
+  SyncToken?: string;
+  CustomerRef: { value: string };
+  Line: QbInvoiceLine[];
+  ClassRef?: { value: string; name?: string };
+  TxnDate?: string; // YYYY-MM-DD
+  DueDate?: string; // YYYY-MM-DD
+  DocNumber?: string;
+  PrivateNote?: string;
+  TxnTaxDetail?: { TotalTax: number };
+}
+
+export interface QbInvoiceWriteResult {
+  id: string;
+  syncToken: string;
+}
+
+// ---------- Payment ----------
+
+export interface QbPaymentLine {
+  Amount: number;
+  LinkedTxn: Array<{ TxnId: string; TxnType: "Invoice" }>;
+}
+
+export interface QbPaymentPayload {
+  Id?: string;
+  SyncToken?: string;
+  CustomerRef: { value: string };
+  TotalAmt: number;
+  Line: QbPaymentLine[];
+  DepositToAccountRef?: { value: string };
+  PaymentMethodRef?: { value: string };
+  TxnDate?: string;
+  PrivateNote?: string;
+}
+
+export interface QbPaymentWriteResult {
+  id: string;
+  syncToken: string;
+}
+
+// ---------- Invoice email settings ----------
+
+export type InvoiceEmailProvider = "resend" | "email_account";
+
+export interface InvoiceEmailSettings {
+  id: string;
+  provider: InvoiceEmailProvider;
+  email_account_id: string | null;
+  send_from_email: string | null;
+  send_from_name: string | null;
+  reply_to_email: string | null;
+  subject_template: string;
+  body_template: string;
+  created_at: string;
+  updated_at: string;
 }

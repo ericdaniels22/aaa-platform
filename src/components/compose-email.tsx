@@ -50,6 +50,7 @@ interface ComposeEmailProps {
   replyToMessageId?: string;
   mode?: "compose" | "reply" | "forward";
   onSent?: () => void;
+  defaultAttachments?: UploadedFile[];
 }
 
 export default function ComposeEmailModal({
@@ -66,6 +67,7 @@ export default function ComposeEmailModal({
   replyToMessageId,
   mode = "compose",
   onSent,
+  defaultAttachments = [],
 }: ComposeEmailProps) {
   const [accounts, setAccounts] = useState<EmailAccountData[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
@@ -125,7 +127,7 @@ export default function ComposeEmailModal({
   useEffect(() => {
     if (open) {
       setSubject(defaultSubject);
-      setUploadedFiles([]);
+      setUploadedFiles(defaultAttachments);
       setDraftId(initialDraftId || null);
 
       // Set To recipients
