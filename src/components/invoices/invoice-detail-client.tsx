@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import ComposeEmailModal from "@/components/compose-email";
 import RecordPaymentModal from "@/components/payments/record-payment-modal";
+import { PaymentRequestModal } from "@/components/payments/payment-request-modal";
 import { InvoiceStatusPill } from "./invoice-status-pill";
 import LineItemsEditor, {
   blankLine,
@@ -79,9 +80,11 @@ function resolveMergeFields(template: string, ctx: Record<string, string>): stri
 export default function InvoiceDetailClient({
   invoiceId,
   autoAction,
+  stripeConnected,
 }: {
   invoiceId: string;
   autoAction: string | null;
+  stripeConnected?: boolean;
 }) {
   const router = useRouter();
   const [invoice, setInvoice] = useState<InvoiceWithItems | null>(null);
@@ -101,6 +104,8 @@ export default function InvoiceDetailClient({
   const [sendAttachments, setSendAttachments] = useState<AttachmentRef[]>([]);
   const [preparingSend, setPreparingSend] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [payRequestOpen, setPayRequestOpen] = useState(false);
+  const [paidAmount, setPaidAmount] = useState(0);
   const [autoActionHandled, setAutoActionHandled] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -125,6 +130,15 @@ export default function InvoiceDetailClient({
 
     const esRes = await fetch("/api/settings/invoice-email");
     if (esRes.ok) setEmailSettings((await esRes.json()) as InvoiceEmailSettingsLite);
+
+    const pmtRes = await fetch(`/api/payments?invoiceId=${inv.id}`);
+    if (pmtRes.ok) {
+      const pmtData = (await pmtRes.json()) as { rows: { amount: number; status: string }[] };
+      const paid = pmtData.rows
+        .filter((p) => p.status === "received")
+        .reduce((acc, p) => acc + Number(p.amount), 0);
+      setPaidAmount(paid);
+    }
 
     setLoading(false);
   }, [invoiceId]);
@@ -185,6 +199,7 @@ export default function InvoiceDetailClient({
   const isVoided = invoice?.status === "voided";
   const isPostSent =
     !!invoice && invoice.status !== "draft" && invoice.status !== "voided";
+  const balance = invoice ? Math.max(0, Number(invoice.total_amount) - paidAmount) : 0;
 
   async function saveCosmeticEdits() {
     if (!invoice) return;
@@ -394,6 +409,16 @@ export default function InvoiceDetailClient({
               >
                 Record payment
               </button>
+              {stripeConnected && (
+                <button
+                  onClick={() => setPayRequestOpen(true)}
+                  disabled={balance <= 0}
+                  title={balance <= 0 ? "Invoice is paid in full" : undefined}
+                  className="px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-accent disabled:opacity-50"
+                >
+                  Request Online Payment
+                </button>
+              )}
               <button
                 onClick={handleVoid}
                 disabled={saving}
@@ -537,6 +562,16 @@ export default function InvoiceDetailClient({
         invoiceId={invoice.id}
         jobId={invoice.job_id}
         onRecorded={refresh}
+      />
+
+      <PaymentRequestModal
+        open={payRequestOpen}
+        onOpenChange={setPayRequestOpen}
+        jobId={invoice.job_id}
+        invoiceId={invoice.id}
+        defaultTitle={`Invoice ${invoice.invoice_number ?? invoice.id.slice(0, 8)}`}
+        defaultAmount={balance}
+        defaultRequestType="invoice"
       />
     </div>
   );
