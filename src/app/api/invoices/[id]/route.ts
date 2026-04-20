@@ -37,11 +37,19 @@ export async function GET(
     .eq("invoice_id", id)
     .order("sort_order", { ascending: true });
 
-  const result: InvoiceWithItems = {
+  const { data: job } = await supabase
+    .from("jobs")
+    .select(
+      "id, job_number, property_address, damage_type, contact_id, contacts:contact_id(first_name, last_name, email)",
+    )
+    .eq("id", invoice.job_id)
+    .maybeSingle();
+
+  return NextResponse.json({
     ...invoice,
     line_items: items ?? [],
-  };
-  return NextResponse.json(result);
+    job: job ?? null,
+  });
 }
 
 interface PatchBody {
