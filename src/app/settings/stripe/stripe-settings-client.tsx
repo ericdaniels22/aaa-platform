@@ -51,7 +51,7 @@ function useDebouncedPatch(setConnection: (c: StripeConnectionRow | null) => voi
         }
         const { connection } = (await res.json()) as { connection: StripeConnectionRow };
         setConnection(connection);
-        toast.success("Saved");
+        toast.success("Saved", { id: "stripe-settings-save" });
       }, delay);
       timers.current.set(field, t);
     },
@@ -59,10 +59,28 @@ function useDebouncedPatch(setConnection: (c: StripeConnectionRow | null) => voi
   );
 }
 
+const DEFAULT_SURCHARGE_DISCLOSURE =
+  "We add a surcharge to card payments that is not greater than our cost of acceptance. We do not surcharge ACH/bank payments.";
+
 export default function StripeSettingsClient({ initialConnection }: Props) {
   const [connection, setConnection] = useState<StripeConnectionRow | null>(initialConnection);
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Local drafts for text/number inputs so their values are controlled locally
+  // instead of via `defaultValue` (which warns when the underlying prop shifts
+  // after each debounced save).
+  const [descriptorDraft, setDescriptorDraft] = useState(
+    initialConnection?.default_statement_descriptor ?? "",
+  );
+  const [cardFeePercentDraft, setCardFeePercentDraft] = useState<number>(
+    initialConnection?.card_fee_percent ?? 3,
+  );
+  const [surchargeDisclosureDraft, setSurchargeDisclosureDraft] = useState<string>(
+    initialConnection?.surcharge_disclosure ?? DEFAULT_SURCHARGE_DISCLOSURE,
+  );
+  const [achThresholdDraft, setAchThresholdDraft] = useState<number>(
+    initialConnection?.ach_preferred_threshold ?? 5000,
+  );
   const patch = useDebouncedPatch(setConnection);
 
   const onConnect = () => {
@@ -162,12 +180,14 @@ export default function StripeSettingsClient({ initialConnection }: Props) {
             <Label htmlFor="descriptor">Statement descriptor</Label>
             <Input
               id="descriptor"
-              defaultValue={connection.default_statement_descriptor ?? ""}
+              value={descriptorDraft}
               maxLength={22}
               placeholder="e.g. AAA CONTRACTING"
-              onChange={(e) =>
-                patch("default_statement_descriptor", e.target.value.slice(0, 22) || null)
-              }
+              onChange={(e) => {
+                const v = e.target.value.slice(0, 22);
+                setDescriptorDraft(v);
+                patch("default_statement_descriptor", v || null, 1200);
+              }}
             />
             <p className="text-xs text-muted-foreground">
               Up to 22 characters. Appears on your customers&rsquo; bank statements.
@@ -265,11 +285,12 @@ export default function StripeSettingsClient({ initialConnection }: Props) {
                     step="0.01"
                     min="0"
                     max="5"
-                    defaultValue={connection.card_fee_percent}
+                    value={cardFeePercentDraft}
                     onChange={(e) => {
                       const v = Number(e.target.value);
+                      setCardFeePercentDraft(e.target.value === "" ? 0 : v);
                       if (Number.isFinite(v) && v >= 0 && v <= 5) {
-                        patch("card_fee_percent", v);
+                        patch("card_fee_percent", v, 1200);
                       }
                     }}
                     className="w-24"
@@ -278,7 +299,7 @@ export default function StripeSettingsClient({ initialConnection }: Props) {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Preview: $1,000 invoice would charge $
-                  {(1000 + (1000 * Number(connection.card_fee_percent)) / 100).toFixed(2)} on card.
+                  {(1000 + (1000 * cardFeePercentDraft) / 100).toFixed(2)} on card.
                 </p>
               </div>
               <div className="space-y-2">
@@ -286,11 +307,11 @@ export default function StripeSettingsClient({ initialConnection }: Props) {
                 <textarea
                   id="surcharge_disclosure"
                   className="min-h-[80px] w-full rounded-md border border-input bg-background p-2 text-sm"
-                  defaultValue={
-                    connection.surcharge_disclosure ??
-                    "We add a surcharge to card payments that is not greater than our cost of acceptance. We do not surcharge ACH/bank payments."
-                  }
-                  onChange={(e) => patch("surcharge_disclosure", e.target.value || null)}
+                  value={surchargeDisclosureDraft}
+                  onChange={(e) => {
+                    setSurchargeDisclosureDraft(e.target.value);
+                    patch("surcharge_disclosure", e.target.value || null, 1200);
+                  }}
                 />
               </div>
             </>
@@ -317,7 +338,8 @@ export default function StripeSettingsClient({ initialConnection }: Props) {
               id="ach_threshold_enabled"
               checked={connection.ach_preferred_threshold != null}
               onCheckedChange={(v) => {
-                const next = v ? 5000 : null;
+                const next = v ? achThresholdDraft || 5000 : null;
+                if (v) setAchThresholdDraft(next as number);
                 setConnection({ ...connection, ach_preferred_threshold: next });
                 patch("ach_preferred_threshold", next, 50);
               }}
@@ -331,10 +353,11 @@ export default function StripeSettingsClient({ initialConnection }: Props) {
                 type="number"
                 step="1"
                 min="0"
-                defaultValue={connection.ach_preferred_threshold}
+                value={achThresholdDraft}
                 onChange={(e) => {
                   const v = Number(e.target.value);
-                  if (Number.isFinite(v) && v >= 0) patch("ach_preferred_threshold", v);
+                  setAchThresholdDraft(e.target.value === "" ? 0 : v);
+                  if (Number.isFinite(v) && v >= 0) patch("ach_preferred_threshold", v, 1200);
                 }}
                 className="w-32"
               />
