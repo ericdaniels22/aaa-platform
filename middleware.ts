@@ -28,12 +28,15 @@ export async function middleware(request: NextRequest) {
   // Refresh the session
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Allow login page and API routes without auth
+  // Allow login page, API routes, and customer-facing public pages
+  // (contract signing and payment) without auth.
   const { pathname } = request.nextUrl;
   const isLoginPage = pathname === "/login";
   const isPublicApi = pathname.startsWith("/api/");
+  const isPublicPage =
+    pathname.startsWith("/sign/") || pathname.startsWith("/pay/");
 
-  if (!user && !isLoginPage && !isPublicApi) {
+  if (!user && !isLoginPage && !isPublicApi && !isPublicPage) {
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
   }
