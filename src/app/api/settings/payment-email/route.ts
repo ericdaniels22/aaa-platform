@@ -66,11 +66,28 @@ export async function PATCH(request: Request) {
     "payment_request_body_template",
     "payment_reminder_subject_template",
     "payment_reminder_body_template",
+    "payment_receipt_subject_template",
+    "payment_receipt_body_template",
+    "refund_confirmation_subject_template",
+    "refund_confirmation_body_template",
+    "payment_received_internal_subject_template",
+    "payment_received_internal_body_template",
+    "payment_failed_internal_subject_template",
+    "payment_failed_internal_body_template",
+    "refund_issued_internal_subject_template",
+    "refund_issued_internal_body_template",
   ];
   for (const f of stringFields) {
     if (typeof body[f] === "string") {
       (patch as Record<string, unknown>)[f] = body[f];
     }
+  }
+  if (
+    body.internal_notification_to_email === null ||
+    typeof body.internal_notification_to_email === "string"
+  ) {
+    patch.internal_notification_to_email =
+      body.internal_notification_to_email || null;
   }
   if (body.reply_to_email === null || typeof body.reply_to_email === "string") {
     patch.reply_to_email = body.reply_to_email || null;

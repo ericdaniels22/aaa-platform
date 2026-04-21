@@ -264,6 +264,81 @@ export default function PaymentEmailSettingsPage() {
         onBodyChange={(v) => patch("payment_reminder_body_template", v)}
       />
 
+      {/* Customer Receipt */}
+      <PaymentEmailTemplateField
+        label="Customer Receipt"
+        description="Sent to the customer when their payment is confirmed. A branded PDF is attached automatically."
+        subject={settings.payment_receipt_subject_template}
+        body={settings.payment_receipt_body_template}
+        onSubjectChange={(v) => patch("payment_receipt_subject_template", v)}
+        onBodyChange={(v) => patch("payment_receipt_body_template", v)}
+      />
+
+      {/* Refund Confirmation */}
+      <PaymentEmailTemplateField
+        label="Refund Confirmation (to customer)"
+        description="Sent to the customer after Stripe confirms a refund you initiated."
+        subject={settings.refund_confirmation_subject_template}
+        body={settings.refund_confirmation_body_template}
+        onSubjectChange={(v) =>
+          patch("refund_confirmation_subject_template", v)
+        }
+        onBodyChange={(v) => patch("refund_confirmation_body_template", v)}
+      />
+
+      {/* Internal Notifications */}
+      <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">
+            Internal Notifications
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Emails sent to your team when payments succeed, fail, or are
+            refunded. Leave the address blank to send to the same send-from
+            address.
+          </p>
+        </div>
+        <TextInput
+          label="Notification recipient email"
+          value={settings.internal_notification_to_email ?? ""}
+          onChange={(v) => patch("internal_notification_to_email", v || null)}
+          placeholder="team@example.com (defaults to the send-from address)"
+        />
+      </div>
+
+      <PaymentEmailTemplateField
+        label="Payment Received"
+        description="Internal alert when a customer payment succeeds."
+        subject={settings.payment_received_internal_subject_template}
+        body={settings.payment_received_internal_body_template}
+        onSubjectChange={(v) =>
+          patch("payment_received_internal_subject_template", v)
+        }
+        onBodyChange={(v) =>
+          patch("payment_received_internal_body_template", v)
+        }
+      />
+      <PaymentEmailTemplateField
+        label="Payment Failed"
+        description="Internal alert when a customer payment attempt fails."
+        subject={settings.payment_failed_internal_subject_template}
+        body={settings.payment_failed_internal_body_template}
+        onSubjectChange={(v) =>
+          patch("payment_failed_internal_subject_template", v)
+        }
+        onBodyChange={(v) => patch("payment_failed_internal_body_template", v)}
+      />
+      <PaymentEmailTemplateField
+        label="Refund Issued"
+        description="Internal alert when a refund you initiated is confirmed by Stripe."
+        subject={settings.refund_issued_internal_subject_template}
+        body={settings.refund_issued_internal_body_template}
+        onSubjectChange={(v) =>
+          patch("refund_issued_internal_subject_template", v)
+        }
+        onBodyChange={(v) => patch("refund_issued_internal_body_template", v)}
+      />
+
       {/* Fee disclosure */}
       <div className="rounded-xl border border-border bg-card p-5 space-y-3">
         <div>
