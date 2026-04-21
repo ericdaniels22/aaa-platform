@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { Contact } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -89,9 +90,11 @@ export default function ContactsPage() {
     const supabase = createClient();
 
     // Fetch contacts with job count
+    const orgId = getActiveOrganizationId();
     const { data: contactsData } = await supabase
       .from("contacts")
       .select("*")
+      .eq("organization_id", orgId)
       .order("created_at", { ascending: false });
 
     if (!contactsData) {
@@ -103,7 +106,8 @@ export default function ContactsPage() {
     // Get job counts per contact
     const { data: jobCounts } = await supabase
       .from("jobs")
-      .select("contact_id");
+      .select("contact_id")
+      .eq("organization_id", orgId);
 
     const countMap: Record<string, number> = {};
     if (jobCounts) {
@@ -189,7 +193,8 @@ export default function ContactsPage() {
       const { error } = await supabase
         .from("contacts")
         .update(payload)
-        .eq("id", editingContact.id);
+        .eq("id", editingContact.id)
+        .eq("organization_id", getActiveOrganizationId());
 
       if (error) {
         toast.error("Failed to update contact");
@@ -200,7 +205,9 @@ export default function ContactsPage() {
         fetchContacts();
       }
     } else {
-      const { error } = await supabase.from("contacts").insert(payload);
+      const { error } = await supabase
+        .from("contacts")
+        .insert({ ...payload, organization_id: getActiveOrganizationId() });
 
       if (error) {
         toast.error("Failed to create contact");
@@ -221,7 +228,8 @@ export default function ContactsPage() {
     const { error } = await supabase
       .from("contacts")
       .delete()
-      .eq("id", deleteTarget.id);
+      .eq("id", deleteTarget.id)
+      .eq("organization_id", getActiveOrganizationId());
 
     if (error) {
       toast.error(

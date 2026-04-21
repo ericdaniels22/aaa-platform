@@ -3,6 +3,7 @@ import { verifyOAuthState, InvalidOAuthStateError } from "@/lib/stripe-oauth";
 import { createServiceClient } from "@/lib/supabase-api";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { encrypt } from "@/lib/encryption";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 interface StripeOAuthTokenResponse {
   stripe_user_id: string;
@@ -97,13 +98,15 @@ export async function GET(req: NextRequest) {
     return back("token_exchange_failed");
   }
 
+  const orgId = getActiveOrganizationId();
   const supabase = createServiceClient();
-  // Single-row pattern: delete existing, insert fresh.
+  // One-row-per-org pattern: delete the existing row for this org, insert fresh.
   await supabase
     .from("stripe_connection")
     .delete()
-    .neq("id", "00000000-0000-0000-0000-000000000000");
+    .eq("organization_id", orgId);
   const { error: insertErr } = await supabase.from("stripe_connection").insert({
+    organization_id: orgId,
     stripe_account_id: token.stripe_user_id,
     publishable_key: token.stripe_publishable_key,
     secret_key_encrypted: encrypt(token.access_token),

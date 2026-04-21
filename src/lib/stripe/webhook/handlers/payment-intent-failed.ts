@@ -80,6 +80,7 @@ export async function handlePaymentIntentFailed(
     body: failureReason,
     href: `/jobs/${pr.job_id}`,
     jobId: pr.job_id,
+    organizationId: pr.organization_id,
     metadata: { payment_request_id: pr.id },
   }).catch(() => undefined);
 
