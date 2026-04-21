@@ -46,7 +46,6 @@ const PAYMENT_EXTENDED: PaymentMergeFieldDefinition[] = [
   { name: "refund_reason", label: "Refund Reason", category: "Payment" },
   { name: "refunded_at_formatted", label: "Refund Date", category: "Payment" },
   { name: "refunded_by_name", label: "Refunded By", category: "Payment" },
-  { name: "job_number", label: "Job Number", category: "Payment" },
   { name: "job_link", label: "Job Link (internal)", category: "Payment" },
 ];
 
@@ -138,7 +137,6 @@ export interface PaymentMergeExtras {
   refund_reason?: string | null;
   refunded_at?: string | null;
   refunded_by_name?: string | null;
-  job_number?: string | null;
   job_link?: string | null;
 }
 
@@ -241,7 +239,10 @@ export async function buildPaymentMergeFieldValues(
     }
     if (extras.payment_method_type === "card") {
       const brand = extras.card_brand
-        ? extras.card_brand.charAt(0).toUpperCase() + extras.card_brand.slice(1)
+        ? extras.card_brand
+            .split("_")
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(" ")
         : "Card";
       return extras.card_last4 ? `${brand} ending in ${extras.card_last4}` : brand;
     }
@@ -264,7 +265,6 @@ export async function buildPaymentMergeFieldValues(
   values.refunded_at_formatted = formatDate(extras.refunded_at ?? null);
   values.refunded_by_name = extras.refunded_by_name ?? null;
 
-  values.job_number = extras.job_number ?? null;
   values.job_link = extras.job_link ?? null;
 
   return values;

@@ -936,7 +936,6 @@ export interface PaymentMergeExtras {
   refund_reason?: string | null;
   refunded_at?: string | null;
   refunded_by_name?: string | null;
-  job_number?: string | null;
   job_link?: string | null;          // <APP_URL>/jobs/<job_id>
 }
 ```
@@ -961,7 +960,6 @@ const PAYMENT_EXTENDED: PaymentMergeFieldDefinition[] = [
   { name: "refund_reason", label: "Refund Reason", category: "Payment" },
   { name: "refunded_at_formatted", label: "Refund Date", category: "Payment" },
   { name: "refunded_by_name", label: "Refunded By", category: "Payment" },
-  { name: "job_number", label: "Job Number", category: "Payment" },
   { name: "job_link", label: "Job Link (internal)", category: "Payment" },
 ];
 ```
@@ -1010,7 +1008,10 @@ At the end of the function (just before `return values`), resolve the extras:
     }
     if (extras.payment_method_type === "card") {
       const brand = extras.card_brand
-        ? extras.card_brand.charAt(0).toUpperCase() + extras.card_brand.slice(1)
+        ? extras.card_brand
+            .split("_")
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(" ")
         : "Card";
       return extras.card_last4 ? `${brand} ending in ${extras.card_last4}` : brand;
     }
@@ -1033,7 +1034,6 @@ At the end of the function (just before `return values`), resolve the extras:
   values.refunded_at_formatted = formatDate(extras.refunded_at ?? null);
   values.refunded_by_name = extras.refunded_by_name ?? null;
 
-  values.job_number = extras.job_number ?? null;
   values.job_link = extras.job_link ?? null;
 ```
 
@@ -2366,7 +2366,6 @@ export async function handlePaymentIntentSucceeded(
     stripe_receipt_url: charge?.receipt_url ?? null,
     stripe_fee_amount: feeAmount,
     net_amount: amountReceived - feeAmount,
-    job_number: jobMeta?.job_number ?? null,
     job_link: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/jobs/${pr.job_id}`,
   };
 
@@ -3231,7 +3230,6 @@ export async function handlePaymentIntentFailed(
     payer_name: pr.payer_name,
     payer_email: pr.payer_email,
     failure_reason: failureReason,
-    job_number: jobMeta?.job_number ?? null,
     job_link: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/jobs/${pr.job_id}`,
   };
 
@@ -3851,7 +3849,6 @@ export async function handleChargeRefunded(
     refunded_by_name: refundedByName,
     payer_name: pr?.payer_name ?? null,
     payer_email: pr?.payer_email ?? null,
-    job_number: jobMeta?.job_number ?? null,
     job_link: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/jobs/${payment.job_id}`,
   };
 
@@ -4036,7 +4033,6 @@ export async function handleChargeDisputeCreated(
       subjectPrefix: "DISPUTE OPENED — ",
       extras: {
         failure_reason: dispute.reason,
-        job_number: jobMeta?.job_number ?? null,
         job_link: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/jobs/${payment.job_id}`,
       },
     }).catch((e) =>
