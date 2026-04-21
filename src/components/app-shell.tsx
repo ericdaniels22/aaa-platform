@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Sidebar from "@/components/nav";
+import { NotificationBell } from "@/components/notifications/bell";
 import { useSidebarCollapse } from "@/lib/sidebar-collapse-context";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           collapsed ? "lg:ml-16" : "lg:ml-52",
         )}
       >
+        {/* Fixed header bell for authenticated chrome (Build 17c). */}
+        <div className="hidden lg:flex fixed top-2 right-4 z-30 items-center">
+          <NotificationBell />
+        </div>
         {isFullBleed ? children : <div className="p-6 lg:p-8">{children}</div>}
       </main>
     </>

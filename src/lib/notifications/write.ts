@@ -1,10 +1,8 @@
+import { createServiceClient } from "@/lib/supabase-api";
+import type { NotificationType } from "./types";
+
 export interface WriteNotificationInput {
-  type:
-    | "payment_received"
-    | "payment_failed"
-    | "refund_issued"
-    | "dispute_opened"
-    | "qb_sync_failed";
+  type: NotificationType;
   title: string;
   body?: string;
   href?: string;
@@ -13,11 +11,23 @@ export interface WriteNotificationInput {
   metadata?: Record<string, unknown>;
 }
 
-// Stub: Task 14 replaces with the real implementation. Always returns null
-// so Option B (defer) also works — nothing surfaces but the webhook flow
-// continues uninterrupted.
 export async function writeNotification(
-  _input: WriteNotificationInput,
-): Promise<null> {
-  return null;
+  input: WriteNotificationInput,
+): Promise<{ id: string } | null> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("notifications")
+    .insert({
+      user_profile_id: input.userProfileId ?? null,
+      type: input.type,
+      title: input.title,
+      body: input.body ?? null,
+      href: input.href ?? null,
+      priority: input.priority ?? "normal",
+      metadata: input.metadata ?? {},
+    })
+    .select("id")
+    .maybeSingle<{ id: string }>();
+  if (error) throw new Error(`notifications insert: ${error.message}`);
+  return data;
 }
