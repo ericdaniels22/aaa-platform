@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +23,8 @@ import type { StripeConnectionRow } from "@/lib/stripe";
 
 interface Props {
   initialConnection: StripeConnectionRow | null;
+  webhookConfigured: boolean;
+  lastEventAt: string | null;
 }
 
 function useDebouncedPatch(setConnection: (c: StripeConnectionRow | null) => void) {
@@ -62,7 +65,11 @@ function useDebouncedPatch(setConnection: (c: StripeConnectionRow | null) => voi
 const DEFAULT_SURCHARGE_DISCLOSURE =
   "We add a surcharge to card payments that is not greater than our cost of acceptance. We do not surcharge ACH/bank payments.";
 
-export default function StripeSettingsClient({ initialConnection }: Props) {
+export default function StripeSettingsClient({
+  initialConnection,
+  webhookConfigured,
+  lastEventAt,
+}: Props) {
   const [connection, setConnection] = useState<StripeConnectionRow | null>(initialConnection);
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -366,6 +373,19 @@ export default function StripeSettingsClient({ initialConnection }: Props) {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Webhook Configuration</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <WebhookConfigSection
+            configured={webhookConfigured}
+            lastEventAt={lastEventAt}
+            mode={connection.mode}
+          />
+        </CardContent>
+      </Card>
+
       <Dialog open={disconnectOpen} onOpenChange={setDisconnectOpen}>
         <DialogContent>
           <DialogHeader>
@@ -386,5 +406,146 @@ export default function StripeSettingsClient({ initialConnection }: Props) {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function WebhookConfigSection({
+  configured,
+  lastEventAt,
+  mode,
+}: {
+  configured: boolean;
+  lastEventAt: string | null;
+  mode: "test" | "live";
+}) {
+  const dashboardUrl =
+    mode === "live"
+      ? "https://dashboard.stripe.com/webhooks"
+      : "https://dashboard.stripe.com/test/webhooks";
+  const router = useRouter();
+  const [value, setValue] = useState("");
+  const [reveal, setReveal] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [appUrl, setAppUrl] = useState("");
+
+  useEffect(() => {
+    setAppUrl(window.location.origin);
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    const res = await fetch("/api/stripe/webhook-secret", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret: value || null }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const { error } = (await res.json()) as { error?: string };
+      toast.error(error ?? "Failed to save webhook secret");
+      return;
+    }
+    toast.success(value ? "Webhook secret saved" : "Webhook secret cleared");
+    setDirty(false);
+    setValue("");
+    router.refresh();
+  };
+
+  const statusBadge = (() => {
+    if (!configured)
+      return (
+        <Badge className="bg-red-500/20 text-red-700 dark:text-red-300">
+          No webhook configured
+        </Badge>
+      );
+    if (!lastEventAt)
+      return (
+        <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-300">
+          Configured — no events received yet
+        </Badge>
+      );
+    const diff = Date.now() - new Date(lastEventAt).getTime();
+    const readable =
+      diff < 60_000
+        ? "just now"
+        : diff < 3_600_000
+          ? `${Math.floor(diff / 60_000)}m ago`
+          : diff < 86_400_000
+            ? `${Math.floor(diff / 3_600_000)}h ago`
+            : `${Math.floor(diff / 86_400_000)}d ago`;
+    return (
+      <Badge className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+        Configured — last event {readable}
+      </Badge>
+    );
+  })();
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium">Status</p>
+        {statusBadge}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Stripe uses a webhook to tell this app when a payment succeeds, fails,
+        is refunded, or disputed. Create a webhook in your{" "}
+        <a
+          className="underline"
+          target="_blank"
+          rel="noopener noreferrer"
+          href={dashboardUrl}
+        >
+          Stripe Dashboard
+        </a>{" "}
+        pointing to <code>{appUrl}/api/stripe/webhook</code> and subscribe to
+        these events:
+      </p>
+      <ul className="list-disc pl-6 text-xs text-muted-foreground">
+        <li>checkout.session.completed</li>
+        <li>payment_intent.succeeded</li>
+        <li>payment_intent.payment_failed</li>
+        <li>charge.refunded</li>
+        <li>charge.dispute.created</li>
+        <li>charge.dispute.closed</li>
+      </ul>
+      <p className="text-sm text-muted-foreground">
+        Then copy that endpoint&rsquo;s signing secret (starts with{" "}
+        <code>whsec_</code>) and paste it below.
+      </p>
+      <div className="flex items-center gap-2">
+        <Label htmlFor="webhook_secret" className="sr-only">
+          Webhook signing secret
+        </Label>
+        <Input
+          id="webhook_secret"
+          type={reveal ? "text" : "password"}
+          placeholder={
+            configured ? "whsec_•••••  (paste to replace)" : "whsec_..."
+          }
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setDirty(true);
+          }}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setReveal((v) => !v)}
+          aria-label={reveal ? "Hide webhook signing secret" : "Show webhook signing secret"}
+          aria-pressed={reveal}
+        >
+          {reveal ? "Hide" : "Show"}
+        </Button>
+        <Button
+          size="sm"
+          disabled={!dirty || saving}
+          onClick={() => void save()}
+        >
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </section>
   );
 }

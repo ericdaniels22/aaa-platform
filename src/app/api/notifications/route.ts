@@ -1,80 +1,84 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { NextResponse, type NextRequest } from "next/server";
+import { createServiceClient } from "@/lib/supabase-api";
 
-// GET /api/notifications?userId=xxx&limit=20
-export async function GET(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get("userId");
-  const limit = parseInt(request.nextUrl.searchParams.get("limit") || "20");
+export const runtime = "nodejs";
 
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const userId = searchParams.get("userId");
   if (!userId) {
-    return NextResponse.json({ error: "userId required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "userId query param required" },
+      { status: 400 },
+    );
   }
+  const limit = Math.min(Number(searchParams.get("limit") ?? "15"), 100);
 
-  const supabase = createApiClient();
-  const { data, error } = await supabase
+  const supabase = createServiceClient();
+
+  const { data: rows, error } = await supabase
     .from("notifications")
-    .select("*")
+    .select(
+      "id, user_id, type, title, body, is_read, job_id, href, priority, metadata, created_at",
+    )
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(limit);
-
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Get unread count
-  const { count } = await supabase
+  const { count, error: cntErr } = await supabase
     .from("notifications")
-    .select("*", { count: "exact", head: true })
+    .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
     .eq("is_read", false);
+  if (cntErr)
+    return NextResponse.json({ error: cntErr.message }, { status: 500 });
 
-  return NextResponse.json({ notifications: data || [], unread_count: count || 0 });
+  return NextResponse.json({
+    notifications: rows ?? [],
+    unread_count: count ?? 0,
+  });
 }
 
-// POST /api/notifications — create notification
-export async function POST(request: Request) {
-  const { user_id, type, title, body, job_id } = await request.json();
-
-  if (!type || !title) {
-    return NextResponse.json({ error: "type and title required" }, { status: 400 });
+export async function PATCH(req: NextRequest) {
+  const body = (await req.json().catch(() => null)) as
+    | { id?: string; mark_all_read?: boolean; user_id?: string }
+    | null;
+  if (!body) {
+    return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
 
-  const supabase = createApiClient();
-  const { data, error } = await supabase
-    .from("notifications")
-    .insert({ user_id: user_id || null, type, title, body: body || null, job_id: job_id || null })
-    .select()
-    .single();
+  const supabase = createServiceClient();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data, { status: 201 });
-}
-
-// PATCH /api/notifications — mark as read
-export async function PATCH(request: Request) {
-  const { id, mark_all_read, user_id } = await request.json();
-
-  const supabase = createApiClient();
-
-  if (mark_all_read && user_id) {
+  if (body.mark_all_read) {
+    if (!body.user_id) {
+      return NextResponse.json(
+        { error: "user_id required when mark_all_read is true" },
+        { status: 400 },
+      );
+    }
     const { error } = await supabase
       .from("notifications")
       .update({ is_read: true })
-      .eq("user_id", user_id)
+      .eq("user_id", body.user_id)
       .eq("is_read", false);
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ success: true });
+    if (error)
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
   }
 
-  if (id) {
+  if (body.id) {
     const { error } = await supabase
       .from("notifications")
       .update({ is_read: true })
-      .eq("id", id);
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ success: true });
+      .eq("id", body.id);
+    if (error)
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
   }
 
-  return NextResponse.json({ error: "id or mark_all_read required" }, { status: 400 });
+  return NextResponse.json(
+    { error: "body must include either { id } or { mark_all_read: true, user_id }" },
+    { status: 400 },
+  );
 }

@@ -110,10 +110,16 @@ export async function listClasses(token: QbApiContext): Promise<QbClass[]> {
 // ---------- Accounts (payment-method mapping) ----------
 
 export async function listDepositAccounts(token: QbApiContext): Promise<QbAccount[]> {
-  // QBO's query parser rejects parentheses in WHERE clauses, so use IN instead
-  // of (AccountType = 'Bank' OR AccountType = 'Other Current Asset').
-  const query =
-    "select * from Account where AccountType IN ('Bank', 'Other Current Asset') AND Active = true MAXRESULTS 500";
+  return listAccountsByType(token, ["Bank", "Other Current Asset"]);
+}
+
+export async function listAccountsByType(
+  token: QbApiContext,
+  accountTypes: string[],
+): Promise<QbAccount[]> {
+  // QBO's query parser rejects parentheses in WHERE clauses, so use IN instead.
+  const inList = accountTypes.map((t) => `'${t.replace(/'/g, "''")}'`).join(", ");
+  const query = `select * from Account where AccountType IN (${inList}) AND Active = true MAXRESULTS 500`;
   const data = await call<{
     QueryResponse?: { Account?: QbAccount[] };
   }>(token, "GET", `/query?query=${encodeURIComponent(query)}`);
@@ -302,4 +308,51 @@ export async function deletePayment(
     Id: id,
     SyncToken: syncToken,
   });
+}
+
+// ---------- Purchases (used by 17c to post the Stripe processing fee as an expense) ----------
+
+export interface QbPurchaseWriteResult {
+  id: string;
+  syncToken: string;
+}
+
+export async function createPurchase(
+  token: QbApiContext,
+  payload: Record<string, unknown>,
+): Promise<QbPurchaseWriteResult> {
+  const data = await call<{ Purchase?: { Id: string; SyncToken: string } }>(
+    token,
+    "POST",
+    "/purchase",
+    payload,
+  );
+  if (!data.Purchase?.Id) throw new Error("QuickBooks returned no Purchase id");
+  return { id: data.Purchase.Id, syncToken: data.Purchase.SyncToken };
+}
+
+// ---------- Refund receipts (used by 17c to reconcile Stripe refunds to QB) ----------
+
+export interface QbRefundReceiptWriteResult {
+  id: string;
+  syncToken: string;
+}
+
+export async function createRefundReceipt(
+  token: QbApiContext,
+  payload: Record<string, unknown>,
+): Promise<QbRefundReceiptWriteResult> {
+  const data = await call<{ RefundReceipt?: { Id: string; SyncToken: string } }>(
+    token,
+    "POST",
+    "/refundreceipt",
+    payload,
+  );
+  if (!data.RefundReceipt?.Id) {
+    throw new Error("QuickBooks returned no RefundReceipt id");
+  }
+  return {
+    id: data.RefundReceipt.Id,
+    syncToken: data.RefundReceipt.SyncToken,
+  };
 }

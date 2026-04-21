@@ -1,13 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
 import { requireAdmin } from "@/lib/qb/auth";
 import { getValidAccessToken } from "@/lib/qb/tokens";
-import { listDepositAccounts } from "@/lib/qb/client";
+import { listAccountsByType, listDepositAccounts } from "@/lib/qb/client";
 
-// GET /api/qb/accounts — returns active QB Accounts of type Bank or
-// Other Current Asset for the payment-method mapping dropdown.
-export async function GET() {
+// GET /api/qb/accounts
+// Default (no ?types=) — Bank + Other Current Asset (payment-method mapping).
+// With ?types=Income,Expense — returns the specified account types instead.
+export async function GET(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
   const gate = await requireAdmin(supabase);
   if (!gate.ok) return gate.response;
@@ -21,7 +22,13 @@ export async function GET() {
     );
   }
   try {
-    const accounts = await listDepositAccounts(token);
+    const typesParam = req.nextUrl.searchParams.get("types");
+    const accounts = typesParam
+      ? await listAccountsByType(
+          token,
+          typesParam.split(",").map((t) => t.trim()).filter(Boolean),
+        )
+      : await listDepositAccounts(token);
     return NextResponse.json({ accounts });
   } catch (err) {
     const anyErr = err as { message?: string; status?: number; code?: string; detail?: string; raw?: unknown };

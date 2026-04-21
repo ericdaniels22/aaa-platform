@@ -180,6 +180,11 @@ export async function POST(
         },
         statement_descriptor_suffix:
           connection.default_statement_descriptor?.slice(0, 22) || undefined,
+        // 17c — intentionally NOT setting receipt_email. Our webhook handler
+        // sends a branded receipt email with a PDF attached. To prevent
+        // Stripe from also sending its default receipt, disable the
+        // "Successful payments" email in Stripe Dashboard → Settings →
+        // Emails (applies account-wide).
       },
       customer_email: pr.payer_email ?? undefined,
       success_url: `${appUrl}/pay/${token}/success`,

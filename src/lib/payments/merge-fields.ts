@@ -31,6 +31,24 @@ const PAYMENT_ONLY: PaymentMergeFieldDefinition[] = [
   { name: "link_expires_in_days", label: "Link Expires In (days)", category: "Payment" },
 ];
 
+const PAYMENT_EXTENDED: PaymentMergeFieldDefinition[] = [
+  { name: "paid_at", label: "Paid At (raw)", category: "Payment" },
+  { name: "paid_at_formatted", label: "Paid At", category: "Payment" },
+  { name: "payer_name", label: "Payer Name", category: "Payment" },
+  { name: "payer_email", label: "Payer Email", category: "Payment" },
+  { name: "payment_method_display", label: "Payment Method", category: "Payment" },
+  { name: "transaction_id", label: "Transaction ID", category: "Payment" },
+  { name: "stripe_receipt_url", label: "Stripe Receipt URL", category: "Payment" },
+  { name: "stripe_fee_formatted", label: "Stripe Fee", category: "Payment" },
+  { name: "net_amount_formatted", label: "Net to Bank", category: "Payment" },
+  { name: "failure_reason", label: "Failure Reason", category: "Payment" },
+  { name: "refund_amount_formatted", label: "Refund Amount", category: "Payment" },
+  { name: "refund_reason", label: "Refund Reason", category: "Payment" },
+  { name: "refunded_at_formatted", label: "Refund Date", category: "Payment" },
+  { name: "refunded_by_name", label: "Refunded By", category: "Payment" },
+  { name: "job_link", label: "Job Link (internal)", category: "Payment" },
+];
+
 const INVOICE_ONLY: PaymentMergeFieldDefinition[] = [
   { name: "invoice_number", label: "Invoice Number", category: "Invoice" },
   { name: "invoice_total_formatted", label: "Invoice Total", category: "Invoice" },
@@ -39,6 +57,7 @@ const INVOICE_ONLY: PaymentMergeFieldDefinition[] = [
 
 export const PAYMENT_MERGE_FIELDS: PaymentMergeFieldDefinition[] = [
   ...PAYMENT_ONLY,
+  ...PAYMENT_EXTENDED,
   ...INVOICE_ONLY,
 ];
 
@@ -98,6 +117,29 @@ interface StripeConnectionFees {
   card_fee_percent: number;
 }
 
+// Runtime-only merge-field inputs — populated by the webhook handler or
+// refund flow from a Stripe event payload. None of these are stored on
+// payment_requests directly.
+export interface PaymentMergeExtras {
+  paid_at?: string | null;
+  payer_name?: string | null;
+  payer_email?: string | null;
+  payment_method_type?: "card" | "us_bank_account" | null;
+  card_last4?: string | null;
+  card_brand?: string | null;
+  bank_name?: string | null;
+  transaction_id?: string | null;
+  stripe_receipt_url?: string | null;
+  stripe_fee_amount?: number | null;
+  net_amount?: number | null;
+  failure_reason?: string | null;
+  refund_amount?: number | null;
+  refund_reason?: string | null;
+  refunded_at?: string | null;
+  refunded_by_name?: string | null;
+  job_link?: string | null;
+}
+
 interface InvoiceRow {
   id: string;
   invoice_number: string | null;
@@ -111,7 +153,11 @@ interface InvoiceRow {
 export async function buildPaymentMergeFieldValues(
   supabase: SupabaseClient,
   pr: PaymentRequestLite,
-  opts?: { appUrl?: string; stripeConnection?: StripeConnectionFees | null },
+  opts?: {
+    appUrl?: string;
+    stripeConnection?: StripeConnectionFees | null;
+    extras?: PaymentMergeExtras;
+  },
 ): Promise<Record<string, string | null>> {
   const values = await buildMergeFieldValues(supabase, pr.job_id);
 
@@ -178,6 +224,49 @@ export async function buildPaymentMergeFieldValues(
     }
   }
 
+  const extras = opts?.extras ?? {};
+
+  values.paid_at = extras.paid_at ?? null;
+  values.paid_at_formatted = formatDate(extras.paid_at ?? null);
+  values.payer_name = extras.payer_name ?? null;
+  values.payer_email = extras.payer_email ?? null;
+
+  values.payment_method_display = (() => {
+    if (extras.payment_method_type === "us_bank_account") {
+      return extras.bank_name
+        ? `Bank transfer (${extras.bank_name})`
+        : "Bank transfer (ACH)";
+    }
+    if (extras.payment_method_type === "card") {
+      const brand = extras.card_brand
+        ? extras.card_brand
+            .split("_")
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(" ")
+        : "Card";
+      return extras.card_last4 ? `${brand} ending in ${extras.card_last4}` : brand;
+    }
+    return null;
+  })();
+
+  values.transaction_id = extras.transaction_id
+    ? extras.transaction_id.length > 12
+      ? `…${extras.transaction_id.slice(-12)}`
+      : extras.transaction_id
+    : null;
+  values.stripe_receipt_url = extras.stripe_receipt_url ?? null;
+  values.stripe_fee_formatted = formatUsd(extras.stripe_fee_amount ?? null);
+  values.net_amount_formatted = formatUsd(extras.net_amount ?? null);
+
+  values.failure_reason = extras.failure_reason ?? null;
+
+  values.refund_amount_formatted = formatUsd(extras.refund_amount ?? null);
+  values.refund_reason = extras.refund_reason ?? null;
+  values.refunded_at_formatted = formatDate(extras.refunded_at ?? null);
+  values.refunded_by_name = extras.refunded_by_name ?? null;
+
+  values.job_link = extras.job_link ?? null;
+
   return values;
 }
 
@@ -200,6 +289,7 @@ export async function resolvePaymentEmailTemplate(
   opts?: {
     appUrl?: string;
     stripeConnection?: StripeConnectionFees | null;
+    extras?: PaymentMergeExtras;
   },
 ): Promise<{ subject: string; html: string; unresolvedFields: string[] }> {
   const values = await buildPaymentMergeFieldValues(supabase, pr, opts);

@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { CreditCard, Landmark } from "lucide-react";
 import { PaymentRequestModal } from "./payment-request-modal";
+import { RefundModal } from "./refund-modal";
+import { QbSyncBadge } from "./qb-sync-badge";
 
 interface PaymentRequestRow {
   id: string;
@@ -15,6 +18,16 @@ interface PaymentRequestRow {
   created_at: string;
   link_expires_at: string | null;
   link_token: string | null;
+  paid_at: string | null;
+  payer_name: string | null;
+  payment_method_type: "card" | "us_bank_account" | null;
+  receipt_pdf_path: string | null;
+  quickbooks_sync_status:
+    | "pending"
+    | "synced"
+    | "failed"
+    | "not_applicable"
+    | null;
 }
 
 const STATUS_STYLES: Record<string, { label: string; className: string }> = {
@@ -61,6 +74,10 @@ export function OnlinePaymentRequestsSubsection({
   const [depositOpen, setDepositOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [refundTarget, setRefundTarget] = useState<PaymentRequestRow | null>(
+    null,
+  );
+  const [refundRemaining, setRefundRemaining] = useState(0);
 
   const refresh = async () => {
     const res = await fetch(`/api/payment-requests?job_id=${encodeURIComponent(jobId)}`);
@@ -129,6 +146,48 @@ export function OnlinePaymentRequestsSubsection({
     window.open(`/pay/${tokenValue}`, "_blank", "noopener,noreferrer");
   };
 
+  const onViewReceipt = async (id: string) => {
+    const res = await fetch(`/api/payment-requests/${id}/receipt-url`);
+    if (!res.ok) {
+      toast.error(
+        "Receipt PDF not available yet — it generates after Stripe confirms the payment.",
+      );
+      return;
+    }
+    const { url } = (await res.json()) as { url: string };
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const onRetryQb = async (prId: string) => {
+    const rfRes = await fetch(`/api/payment-requests/${prId}/refundable`);
+    if (!rfRes.ok) {
+      toast.error("Cannot locate linked payment.");
+      return;
+    }
+    const { payment_id } = (await rfRes.json()) as { payment_id: string };
+    const res = await fetch(`/api/payments/${payment_id}/retry-qb-sync`, {
+      method: "POST",
+    });
+    if (!res.ok) {
+      const { error } = (await res.json()) as { error?: string };
+      toast.error(error ?? "Retry failed");
+      return;
+    }
+    toast.success("Synced to QuickBooks");
+    await refresh();
+  };
+
+  const onOpenRefund = async (r: PaymentRequestRow) => {
+    const res = await fetch(`/api/payment-requests/${r.id}/refundable`);
+    if (!res.ok) {
+      toast.error("Cannot refund this payment.");
+      return;
+    }
+    const { remaining } = (await res.json()) as { remaining: number };
+    setRefundRemaining(remaining);
+    setRefundTarget(r);
+  };
+
   return (
     <div className="space-y-3 border-t pt-4">
       <h3 className="text-sm font-medium">Online Payment Requests</h3>
@@ -146,9 +205,29 @@ export function OnlinePaymentRequestsSubsection({
                 className="flex items-center justify-between gap-2 rounded border bg-card p-3"
               >
                 <div>
-                  <div className="font-medium">{r.title}</div>
+                  <div className="font-medium flex items-center gap-1">
+                    {(r.status === "paid" ||
+                      r.status === "partially_refunded") &&
+                      r.payment_method_type === "us_bank_account" && (
+                        <Landmark className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                    {(r.status === "paid" ||
+                      r.status === "partially_refunded") &&
+                      r.payment_method_type === "card" && (
+                        <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                    {r.title}
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     ${Number(r.amount).toFixed(2)} &middot; {r.request_type}
+                    {r.paid_at && (
+                      <>
+                        {" "}
+                        &middot; paid{" "}
+                        {new Date(r.paid_at).toLocaleDateString()}
+                      </>
+                    )}
+                    {r.payer_name && <> &middot; {r.payer_name}</>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -197,6 +276,35 @@ export function OnlinePaymentRequestsSubsection({
                       </Button>
                     </>
                   )}
+                  {(r.status === "paid" ||
+                    r.status === "partially_refunded") && (
+                    <>
+                      <QbSyncBadge status={r.quickbooks_sync_status} />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void onViewReceipt(r.id)}
+                      >
+                        View receipt
+                      </Button>
+                      {r.quickbooks_sync_status === "failed" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void onRetryQb(r.id)}
+                        >
+                          Retry QB sync
+                        </Button>
+                      )}
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => void onOpenRefund(r)}
+                      >
+                        Refund
+                      </Button>
+                    </>
+                  )}
                 </div>
               </li>
             );
@@ -218,6 +326,22 @@ export function OnlinePaymentRequestsSubsection({
         defaultRequestType="deposit"
         onCreated={() => void refresh()}
       />
+
+      {refundTarget && (
+        <RefundModal
+          open={Boolean(refundTarget)}
+          onOpenChange={(v) => {
+            if (!v) setRefundTarget(null);
+          }}
+          paymentRequestId={refundTarget.id}
+          paymentRequestTitle={refundTarget.title}
+          remainingRefundable={refundRemaining}
+          onRefunded={async () => {
+            setRefundTarget(null);
+            await refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

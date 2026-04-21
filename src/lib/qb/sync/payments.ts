@@ -84,12 +84,93 @@ export async function syncPayment(
   }
 
   if (!payment.invoice_id) {
-    // No invoice linkage — we don't sync free-standing payments in 16d.
-    return {
-      status: "synced",
-      payload: { CustomerRef: { value: "no_invoice" }, TotalAmt: 0, Line: [] },
-      reason: "no_invoice_linkage",
+    // 17c — for standalone deposits/retainers (no invoice linkage), post
+    // against a generic income account if configured via qb_mappings.
+    const { data: genericMappings } = await supabase
+      .from("qb_mappings")
+      .select("id, type, platform_value, qb_entity_id, qb_entity_name, created_at, updated_at")
+      .eq("type", "generic_income_account");
+    const incomeAccount = (genericMappings ?? []).find(
+      (m: QbMappingRow) => m.platform_value === "stripe_deposits",
+    );
+    if (!incomeAccount) {
+      return {
+        status: "deferred",
+        payload: {
+          CustomerRef: { value: "pending" },
+          TotalAmt: 0,
+          Line: [],
+        },
+        reason: "no_generic_income_mapping",
+      };
+    }
+
+    // Need a subcustomer for the job — same as the invoice path.
+    const { data: job } = await supabase
+      .from("jobs")
+      .select("id, qb_subcustomer_id")
+      .eq("id", payment.job_id)
+      .maybeSingle<JobRow>();
+    if (!job?.qb_subcustomer_id) {
+      return {
+        status: "deferred",
+        payload: {
+          CustomerRef: { value: "pending" },
+          TotalAmt: 0,
+          Line: [],
+        },
+        reason: "sub_customer_not_synced",
+      };
+    }
+
+    const { data: methodMappings } = await supabase
+      .from("qb_mappings")
+      .select("id, type, platform_value, qb_entity_id, qb_entity_name, created_at, updated_at")
+      .eq("type", "payment_method");
+    const depositAccount = (methodMappings ?? []).find(
+      (m: QbMappingRow) => m.platform_value === payment.method,
+    ) ?? null;
+    if (!depositAccount) {
+      const err = new Error(
+        `Payment method "${payment.method}" isn't mapped to a QB deposit account.`,
+      );
+      (err as Error & { code?: string }).code = "deposit_account_not_mapped";
+      throw err;
+    }
+
+    const payload: QbPaymentPayload = {
+      CustomerRef: { value: job.qb_subcustomer_id },
+      TotalAmt: Number(payment.amount),
+      Line: [
+        {
+          Amount: Number(payment.amount),
+          DetailType: "PaymentLineDetail",
+          PaymentLineDetail: {
+            DepositToAccountRef: { value: incomeAccount.qb_entity_id },
+          },
+        },
+      ],
+      DepositToAccountRef: { value: depositAccount.qb_entity_id },
+      TxnDate: toIsoDate(payment.received_date),
+      PrivateNote:
+        (payment.reference_number || payment.notes || "").slice(0, 4000) ||
+        "Standalone deposit (no invoice)",
     };
+
+    if (mode === "dry_run") {
+      return { status: "skipped_dry_run", payload };
+    }
+    if (!token) throw new Error("live sync requires a valid token");
+
+    if (payment.qb_payment_id) {
+      return { status: "synced", payload, qbEntityId: payment.qb_payment_id };
+    }
+    const created = await createPayment(token, payload);
+    await supabase
+      .from("payments")
+      .update({ qb_payment_id: created.id })
+      .eq("id", payment.id);
+    return { status: "synced", payload, qbEntityId: created.id };
   }
 
   const { data: invoice } = await supabase
