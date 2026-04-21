@@ -1632,7 +1632,10 @@ function extraMethodDisplay(extras: PaymentMergeExtras): string {
   }
   if (extras.payment_method_type === "card") {
     const brand = extras.card_brand
-      ? extras.card_brand.charAt(0).toUpperCase() + extras.card_brand.slice(1)
+      ? extras.card_brand
+          .split("_")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ")
       : "Card";
     return extras.card_last4 ? `${brand} ending in ${extras.card_last4}` : brand;
   }
