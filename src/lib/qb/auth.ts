@@ -1,9 +1,14 @@
 // Shared gate used by every /api/qb/* route (except the cron endpoint,
 // which authenticates via CRON_SECRET). Returns the authorized user id or
 // an error response ready to be returned straight from the route handler.
+//
+// 18a: admin-role check now reads user_organizations.role scoped to the
+// active org. TODO(18b): replace getActiveOrganizationId() with the
+// session-sourced helper once the access-token hook ships.
 
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 export type RequireAdminResult =
   | { ok: true; userId: string }
@@ -19,12 +24,14 @@ export async function requireAdmin(
       response: NextResponse.json({ error: "not authenticated" }, { status: 401 }),
     };
   }
-  const { data: profile } = await supabase
-    .from("user_profiles")
+  const orgId = getActiveOrganizationId();
+  const { data: membership } = await supabase
+    .from("user_organizations")
     .select("role")
-    .eq("id", user.id)
+    .eq("user_id", user.id)
+    .eq("organization_id", orgId)
     .maybeSingle<{ role: string }>();
-  if (profile?.role !== "admin") {
+  if (membership?.role !== "admin") {
     return {
       ok: false,
       response: NextResponse.json({ error: "admin only" }, { status: 403 }),

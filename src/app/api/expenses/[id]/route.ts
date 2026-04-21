@@ -1,29 +1,45 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 async function getCallerAndExpense(id: string) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, status: 401, error: "Not authenticated" };
 
-  const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).maybeSingle();
+  const orgId = getActiveOrganizationId();
+  const { data: membership } = await supabase
+    .from("user_organizations")
+    .select("id, role")
+    .eq("user_id", user.id)
+    .eq("organization_id", orgId)
+    .maybeSingle<{ id: string; role: string }>();
+
   const service = createServiceClient();
   const { data: expense } = await service.from("expenses")
     .select("id, submitted_by, receipt_path, thumbnail_path, activity_id")
-    .eq("id", id).maybeSingle();
+    .eq("id", id)
+    .eq("organization_id", orgId)
+    .maybeSingle();
   if (!expense) return { ok: false as const, status: 404, error: "Expense not found" };
 
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = membership?.role === "admin";
   const isSubmitter = expense.submitted_by === user.id;
   if (!isAdmin && !isSubmitter) return { ok: false as const, status: 403, error: "Permission denied" };
 
   // Also require log_expenses (defence in depth — submitters were granted this by role, but double check).
-  const { data: perm } = await supabase.from("user_permissions")
-    .select("granted").eq("user_id", user.id).eq("permission_key", "log_expenses").maybeSingle();
-  if (!isAdmin && !perm?.granted) return { ok: false as const, status: 403, error: "Permission denied" };
+  if (!isAdmin) {
+    const { data: perm } = await supabase
+      .from("user_organization_permissions")
+      .select("granted")
+      .eq("user_organization_id", membership?.id ?? "")
+      .eq("permission_key", "log_expenses")
+      .maybeSingle();
+    if (!perm?.granted) return { ok: false as const, status: 403, error: "Permission denied" };
+  }
 
-  return { ok: true as const, user, profile, expense, service };
+  return { ok: true as const, user, expense, service };
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

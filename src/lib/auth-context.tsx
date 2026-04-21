@@ -4,6 +4,13 @@ import { createContext, useContext, useEffect, useState, useCallback, type React
 import { createClient } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 
+// role lives on user_organizations (scoped to a specific membership) since
+// build48. UserProfile exposes it as a flat string for display — sourced
+// from the active-org membership. When workspace switching lands in 18c,
+// this resolver becomes dynamic.
+// TODO(18b): replace AAA_ORGANIZATION_ID with session-sourced org.
+const AAA_ORGANIZATION_ID = "a0000000-0000-4000-8000-000000000001";
+
 interface UserProfile {
   id: string;
   full_name: string;
@@ -35,15 +42,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadProfile = useCallback(async (userId: string) => {
     const supabase = createClient();
 
-    // Fetch profile
+    // Fetch profile (no role column after build48).
     const { data: profileData } = await supabase
       .from("user_profiles")
-      .select("*")
+      .select("id, full_name, phone, profile_photo_path, is_active, last_login_at")
       .eq("id", userId)
       .maybeSingle();
 
+    // Fetch role + membership id from user_organizations scoped to active org.
+    const { data: membership } = await supabase
+      .from("user_organizations")
+      .select("id, role")
+      .eq("user_id", userId)
+      .eq("organization_id", AAA_ORGANIZATION_ID)
+      .maybeSingle<{ id: string; role: string }>();
+
     if (profileData) {
-      setProfile(profileData as UserProfile);
+      setProfile({ ...(profileData as Omit<UserProfile, "role">), role: membership?.role ?? "crew_member" });
 
       // Update last_login_at
       await supabase
@@ -52,18 +67,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq("id", userId);
     }
 
-    // Fetch permissions
-    const { data: permsData } = await supabase
-      .from("user_permissions")
-      .select("permission_key, granted")
-      .eq("user_id", userId);
+    // Fetch permissions from user_organization_permissions by membership id.
+    if (membership) {
+      const { data: permsData } = await supabase
+        .from("user_organization_permissions")
+        .select("permission_key, granted")
+        .eq("user_organization_id", membership.id);
 
-    if (permsData) {
-      const permsMap: Record<string, boolean> = {};
-      for (const p of permsData) {
-        permsMap[p.permission_key] = p.granted;
+      if (permsData) {
+        const permsMap: Record<string, boolean> = {};
+        for (const p of permsData) {
+          permsMap[p.permission_key] = p.granted;
+        }
+        setPermissions(permsMap);
       }
-      setPermissions(permsMap);
     }
   }, []);
 

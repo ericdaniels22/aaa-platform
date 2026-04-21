@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 interface CreatePayload {
   job_id: string;
@@ -19,12 +20,28 @@ async function requireLogExpenses() {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, response: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
-  const { data: profile } = await supabase.from("user_profiles").select("role, full_name").eq("id", user.id).maybeSingle();
+
+  const { data: profile } = await supabase.from("user_profiles").select("full_name").eq("id", user.id).maybeSingle();
   if (!profile) return { ok: false as const, response: NextResponse.json({ error: "Profile not found" }, { status: 403 }) };
-  if (profile.role === "admin") return { ok: true as const, userId: user.id, fullName: profile.full_name, role: profile.role };
-  const { data: perm } = await supabase.from("user_permissions")
-    .select("granted").eq("user_id", user.id).eq("permission_key", "log_expenses").maybeSingle();
-  if (perm?.granted) return { ok: true as const, userId: user.id, fullName: profile.full_name, role: profile.role };
+
+  const orgId = getActiveOrganizationId();
+  const { data: membership } = await supabase
+    .from("user_organizations")
+    .select("id, role")
+    .eq("user_id", user.id)
+    .eq("organization_id", orgId)
+    .maybeSingle<{ id: string; role: string }>();
+
+  if (membership?.role === "admin") return { ok: true as const, userId: user.id, fullName: profile.full_name, role: membership.role };
+  if (!membership) return { ok: false as const, response: NextResponse.json({ error: "Permission denied" }, { status: 403 }) };
+
+  const { data: perm } = await supabase
+    .from("user_organization_permissions")
+    .select("granted")
+    .eq("user_organization_id", membership.id)
+    .eq("permission_key", "log_expenses")
+    .maybeSingle();
+  if (perm?.granted) return { ok: true as const, userId: user.id, fullName: profile.full_name, role: membership.role };
   return { ok: false as const, response: NextResponse.json({ error: "Permission denied" }, { status: 403 }) };
 }
 

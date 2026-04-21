@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
-// PATCH /api/settings/users/[id] — update user profile
+// PATCH /api/settings/users/[id] — update user profile. Role updates land
+// on user_organizations (scoped to the active org) not user_profiles, since
+// build48 dropped user_profiles.role.
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -19,18 +22,27 @@ export async function PATCH(
     );
   }
 
-  const updates: Record<string, unknown> = {};
-  if (body.full_name !== undefined) updates.full_name = body.full_name;
-  if (body.phone !== undefined) updates.phone = body.phone || null;
-  if (body.role !== undefined) updates.role = body.role;
-  if (body.is_active !== undefined) updates.is_active = body.is_active;
+  const profileUpdates: Record<string, unknown> = {};
+  if (body.full_name !== undefined) profileUpdates.full_name = body.full_name;
+  if (body.phone !== undefined) profileUpdates.phone = body.phone || null;
+  if (body.is_active !== undefined) profileUpdates.is_active = body.is_active;
 
-  if (Object.keys(updates).length > 0) {
+  if (Object.keys(profileUpdates).length > 0) {
     const { error } = await service
       .from("user_profiles")
-      .update(updates)
+      .update(profileUpdates)
       .eq("id", id);
 
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (body.role !== undefined) {
+    const orgId = getActiveOrganizationId();
+    const { error } = await service
+      .from("user_organizations")
+      .update({ role: body.role })
+      .eq("user_id", id)
+      .eq("organization_id", orgId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

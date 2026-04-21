@@ -280,12 +280,135 @@ create policy qb_connection_admin
   );
 
 -- ---------------------------------------------------------------------------
--- 5. Drop user_profiles.role — the role now lives on user_organizations.
+-- 5. Rewrite DB functions that reference user_profiles.role or write to
+--    user_permissions. These all fire from triggers or RPCs and would break
+--    otherwise.
+-- ---------------------------------------------------------------------------
+
+-- handle_new_user: fires on auth.users insert. Drop the role set — role
+-- is now per-membership, and new users don't have a membership at signup.
+-- The caller (invite flow) is responsible for creating the user_organizations
+-- row with the correct role.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  insert into public.user_profiles (id, full_name)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'full_name', new.email)
+  );
+  return new;
+end;
+$$;
+
+-- notify_admins: now reads role from user_organizations (scoped to a
+-- job's org) and writes notifications with organization_id set. p_job_id
+-- is required — without it we can't determine which tenant's admins to
+-- notify. Keep the default NULL parameter for signature compat; raise
+-- if called without a job_id post-18a.
+create or replace function public.notify_admins(
+  p_type text,
+  p_title text,
+  p_body text default null,
+  p_job_id uuid default null
+)
+returns void
+language plpgsql
+as $$
+declare
+  v_org_id uuid;
+begin
+  if p_job_id is null then
+    raise exception 'notify_admins: p_job_id is required post-18a (needed to scope to an org)';
+  end if;
+
+  select organization_id into v_org_id from public.jobs where id = p_job_id;
+  if v_org_id is null then
+    raise exception 'notify_admins: job % has no organization_id', p_job_id;
+  end if;
+
+  insert into public.notifications (organization_id, user_id, type, title, body, job_id)
+  select v_org_id, uo.user_id, p_type, p_title, p_body, p_job_id
+    from public.user_organizations uo
+    join public.user_profiles up on up.id = uo.user_id
+   where uo.organization_id = v_org_id
+     and uo.role = 'admin'
+     and up.is_active = true;
+end;
+$$;
+
+-- set_default_permissions: now writes to BOTH user_permissions (legacy,
+-- kept during 18a for revert safety) and user_organization_permissions
+-- (the new source of truth). Requires p_user_organization_id so the
+-- writes can land on the correct membership.
+create or replace function public.set_default_permissions(p_user_organization_id uuid, p_role text)
+returns void
+language plpgsql
+as $$
+declare
+  all_perms text[] := array[
+    'view_jobs', 'edit_jobs', 'create_jobs',
+    'log_activities', 'upload_photos', 'edit_photos',
+    'view_billing', 'record_payments',
+    'view_email', 'send_email',
+    'manage_reports', 'access_settings',
+    'log_expenses', 'manage_vendors', 'manage_contract_templates', 'manage_expense_categories',
+    'view_accounting', 'manage_accounting'
+  ];
+  admin_perms text[] := all_perms;
+  lead_perms text[] := array[
+    'view_jobs', 'edit_jobs', 'create_jobs',
+    'log_activities', 'upload_photos', 'edit_photos',
+    'view_billing', 'record_payments',
+    'view_email', 'send_email',
+    'manage_reports',
+    'log_expenses'
+  ];
+  member_perms text[] := array[
+    'view_jobs', 'log_activities', 'upload_photos',
+    'log_expenses'
+  ];
+  granted_perms text[];
+  perm text;
+  v_user_id uuid;
+begin
+  select user_id into v_user_id from public.user_organizations where id = p_user_organization_id;
+  if v_user_id is null then
+    raise exception 'set_default_permissions: user_organization % not found', p_user_organization_id;
+  end if;
+
+  if p_role = 'admin' then
+    granted_perms := admin_perms;
+  elsif p_role = 'crew_lead' then
+    granted_perms := lead_perms;
+  else
+    granted_perms := member_perms;
+  end if;
+
+  foreach perm in array all_perms loop
+    -- New source of truth
+    insert into public.user_organization_permissions (user_organization_id, permission_key, granted)
+    values (p_user_organization_id, perm, perm = any(granted_perms))
+    on conflict (user_organization_id, permission_key) do update set granted = excluded.granted;
+
+    -- Legacy table — kept in sync during 18a until the deprecation cleanup migration drops it.
+    insert into public.user_permissions (user_id, permission_key, granted)
+    values (v_user_id, perm, perm = any(granted_perms))
+    on conflict (user_id, permission_key) do update set granted = excluded.granted;
+  end loop;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 6. Drop user_profiles.role — the role now lives on user_organizations.
 -- ---------------------------------------------------------------------------
 alter table public.user_profiles drop column if exists role;
 
 -- ---------------------------------------------------------------------------
--- 6. Deprecate (but do NOT drop) user_permissions. Dropping the table is a
+-- 7. Deprecate (but do NOT drop) user_permissions. Dropping the table is a
 --    follow-up cleanup migration after the code sweep ships — keeps revert
 --    safe during rollout.
 -- ---------------------------------------------------------------------------

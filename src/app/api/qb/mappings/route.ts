@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
 import { requireAdmin } from "@/lib/qb/auth";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import type { QbMappingType } from "@/lib/qb/types";
 
 // GET /api/qb/mappings?type=... — all mappings, or one type.
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
   let query = service
     .from("qb_mappings")
     .select("*")
+    .eq("organization_id", getActiveOrganizationId())
     .order("platform_value", { ascending: true });
   if (type) query = query.eq("type", type);
   const { data, error } = await query;
@@ -48,15 +50,18 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "type and mappings required" }, { status: 400 });
   }
 
+  const orgId = getActiveOrganizationId();
   const service = createServiceClient();
   const { error: delErr } = await service
     .from("qb_mappings")
     .delete()
-    .eq("type", body.type);
+    .eq("type", body.type)
+    .eq("organization_id", orgId);
   if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
 
   if (body.mappings.length > 0) {
     const rows = body.mappings.map((m) => ({
+      organization_id: orgId,
       type: body.type,
       platform_value: m.platform_value,
       qb_entity_id: m.qb_entity_id,

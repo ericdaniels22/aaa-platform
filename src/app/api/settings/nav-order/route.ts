@@ -30,14 +30,18 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // Admin check (defense-in-depth; RLS also enforces this)
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
+  // Admin check (defense-in-depth; RLS also enforces this). nav_items is a
+  // product-level table, so we accept admin in ANY org the user belongs to
+  // (the same check the updated build48 policy uses).
+  const { data: anyAdminMembership } = await supabase
+    .from("user_organizations")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("role", "admin")
+    .limit(1)
+    .maybeSingle<{ id: string }>();
 
-  if (profile?.role !== "admin") {
+  if (!anyAdminMembership) {
     return NextResponse.json(
       { error: "Admin access required" },
       { status: 403 }

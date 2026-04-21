@@ -212,9 +212,155 @@ create index if not exists idx_knowledge_documents_organization_id on public.kno
 alter table public.knowledge_chunks          add constraint fk_knowledge_chunks_organization        foreign key (organization_id) references public.organizations(id) on delete restrict;
 create index if not exists idx_knowledge_chunks_organization_id on public.knowledge_chunks(organization_id);
 
+-- ---------------------------------------------------------------------------
+-- Update RPC functions that INSERT into bucket-A/B tables. These would
+-- fail the new NOT NULL constraint otherwise. The RPCs derive
+-- organization_id from their existing p_job_id parameter (jobs.organization_id
+-- is now NOT NULL + FK'd).
+-- ---------------------------------------------------------------------------
+
+create or replace function public.create_expense_with_activity(
+  p_job_id uuid, p_vendor_id uuid, p_vendor_name text, p_category_id uuid,
+  p_amount numeric, p_expense_date date, p_payment_method text, p_description text,
+  p_receipt_path text, p_thumbnail_path text, p_submitted_by uuid, p_submitter_name text
+)
+returns uuid
+language plpgsql
+as $$
+declare
+  v_expense_id uuid;
+  v_activity_id uuid;
+  v_category_label text;
+  v_activity_title text;
+  v_activity_description text;
+  v_org_id uuid;
+begin
+  select organization_id into v_org_id from public.jobs where id = p_job_id;
+  if v_org_id is null then
+    raise exception 'create_expense_with_activity: job % has no organization_id', p_job_id;
+  end if;
+
+  select display_label into v_category_label
+    from public.expense_categories where id = p_category_id;
+
+  v_activity_title := 'Logged expense: ' || p_vendor_name || ' — $' || to_char(p_amount, 'FM999,999,990.00');
+  v_activity_description := coalesce(v_category_label, 'Expense');
+  if p_receipt_path is not null then
+    v_activity_description := v_activity_description || ' · receipt attached';
+  end if;
+
+  insert into public.job_activities (organization_id, job_id, activity_type, title, description, author)
+    values (v_org_id, p_job_id, 'expense', v_activity_title, v_activity_description, p_submitter_name)
+    returning id into v_activity_id;
+
+  insert into public.expenses (
+    organization_id, job_id, vendor_id, vendor_name, category_id, amount, expense_date,
+    payment_method, description, receipt_path, thumbnail_path,
+    submitted_by, submitter_name, activity_id
+  ) values (
+    v_org_id, p_job_id, p_vendor_id, p_vendor_name, p_category_id, p_amount, p_expense_date,
+    p_payment_method, p_description, p_receipt_path, p_thumbnail_path,
+    p_submitted_by, p_submitter_name, v_activity_id
+  ) returning id into v_expense_id;
+
+  return v_expense_id;
+end;
+$$;
+
+create or replace function public.create_contract_draft(
+  p_contract_id uuid, p_signer_id uuid, p_job_id uuid, p_template_id uuid, p_template_version integer,
+  p_title text, p_filled_content_html text, p_filled_content_hash text,
+  p_link_token text, p_link_expires_at timestamptz,
+  p_signer_order integer, p_signer_role_label text, p_signer_name text, p_signer_email text,
+  p_sent_by uuid
+)
+returns uuid
+language plpgsql
+as $$
+declare
+  v_org_id uuid;
+begin
+  select organization_id into v_org_id from public.jobs where id = p_job_id;
+  if v_org_id is null then
+    raise exception 'create_contract_draft: job % has no organization_id', p_job_id;
+  end if;
+
+  insert into public.contracts (
+    organization_id, id, job_id, template_id, template_version, title, status,
+    filled_content_html, filled_content_hash,
+    link_token, link_expires_at, sent_by
+  ) values (
+    v_org_id, p_contract_id, p_job_id, p_template_id, p_template_version, p_title, 'draft',
+    p_filled_content_html, p_filled_content_hash,
+    p_link_token, p_link_expires_at, p_sent_by
+  );
+
+  insert into public.contract_signers (
+    organization_id, id, contract_id, signer_order, role_label, name, email
+  ) values (
+    v_org_id, p_signer_id, p_contract_id, p_signer_order, p_signer_role_label,
+    p_signer_name, p_signer_email
+  );
+
+  insert into public.contract_events (organization_id, contract_id, signer_id, event_type)
+  values (v_org_id, p_contract_id, p_signer_id, 'created');
+
+  return p_contract_id;
+end;
+$$;
+
+create or replace function public.create_contract_with_signers(
+  p_contract_id uuid, p_job_id uuid, p_template_id uuid, p_template_version integer,
+  p_title text, p_filled_content_html text, p_filled_content_hash text,
+  p_link_token text, p_link_expires_at timestamptz, p_sent_by uuid, p_signers jsonb
+)
+returns uuid
+language plpgsql
+as $$
+declare
+  signer jsonb;
+  v_org_id uuid;
+begin
+  select organization_id into v_org_id from public.jobs where id = p_job_id;
+  if v_org_id is null then
+    raise exception 'create_contract_with_signers: job % has no organization_id', p_job_id;
+  end if;
+
+  insert into public.contracts (
+    organization_id, id, job_id, template_id, template_version, title, status,
+    filled_content_html, filled_content_hash,
+    link_token, link_expires_at, sent_by
+  ) values (
+    v_org_id, p_contract_id, p_job_id, p_template_id, p_template_version, p_title, 'draft',
+    p_filled_content_html, p_filled_content_hash,
+    p_link_token, p_link_expires_at, p_sent_by
+  );
+
+  for signer in select * from jsonb_array_elements(p_signers) loop
+    insert into public.contract_signers (
+      organization_id, id, contract_id, signer_order, role_label, name, email
+    ) values (
+      v_org_id,
+      (signer->>'id')::uuid,
+      p_contract_id,
+      (signer->>'signer_order')::integer,
+      signer->>'role_label',
+      signer->>'name',
+      signer->>'email'
+    );
+  end loop;
+
+  insert into public.contract_events (organization_id, contract_id, event_type)
+  values (v_org_id, p_contract_id, 'created');
+
+  return p_contract_id;
+end;
+$$;
+
 -- ROLLBACK ---
 -- Drop FKs, drop indexes, drop NOT NULL. Column + data preserved.
 -- alter table public.contacts                  drop constraint if exists fk_contacts_organization;
 -- drop index if exists public.idx_contacts_organization_id;
 -- alter table public.contacts                  alter column organization_id drop not null;
 -- (repeat pattern for every table above)
+-- Restore pre-18a RPC bodies (omitting organization_id inserts).

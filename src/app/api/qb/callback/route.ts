@@ -6,6 +6,7 @@ import { encrypt } from "@/lib/encryption";
 import { createOAuthClient } from "@/lib/qb/oauth";
 import { fetchCompanyName } from "@/lib/qb/client";
 import type { QbEnvironment } from "@/lib/qb/config";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 function settingsUrl(request: Request, path: string, qs?: Record<string, string>) {
   const origin = new URL(request.url).origin;
@@ -53,12 +54,13 @@ export async function GET(request: Request) {
       settingsUrl(request, "/login"),
     );
   }
-  const { data: profile } = await supabase
-    .from("user_profiles")
+  const { data: membership } = await supabase
+    .from("user_organizations")
     .select("role")
-    .eq("id", user.id)
+    .eq("user_id", user.id)
+    .eq("organization_id", getActiveOrganizationId())
     .maybeSingle<{ role: string }>();
-  if (profile?.role !== "admin") {
+  if (membership?.role !== "admin") {
     return NextResponse.redirect(
       settingsUrl(request, "/settings/accounting", { oauth_error: "forbidden" }),
     );
@@ -100,6 +102,7 @@ export async function GET(request: Request) {
   // authenticated + authorized the user above).
   const service = createServiceClient();
   const { error: upsertErr } = await service.from("qb_connection").insert({
+    organization_id: getActiveOrganizationId(),
     realm_id: realmId,
     company_name: companyName,
     access_token_encrypted: encrypt(accessToken),
