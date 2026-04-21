@@ -233,3 +233,14 @@ alter table qb_mappings add constraint qb_mappings_type_check
     'damage_type','payment_method','expense_category',
     'generic_income_account','stripe_fee_account'
   ));
+
+-- ---------------------------------------------------------------------------
+-- 11. Prevent duplicate Stripe-sourced payment rows. If the Task 13 handler
+--     races (e.g., Stripe delivers the same PI success under two different
+--     event IDs, or the optimistic-concurrency guard misses), the UNIQUE
+--     constraint throws 23505 on the second insert, which the handler
+--     catches via releaseEvent.
+-- ---------------------------------------------------------------------------
+create unique index if not exists idx_payments_stripe_payment_intent_unique
+  on payments(stripe_payment_intent_id)
+  where stripe_payment_intent_id is not null;

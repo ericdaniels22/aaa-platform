@@ -162,6 +162,14 @@ function formatDate(iso: string | null): string {
   }
 }
 
+// StandardFonts.Helvetica is WinAnsi-encoded. Non-Latin characters throw
+// at drawText time. Replace anything outside WinAnsi with "?" so the
+// receipt renders even when a payer name contains e.g. CJK or emoji.
+function winAnsiSafe(s: string | null | undefined): string {
+  if (!s) return "";
+  return s.replace(/[^\x00-\xff]/g, "?");
+}
+
 export async function generateReceiptPdf(
   supabase: SupabaseClient,
   input: GenerateReceiptPdfInput,
@@ -211,7 +219,7 @@ export async function generateReceiptPdf(
     }
   }
 
-  const receiptNumber = `#${pr.id.slice(0, 8).toUpperCase()}`;
+  const receiptNumber = winAnsiSafe(`#${pr.id.slice(0, 8).toUpperCase()}`);
   page.drawText("RECEIPT", {
     x: width - marginX - bold.widthOfTextAtSize("RECEIPT", 24),
     y: cursorY - 18,
@@ -226,7 +234,7 @@ export async function generateReceiptPdf(
     font,
     color: mutedColor,
   });
-  const dateStr = formatDate(pr.paid_at);
+  const dateStr = winAnsiSafe(formatDate(pr.paid_at));
   page.drawText(dateStr, {
     x: width - marginX - font.widthOfTextAtSize(dateStr, 10),
     y: cursorY - 50,
@@ -249,7 +257,7 @@ export async function generateReceiptPdf(
     [company.phone, company.email].filter(Boolean).join(" • "),
     company.license ? `License: ${company.license}` : "",
   ].filter(Boolean);
-  for (const line of companyLines) {
+  for (const line of companyLines.map(winAnsiSafe)) {
     page.drawText(line, {
       x: marginX,
       y: cursorY,
@@ -275,7 +283,7 @@ export async function generateReceiptPdf(
     `Job: ${job.job_number ?? "—"} — ${pr.title}`,
     job.property_address ?? "",
   ].filter(Boolean);
-  for (const line of paidByLines) {
+  for (const line of paidByLines.map(winAnsiSafe)) {
     page.drawText(line, {
       x: marginX,
       y: cursorY,
@@ -316,14 +324,14 @@ export async function generateReceiptPdf(
   const totalPaid =
     pr.total_charged != null ? Number(pr.total_charged) : baseAmount;
 
-  page.drawText(pr.title, {
+  page.drawText(winAnsiSafe(pr.title), {
     x: marginX,
     y: cursorY,
     size: 11,
     font,
     color: textColor,
   });
-  page.drawText(formatUsd(baseAmount) ?? "", {
+  page.drawText(winAnsiSafe(formatUsd(baseAmount) ?? ""), {
     x: width - marginX - 80,
     y: cursorY,
     size: 11,
@@ -340,7 +348,7 @@ export async function generateReceiptPdf(
       font,
       color: textColor,
     });
-    page.drawText(formatUsd(feeAmount) ?? "", {
+    page.drawText(winAnsiSafe(formatUsd(feeAmount) ?? ""), {
       x: width - marginX - 80,
       y: cursorY,
       size: 11,
@@ -365,7 +373,7 @@ export async function generateReceiptPdf(
     font: bold,
     color: textColor,
   });
-  page.drawText(formatUsd(totalPaid) ?? "", {
+  page.drawText(winAnsiSafe(formatUsd(totalPaid) ?? ""), {
     x: width - marginX - 80,
     y: cursorY,
     size: 13,
@@ -386,7 +394,7 @@ export async function generateReceiptPdf(
   if (input.netAmount != null) {
     metaLines.push(`Net deposited to bank: ${formatUsd(input.netAmount)}`);
   }
-  for (const line of metaLines) {
+  for (const line of metaLines.map(winAnsiSafe)) {
     page.drawText(line, {
       x: marginX,
       y: cursorY,
@@ -400,9 +408,11 @@ export async function generateReceiptPdf(
   if (invoice) {
     cursorY -= 14;
     page.drawText(
-      `Applied to invoice ${invoice.invoice_number ?? ""} (${formatUsd(
-        Number(invoice.total_amount),
-      )}).`,
+      winAnsiSafe(
+        `Applied to invoice ${invoice.invoice_number ?? ""} (${formatUsd(
+          Number(invoice.total_amount),
+        )}).`,
+      ),
       {
         x: marginX,
         y: cursorY,
@@ -430,7 +440,9 @@ export async function generateReceiptPdf(
   });
   if (pr.stripe_receipt_url) {
     page.drawText(
-      `A Stripe-issued receipt is also available at ${pr.stripe_receipt_url}`,
+      winAnsiSafe(
+        `A Stripe-issued receipt is also available at ${pr.stripe_receipt_url}`,
+      ),
       {
         x: marginX,
         y: footerY + 4,
