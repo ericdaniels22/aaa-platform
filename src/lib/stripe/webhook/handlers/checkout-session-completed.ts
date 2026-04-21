@@ -13,7 +13,7 @@ export async function handleCheckoutSessionCompleted(
     (session.metadata as Record<string, string> | null)?.payment_request_id ?? null;
   if (!paymentRequestId) {
     console.warn(
-      `[webhook] checkout.session.completed ${session.id} has no metadata.payment_request_id — skipping`,
+      `[stripe/webhook] checkout.session.completed ${session.id} has no metadata.payment_request_id — skipping`,
     );
     return { paymentRequestId: null };
   }

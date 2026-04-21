@@ -81,6 +81,29 @@ export async function POST(
     );
   }
 
+  // Guard against double-click: if there's already a pending refund on
+  // this payment, return it without creating a new Stripe refund.
+  const { data: existingPending } = await serviceSupabase
+    .from("refunds")
+    .select("id, stripe_refund_id, status")
+    .eq("payment_id", payment.id)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{
+      id: string;
+      stripe_refund_id: string | null;
+      status: string;
+    }>();
+  if (existingPending) {
+    return NextResponse.json({
+      refund_id: existingPending.id,
+      status: "pending",
+      stripe_refund_id: existingPending.stripe_refund_id,
+      note: "existing pending refund reused",
+    });
+  }
+
   // Find the acting user for refunded_by
   const {
     data: { user },

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase-api";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { requirePermission } from "@/lib/permissions-api";
 
 export const runtime = "nodejs";
 
@@ -8,11 +9,9 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await createServerSupabaseClient();
-  const { data: userData } = await auth.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const authSupabase = await createServerSupabaseClient();
+  const gate = await requirePermission(authSupabase, "view_billing");
+  if (!gate.ok) return gate.response;
   const { id } = await params;
 
   const supabase = createServiceClient();
