@@ -15,6 +15,18 @@ export interface PaymentEmailSettings {
   default_link_expiry_days: number;
   fee_disclosure_text: string | null;
   updated_at: string;
+  // Added in build41 (17c)
+  payment_receipt_subject_template: string;
+  payment_receipt_body_template: string;
+  refund_confirmation_subject_template: string;
+  refund_confirmation_body_template: string;
+  payment_received_internal_subject_template: string;
+  payment_received_internal_body_template: string;
+  payment_failed_internal_subject_template: string;
+  payment_failed_internal_body_template: string;
+  refund_issued_internal_subject_template: string;
+  refund_issued_internal_body_template: string;
+  internal_notification_to_email: string | null;
 }
 
 // Extras the payment merge-field resolver layers on top of the shared
@@ -81,4 +93,98 @@ export interface PaymentRequestRow {
   payer_name: string | null;
   created_at: string;
   updated_at: string;
+  // Added in build41 (17c)
+  stripe_receipt_url: string | null;
+  qb_payment_id: string | null;
+  quickbooks_sync_status: "pending" | "synced" | "failed" | "not_applicable" | null;
+  quickbooks_sync_attempted_at: string | null;
+  quickbooks_sync_error: string | null;
+}
+
+export interface PaymentRow {
+  id: string;
+  job_id: string;
+  invoice_id: string | null;
+  payment_request_id: string | null;
+  source: "insurance" | "homeowner" | "other" | "stripe";
+  method:
+    | "check"
+    | "ach"
+    | "venmo_zelle"
+    | "cash"
+    | "credit_card"
+    | "stripe_card"
+    | "stripe_ach";
+  amount: number;
+  reference_number: string | null;
+  payer_name: string | null;
+  status: "received" | "pending" | "due" | "refunded";
+  notes: string | null;
+  received_date: string | null;
+  created_at: string;
+  stripe_payment_intent_id: string | null;
+  stripe_charge_id: string | null;
+  stripe_fee_amount: number | null;
+  net_amount: number | null;
+  qb_payment_id: string | null;
+  quickbooks_sync_status: "pending" | "synced" | "failed" | "not_applicable" | null;
+  quickbooks_sync_attempted_at: string | null;
+  quickbooks_sync_error: string | null;
+}
+
+export interface RefundRow {
+  id: string;
+  payment_id: string;
+  payment_request_id: string | null;
+  amount: number;
+  reason: string | null;
+  include_reason_in_customer_email: boolean;
+  notify_customer: boolean;
+  stripe_refund_id: string | null;
+  status: "pending" | "succeeded" | "failed" | "canceled";
+  failure_reason: string | null;
+  refunded_by: string | null;
+  created_at: string;
+  refunded_at: string | null;
+}
+
+export interface StripeDisputeRow {
+  id: string;
+  payment_id: string | null;
+  payment_request_id: string | null;
+  stripe_dispute_id: string;
+  amount: number | null;
+  reason: string | null;
+  status:
+    | "warning_needs_response"
+    | "warning_under_review"
+    | "warning_closed"
+    | "needs_response"
+    | "under_review"
+    | "won"
+    | "lost"
+    | null;
+  evidence_due_by: string | null;
+  opened_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationRow {
+  id: string;
+  user_profile_id: string | null;
+  type:
+    | "payment_received"
+    | "payment_failed"
+    | "refund_issued"
+    | "dispute_opened"
+    | "qb_sync_failed";
+  title: string;
+  body: string | null;
+  href: string | null;
+  priority: "normal" | "high";
+  read_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
 }
