@@ -119,6 +119,7 @@ export async function POST(request: Request) {
     const { data: savedEmail, error: insertError } = await supabase
       .from("emails")
       .insert({
+        organization_id: account.organization_id,
         account_id: accountId,
         job_id: jobId || null,
         message_id: messageId,
@@ -152,9 +153,10 @@ export async function POST(request: Request) {
     // Move attachment files from drafts/ to sent email folder and save metadata
     if (savedEmail && attachments && attachments.length > 0) {
       for (const att of attachments) {
-        const newPath = `${accountId}/${savedEmail.id}/${att.filename}`;
+        const newPath = `${account.organization_id}/${accountId}/${savedEmail.id}/${att.filename}`;
         await supabase.storage.from("email-attachments").move(att.storage_path, newPath);
         await supabase.from("email_attachments").insert({
+          organization_id: account.organization_id,
           email_id: savedEmail.id,
           filename: att.filename,
           content_type: att.content_type,

@@ -619,9 +619,18 @@ async function toolLogActivity(
   const { supabase } = ctx;
   const activityType = resolveActivityType(input.activity_type);
 
+  // Derive org from the parent job so the activity lands in the right tenant.
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("organization_id")
+    .eq("id", input.job_id)
+    .maybeSingle<{ organization_id: string }>();
+  if (!job) return { error: "job not found" };
+
   const { data, error } = await supabase
     .from("job_activities")
     .insert({
+      organization_id: job.organization_id,
       job_id: input.job_id,
       activity_type: activityType,
       title: input.title,
@@ -732,9 +741,24 @@ async function toolCreateAlert(
 ) {
   const { supabase } = ctx;
 
+  // Alerts are tenant-scoped. If the alert references a job, use its org;
+  // otherwise fall back to the hardcoded 18a default (AAA).
+  let orgId: string;
+  if (input.job_id) {
+    const { data: job } = await supabase
+      .from("jobs")
+      .select("organization_id")
+      .eq("id", input.job_id)
+      .maybeSingle<{ organization_id: string }>();
+    orgId = job?.organization_id ?? "a0000000-0000-4000-8000-000000000001";
+  } else {
+    orgId = "a0000000-0000-4000-8000-000000000001";
+  }
+
   const { data, error } = await supabase
     .from("jarvis_alerts")
     .insert({
+      organization_id: orgId,
       user_id: ctx.userId,
       job_id: input.job_id || null,
       message: input.message,
