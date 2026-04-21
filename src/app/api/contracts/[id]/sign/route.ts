@@ -159,7 +159,10 @@ export async function POST(
     return NextResponse.json({ error: "Signature image is empty" }, { status: 400 });
   }
 
-  const path = `${contract.job_id}/${contract.id}/signatures/signer-${signer.signer_order}.png`;
+  // Org-prefixed path matches the post-18a rename layout (see
+  // scripts/migrate-storage-paths.ts). Derived from contract.organization_id
+  // so public-route signers land the PNG in the right tenant's folder.
+  const path = `${contract.organization_id}/${contract.job_id}/${contract.id}/signatures/signer-${signer.signer_order}.png`;
   const { error: upErr } = await supabase.storage
     .from("contracts")
     .upload(path, pngBytes, {
@@ -228,6 +231,7 @@ export async function POST(
       const { data: settings } = await supabase
         .from("contract_email_settings")
         .select("*")
+        .eq("organization_id", contract.organization_id)
         .limit(1)
         .maybeSingle<ContractEmailSettings>();
       if (!settings) throw new Error("contract_email_settings row missing");
@@ -306,11 +310,13 @@ export async function POST(
         supabase
           .from("contract_email_settings")
           .select("*")
+          .eq("organization_id", contract.organization_id)
           .limit(1)
           .maybeSingle<ContractEmailSettings>(),
         supabase
           .from("company_settings")
           .select("key, value")
+          .eq("organization_id", contract.organization_id)
           .in("key", ["company_name", "phone", "email", "address", "license"]),
         supabase
           .from("jobs")
@@ -348,7 +354,7 @@ export async function POST(
       },
     });
 
-    const pdfPath = `${contract.job_id}/${contract.id}.pdf`;
+    const pdfPath = `${contract.organization_id}/${contract.job_id}/${contract.id}.pdf`;
     const { error: pdfUpErr } = await supabase.storage
       .from("contracts")
       .upload(pdfPath, pdfBytes, {
