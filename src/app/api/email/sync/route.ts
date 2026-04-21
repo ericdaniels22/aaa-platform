@@ -5,6 +5,7 @@ import { ImapFlow, FetchMessageObject } from "imapflow";
 import { matchEmailToJob, type MatcherCache, type JobRow, type ContactRow } from "@/lib/email-matcher";
 import { simpleParser, Attachment } from "mailparser";
 import { categorizeEmail, type CategoryRule, type Category } from "@/lib/email-categorizer";
+import { emailAttachmentPath } from "@/lib/storage/paths";
 
 interface ParsedEmail {
   uid: number;
@@ -86,6 +87,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
+  // The account row carries the organization_id. Every row we insert during
+  // this sync (emails, email_attachments) is scoped to that org and every
+  // cross-table read is filtered by it.
+  const orgId: string = account.organization_id;
+
   let password: string;
   try {
     password = decrypt(account.encrypted_password);
@@ -117,6 +123,7 @@ export async function POST(request: NextRequest) {
     const { data: jobsData } = await supabase
       .from("jobs")
       .select("id, job_number, claim_number, property_address, contact_id, job_adjusters(contact_id)")
+      .eq("organization_id", orgId)
       .not("status", "eq", "cancelled");
 
     const jobs = (jobsData || []) as JobRow[];
@@ -136,6 +143,7 @@ export async function POST(request: NextRequest) {
       const { data: contactsData } = await supabase
         .from("contacts")
         .select("id, email")
+        .eq("organization_id", orgId)
         .in("id", Array.from(contactIds))
         .not("email", "is", null);
       contacts = (contactsData || []) as ContactRow[];
@@ -143,10 +151,12 @@ export async function POST(request: NextRequest) {
 
     const matcherCache: MatcherCache = { jobs, contacts };
 
-    // Pre-fetch category rules (once for entire sync)
+    // Pre-fetch category rules (once for entire sync). Bucket-D: include
+    // NULL-org defaults as well as this org's overrides.
     const { data: rulesData } = await supabase
       .from("category_rules")
       .select("match_type, match_value, category")
+      .or(`organization_id.is.null,organization_id.eq.${orgId}`)
       .eq("is_active", true);
     const categoryRules = (rulesData || []) as CategoryRule[];
 
@@ -457,6 +467,7 @@ export async function POST(request: NextRequest) {
             );
 
             return {
+              organization_id: orgId,
               account_id: accountId,
               job_id: match?.job_id || null,
               message_id: p.messageId,
@@ -505,7 +516,7 @@ export async function POST(request: NextRequest) {
 
               for (const att of p.parsedAttachments) {
                 try {
-                  const storagePath = `${accountId}/${emailId}/${att.filename || "attachment"}`;
+                  const storagePath = emailAttachmentPath(orgId, accountId, emailId, att.filename || "attachment");
                   await supabase.storage
                     .from("email-attachments")
                     .upload(storagePath, att.content, {
@@ -513,6 +524,7 @@ export async function POST(request: NextRequest) {
                       upsert: true,
                     });
                   await supabase.from("email_attachments").insert({
+                    organization_id: orgId,
                     email_id: emailId,
                     filename: att.filename || "attachment",
                     content_type: att.contentType || null,

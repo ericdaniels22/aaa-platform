@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { createApiClient } from "@/lib/supabase-api";
 import { encrypt } from "@/lib/encryption";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
-// GET /api/email/accounts — list all email accounts (passwords excluded)
+// GET /api/email/accounts — list accounts for the active org (passwords excluded)
 export async function GET() {
   const supabase = createApiClient();
   const { data, error } = await supabase
     .from("email_accounts")
     .select("id, label, email_address, display_name, provider, signature, imap_host, imap_port, smtp_host, smtp_port, username, is_active, is_default, last_synced_at, last_synced_uid, created_at, updated_at")
+    .eq("organization_id", getActiveOrganizationId())
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -16,7 +18,7 @@ export async function GET() {
   return NextResponse.json(data);
 }
 
-// POST /api/email/accounts — add a new email account
+// POST /api/email/accounts — add a new email account for the active org.
 export async function POST(request: Request) {
   const body = await request.json();
   const { label, email_address, display_name, provider, imap_host, imap_port, smtp_host, smtp_port, username, password } = body;
@@ -34,6 +36,7 @@ export async function POST(request: Request) {
   const { data, error } = await supabase
     .from("email_accounts")
     .insert({
+      organization_id: getActiveOrganizationId(),
       label: label || email_address,
       email_address,
       display_name: display_name || "AAA Disaster Recovery",

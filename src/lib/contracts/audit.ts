@@ -12,11 +12,25 @@ export interface EventArgs {
 
 // Best-effort audit writer. Errors are rethrown so callers can choose to
 // swallow (e.g. post-send non-critical paths) or surface to the caller.
+// Derives organization_id from the parent contract so post-build45 NOT NULL
+// is satisfied without requiring every call site to plumb an org argument.
 export async function writeContractEvent(
   supabase: SupabaseClient,
   args: EventArgs,
 ): Promise<void> {
+  const { data: contract, error: lookupErr } = await supabase
+    .from("contracts")
+    .select("organization_id")
+    .eq("id", args.contractId)
+    .maybeSingle<{ organization_id: string }>();
+  if (lookupErr || !contract) {
+    throw new Error(
+      `writeContractEvent: contract ${args.contractId} not found — cannot determine org`,
+    );
+  }
+
   const { error } = await supabase.from("contract_events").insert({
+    organization_id: contract.organization_id,
     contract_id: args.contractId,
     event_type: args.eventType,
     signer_id: args.signerId ?? null,

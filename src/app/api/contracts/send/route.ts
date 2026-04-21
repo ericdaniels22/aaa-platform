@@ -7,6 +7,7 @@ import { resolveEmailTemplate } from "@/lib/contracts/email-merge-fields";
 import { sendContractEmail } from "@/lib/contracts/email";
 import { generateSigningToken } from "@/lib/contracts/tokens";
 import { computeInitialNextReminderAt } from "@/lib/contracts/reminders";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import type { ContractEmailSettings } from "@/lib/contracts/types";
 
 interface SendSignerInput {
@@ -71,11 +72,13 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceClient();
+  const orgId = getActiveOrganizationId();
 
   // --- Fetch settings ---
   const { data: settings, error: sErr } = await supabase
     .from("contract_email_settings")
     .select("*")
+    .eq("organization_id", orgId)
     .limit(1)
     .maybeSingle<ContractEmailSettings>();
   if (sErr || !settings) {
@@ -96,6 +99,7 @@ export async function POST(request: Request) {
     .from("contract_templates")
     .select("id, name, content_html, version, is_active, signer_role_label")
     .eq("id", body.templateId)
+    .eq("organization_id", orgId)
     .maybeSingle<{
       id: string;
       name: string;
@@ -119,6 +123,7 @@ export async function POST(request: Request) {
     .from("jobs")
     .select("id")
     .eq("id", body.jobId)
+    .eq("organization_id", orgId)
     .maybeSingle();
   if (jErr || !job) {
     return NextResponse.json({ error: jErr?.message || "Job not found" }, { status: 404 });
