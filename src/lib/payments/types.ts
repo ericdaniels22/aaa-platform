@@ -173,8 +173,18 @@ export interface StripeDisputeRow {
 
 export interface NotificationRow {
   id: string;
-  user_profile_id: string | null;
+  user_id: string | null;
   type:
+    // 14g legacy types
+    | "new_job"
+    | "status_change"
+    | "payment"
+    | "activity"
+    | "photo"
+    | "email"
+    | "overdue"
+    | "reminder"
+    // 17c new types
     | "payment_received"
     | "payment_failed"
     | "refund_issued"
@@ -182,9 +192,10 @@ export interface NotificationRow {
     | "qb_sync_failed";
   title: string;
   body: string | null;
+  is_read: boolean;
+  job_id: string | null;
   href: string | null;
   priority: "normal" | "high";
-  read_at: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
 }

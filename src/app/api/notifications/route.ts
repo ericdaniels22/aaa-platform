@@ -1,63 +1,84 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase-api";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
 
-async function requireAuthed(_req: NextRequest) {
-  const auth = await createServerSupabaseClient();
-  const { data } = await auth.auth.getUser();
-  if (!data.user) {
-    return {
-      ok: false as const,
-      response: NextResponse.json({ error: "unauthorized" }, { status: 401 }),
-    };
-  }
-  return { ok: true as const, user: data.user };
-}
-
 export async function GET(req: NextRequest) {
-  const gate = await requireAuthed(req);
-  if (!gate.ok) return gate.response;
-
   const { searchParams } = new URL(req.url);
-  const limit = Math.min(Number(searchParams.get("limit") ?? "50"), 100);
-  const unreadOnly = searchParams.get("unread") === "1";
-
-  const supabase = createServiceClient();
-  let q = supabase
-    .from("notifications")
-    .select(
-      "id, type, title, body, href, priority, read_at, metadata, created_at, user_profile_id",
-    )
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (unreadOnly) q = q.is("read_at", null);
-
-  const { data, error } = await q;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ notifications: data ?? [] });
-}
-
-export async function PATCH(req: NextRequest) {
-  const gate = await requireAuthed(req);
-  if (!gate.ok) return gate.response;
-
-  const body = (await req.json().catch(() => null)) as
-    | { mark_all_read?: boolean }
-    | null;
-  if (!body?.mark_all_read) {
+  const userId = searchParams.get("userId");
+  if (!userId) {
     return NextResponse.json(
-      { error: "body must include { mark_all_read: true }" },
+      { error: "userId query param required" },
       { status: 400 },
     );
   }
+  const limit = Math.min(Number(searchParams.get("limit") ?? "15"), 100);
 
   const supabase = createServiceClient();
-  const { error } = await supabase
+
+  const { data: rows, error } = await supabase
     .from("notifications")
-    .update({ read_at: new Date().toISOString() })
-    .is("read_at", null);
+    .select(
+      "id, user_id, type, title, body, is_read, job_id, href, priority, metadata, created_at",
+    )
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+
+  const { count, error: cntErr } = await supabase
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("is_read", false);
+  if (cntErr)
+    return NextResponse.json({ error: cntErr.message }, { status: 500 });
+
+  return NextResponse.json({
+    notifications: rows ?? [],
+    unread_count: count ?? 0,
+  });
+}
+
+export async function PATCH(req: NextRequest) {
+  const body = (await req.json().catch(() => null)) as
+    | { id?: string; mark_all_read?: boolean; user_id?: string }
+    | null;
+  if (!body) {
+    return NextResponse.json({ error: "invalid body" }, { status: 400 });
+  }
+
+  const supabase = createServiceClient();
+
+  if (body.mark_all_read) {
+    if (!body.user_id) {
+      return NextResponse.json(
+        { error: "user_id required when mark_all_read is true" },
+        { status: 400 },
+      );
+    }
+    const { error } = await supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("user_id", body.user_id)
+      .eq("is_read", false);
+    if (error)
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (body.id) {
+    const { error } = await supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("id", body.id);
+    if (error)
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+
+  return NextResponse.json(
+    { error: "body must include either { id } or { mark_all_read: true, user_id }" },
+    { status: 400 },
+  );
 }

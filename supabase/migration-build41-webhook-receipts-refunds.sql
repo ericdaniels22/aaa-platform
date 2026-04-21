@@ -185,36 +185,33 @@ create policy "Allow all on stripe_disputes" on stripe_disputes for all using (t
 grant all on stripe_disputes to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
--- 9. notifications table — minimal stub for Build 14g (Option A). One row
---    per event that should surface in the bell. Scoped to user_profiles so
---    a future multi-user expansion just uses user_profile_id.
+-- 9. Extend the existing Build 14g notifications table with 17c payment-event
+--    columns + widened type CHECK. The 14g table is the source of truth —
+--    do not recreate it. These ALTERs are idempotent via "if not exists" /
+--    "drop constraint if exists".
 -- ---------------------------------------------------------------------------
-create table if not exists notifications (
-  id uuid primary key default gen_random_uuid(),
-  -- nullable by design: NULL user_profile_id is reserved for broadcast
-  -- notifications (visible to all admins), e.g. QB sync failures. Per-user
-  -- filtering happens at read time.
-  user_profile_id uuid references user_profiles(id) on delete cascade,
-  type text not null check (type in (
-    'payment_received','payment_failed','refund_issued',
-    'dispute_opened','qb_sync_failed'
-  )),
-  title text not null,
-  body text,
-  href text,
-  priority text not null default 'normal' check (priority in ('normal','high')),
-  read_at timestamptz,
-  metadata jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
-);
+alter table notifications add column if not exists href text;
+alter table notifications add column if not exists priority text not null default 'normal';
+alter table notifications add column if not exists metadata jsonb not null default '{}'::jsonb;
 
-create index if not exists idx_notifications_user_unread
-  on notifications(user_profile_id, created_at desc)
-  where read_at is null;
-create index if not exists idx_notifications_user_created
-  on notifications(user_profile_id, created_at desc);
+alter table notifications drop constraint if exists notifications_priority_check;
+alter table notifications add constraint notifications_priority_check
+  check (priority in ('normal','high'));
 
-alter table notifications enable row level security;
-drop policy if exists "Allow all on notifications" on notifications;
-create policy "Allow all on notifications" on notifications for all using (true) with check (true);
-grant all on notifications to anon, authenticated, service_role;
+-- Widen the type CHECK to include the 5 new 17c event types while keeping
+-- all 8 existing 14g values.
+alter table notifications drop constraint if exists notifications_type_check;
+alter table notifications add constraint notifications_type_check
+  check (type in (
+    'new_job','status_change','payment','activity','photo','email','overdue','reminder',
+    'payment_received','payment_failed','refund_issued','dispute_opened','qb_sync_failed'
+  ));
+
+-- Also widen the notification_preferences allowed types so admins can
+-- toggle the new payment-event notifications in the settings UI. The
+-- existing column is just `text` without a CHECK, so this is a no-op at
+-- the DB level — but documenting here as a contract.
+--   Allowed notification_type values (14g + 17c):
+--     new_job, status_change, payment, activity, photo, email, overdue,
+--     reminder, payment_received, payment_failed, refund_issued,
+--     dispute_opened, qb_sync_failed

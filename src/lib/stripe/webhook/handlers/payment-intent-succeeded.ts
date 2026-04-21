@@ -234,6 +234,7 @@ export async function handlePaymentIntentSucceeded(
     title: `Payment received: ${formatUsdInline(amountReceived)} for job ${jobMeta?.job_number ?? "—"}`,
     body: `${payerName ?? "Customer"} paid ${formatUsdInline(amountReceived)} for ${pr.title}.`,
     href: `/jobs/${pr.job_id}`,
+    jobId: pr.job_id,
     metadata: { payment_request_id: pr.id, payment_id: paymentId },
   }).catch((e) => {
     console.error(
@@ -265,6 +266,7 @@ export async function handlePaymentIntentSucceeded(
       title: `QuickBooks sync failed for job ${jobMeta?.job_number ?? "—"}`,
       body: msg,
       href: `/jobs/${pr.job_id}`,
+      jobId: pr.job_id,
       priority: "high",
       metadata: { payment_id: paymentId },
     }).catch(() => undefined);
@@ -280,6 +282,7 @@ export async function handlePaymentIntentSucceeded(
       title: `Amount mismatch on job ${jobMeta?.job_number ?? "—"}: expected ${formatUsdInline(expected)}, received ${formatUsdInline(amountReceived)}`,
       body: `Payment request ${pr.id.slice(0, 8)} charged ${formatUsdInline(amountReceived)} vs. ${formatUsdInline(expected)} expected. Review before reconciling to QB.`,
       href: `/jobs/${pr.job_id}`,
+      jobId: pr.job_id,
       metadata: {
         payment_request_id: pr.id,
         payment_id: paymentId,

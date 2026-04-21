@@ -15,6 +15,9 @@ interface Notification {
   is_read: boolean;
   job_id: string | null;
   created_at: string;
+  href: string | null;
+  priority: "normal" | "high";
+  metadata: Record<string, unknown>;
 }
 
 const TYPE_ICONS: Record<string, typeof Bell> = {
@@ -26,6 +29,12 @@ const TYPE_ICONS: Record<string, typeof Bell> = {
   email: Mail,
   overdue: AlertTriangle,
   reminder: Clock,
+  // 17c additions
+  payment_received: CreditCard,
+  payment_failed: AlertTriangle,
+  refund_issued: CreditCard,
+  dispute_opened: AlertTriangle,
+  qb_sync_failed: AlertTriangle,
 };
 
 const TYPE_COLORS: Record<string, string> = {
@@ -37,6 +46,12 @@ const TYPE_COLORS: Record<string, string> = {
   email: "text-vibrant-blue",
   overdue: "text-destructive",
   reminder: "text-vibrant-amber",
+  // 17c additions
+  payment_received: "text-primary",
+  payment_failed: "text-destructive",
+  refund_issued: "text-vibrant-amber",
+  dispute_opened: "text-destructive",
+  qb_sync_failed: "text-destructive",
 };
 
 export default function NotificationBell() {
@@ -144,7 +159,8 @@ export default function NotificationBell() {
                   <div
                     className={cn(
                       "flex items-start gap-3 px-4 py-3 hover:bg-accent/50 transition-colors cursor-pointer border-b border-border/50 last:border-b-0",
-                      !n.is_read && "bg-primary/5"
+                      !n.is_read && "bg-primary/5",
+                      n.priority === "high" && "border-l-2 border-l-destructive"
                     )}
                     onClick={() => {
                       if (!n.is_read) markAsRead(n.id);
@@ -169,8 +185,9 @@ export default function NotificationBell() {
                   </div>
                 );
 
-                return n.job_id ? (
-                  <Link key={n.id} href={`/jobs/${n.job_id}`}>{content}</Link>
+                const href = n.href ?? (n.job_id ? `/jobs/${n.job_id}` : null);
+                return href ? (
+                  <Link key={n.id} href={href}>{content}</Link>
                 ) : (
                   <div key={n.id}>{content}</div>
                 );
