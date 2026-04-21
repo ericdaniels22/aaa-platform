@@ -186,6 +186,12 @@ export async function POST(req: NextRequest) {
       },
       statement_descriptor_suffix:
         connection.default_statement_descriptor?.slice(0, 22) || undefined,
+      // 17c — suppress Stripe's default customer receipt. Our webhook
+      // handler sends a branded receipt email with a PDF attached instead.
+      // Stripe's TS types constrain `receipt_email` to `string | undefined`,
+      // but the Stripe API accepts `null` to explicitly opt out of the
+      // Dashboard default, so we cast through `unknown`.
+      receipt_email: null as unknown as undefined,
     },
     customer_email: customerEmail ?? undefined,
     success_url: `${appUrl}/pay/${token}/success`,
