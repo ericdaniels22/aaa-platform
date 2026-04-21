@@ -66,6 +66,7 @@ export type ContractEmailProvider = "resend" | "email_account";
 
 export interface Contract {
   id: string;
+  organization_id: string;
   job_id: string;
   template_id: string;
   template_version: number;
@@ -92,6 +93,7 @@ export interface Contract {
 
 export interface ContractSigner {
   id: string;
+  organization_id: string;
   contract_id: string;
   signer_order: 1 | 2;
   role_label: string | null;

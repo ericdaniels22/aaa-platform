@@ -66,10 +66,13 @@ export async function GET(
     return NextResponse.json({ error: "voided" }, { status: 410 });
   }
 
-  // Collect company brand to render the header.
+  // Collect company brand to render the header. Public route uses the
+  // service client (bypasses RLS) — scope company_settings by the contract's
+  // org since we can't read it from a session here.
   const { data: companyRows } = await supabase
     .from("company_settings")
     .select("key, value")
+    .eq("organization_id", contract.organization_id)
     .in("key", ["company_name", "phone", "email", "address", "logo_url"]);
   const map = new Map<string, string | null>(
     (companyRows ?? []).map((r: { key: string; value: string | null }) => [r.key, r.value]),

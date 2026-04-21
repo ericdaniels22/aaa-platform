@@ -5,6 +5,7 @@ import {
   InvalidPaymentLinkTokenError,
 } from "@/lib/payment-link-tokens";
 import { writePaymentEvent } from "@/lib/payments/activity";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import type { PaymentRequestRow } from "@/lib/payments/types";
 import { Lock, CheckCircle2 } from "lucide-react";
 import MethodSelector from "./method-selector";
@@ -18,11 +19,12 @@ interface CompanyBrand {
   logoUrl: string | null;
 }
 
-async function loadCompany(): Promise<CompanyBrand> {
+async function loadCompany(orgId?: string | null): Promise<CompanyBrand> {
   const supabase = createServiceClient();
   const { data } = await supabase
     .from("company_settings")
     .select("key, value")
+    .eq("organization_id", orgId ?? getActiveOrganizationId())
     .in("key", ["company_name", "phone", "email", "address", "logo_url"]);
   const m = new Map<string, string | null>(
     (data ?? []).map((r: { key: string; value: string | null }) => [
