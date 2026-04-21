@@ -23,7 +23,7 @@ export async function handlePaymentIntentSucceeded(
     (pi.metadata as Record<string, string> | null)?.payment_request_id ?? null;
   if (!paymentRequestId) {
     console.warn(
-      `[webhook] payment_intent.succeeded ${pi.id} has no metadata.payment_request_id — skipping`,
+      `[stripe/webhook] payment_intent.succeeded ${pi.id} has no metadata.payment_request_id — skipping`,
     );
     return { paymentRequestId: null };
   }
@@ -42,13 +42,25 @@ export async function handlePaymentIntentSucceeded(
     );
   }
 
-  // Idempotency short-circuit
+  // Idempotency short-circuit — but only if the prior run completed the
+  // payments insert. If the status flip landed but the insert didn't
+  // (partial prior run, then releaseEvent + Stripe retry), we need to
+  // fall through and retry the insert + side effects.
   if (
     pr.status === "paid" ||
     pr.status === "refunded" ||
     pr.status === "partially_refunded"
   ) {
-    return { paymentRequestId };
+    const { count: existingPaymentsCount } = await supabase
+      .from("payments")
+      .select("id", { count: "exact", head: true })
+      .eq("payment_request_id", pr.id)
+      .eq("source", "stripe");
+    if ((existingPaymentsCount ?? 0) > 0) {
+      return { paymentRequestId };
+    }
+    // Prior run partially completed — the status is set but no payments
+    // row exists. Fall through and re-do the insert + side effects.
   }
 
   // Expand the charge to get fee data
@@ -205,7 +217,7 @@ export async function handlePaymentIntentSucceeded(
     extras,
   }).catch((e) => {
     console.error(
-      `receipt email failed: ${e instanceof Error ? e.message : e}`,
+      `[stripe/webhook] receipt email failed: ${e instanceof Error ? e.message : e}`,
     );
   });
   await sendPaymentInternalNotification({
@@ -214,7 +226,7 @@ export async function handlePaymentIntentSucceeded(
     extras,
   }).catch((e) => {
     console.error(
-      `internal notification email failed: ${e instanceof Error ? e.message : e}`,
+      `[stripe/webhook] internal notification email failed: ${e instanceof Error ? e.message : e}`,
     );
   });
   await writeNotification({
@@ -225,7 +237,7 @@ export async function handlePaymentIntentSucceeded(
     metadata: { payment_request_id: pr.id, payment_id: paymentId },
   }).catch((e) => {
     console.error(
-      `in-app notification failed: ${e instanceof Error ? e.message : e}`,
+      `[stripe/webhook] in-app notification failed: ${e instanceof Error ? e.message : e}`,
     );
   });
 
@@ -257,6 +269,25 @@ export async function handlePaymentIntentSucceeded(
       metadata: { payment_id: paymentId },
     }).catch(() => undefined);
   });
+
+  // 9. If the amount Stripe captured differs materially from what we
+  // expected (>$1, skip penny rounding noise), fire a high-priority
+  // notification so the operator can reconcile before month-end.
+  if (amountMismatch && Math.abs(amountReceived - expected) > 1.0) {
+    await writeNotification({
+      type: "payment_received",
+      priority: "high",
+      title: `Amount mismatch on job ${jobMeta?.job_number ?? "—"}: expected ${formatUsdInline(expected)}, received ${formatUsdInline(amountReceived)}`,
+      body: `Payment request ${pr.id.slice(0, 8)} charged ${formatUsdInline(amountReceived)} vs. ${formatUsdInline(expected)} expected. Review before reconciling to QB.`,
+      href: `/jobs/${pr.job_id}`,
+      metadata: {
+        payment_request_id: pr.id,
+        payment_id: paymentId,
+        expected,
+        actual: amountReceived,
+      },
+    }).catch(() => undefined);
+  }
 
   return { paymentRequestId };
 }
