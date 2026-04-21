@@ -14,7 +14,15 @@ export interface PaymentEventArgs {
     | "link_viewed"
     | "reminder_sent"
     | "voided"
-    | "expired";
+    | "expired"
+    // Added in build41 (Build 17c webhook handlers): contract_events CHECK
+    // was widened at the DB level; keep this union aligned.
+    | "paid"
+    | "payment_failed"
+    | "refunded"
+    | "partially_refunded"
+    | "dispute_opened"
+    | "dispute_closed";
   metadata?: Record<string, unknown>;
   ipAddress?: string | null;
   userAgent?: string | null;

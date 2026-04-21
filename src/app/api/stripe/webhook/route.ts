@@ -12,6 +12,7 @@ import {
   releaseEvent,
 } from "@/lib/stripe/webhook/idempotency";
 import { handleCheckoutSessionCompleted } from "@/lib/stripe/webhook/handlers/checkout-session-completed";
+import { handlePaymentIntentSucceeded } from "@/lib/stripe/webhook/handlers/payment-intent-succeeded";
 
 // Webhook handlers need the raw request body for signature verification.
 // Force nodejs runtime + disable response caching.
@@ -26,7 +27,7 @@ const HANDLERS: Record<string, Handler> = {
   // Tasks 12-19 replace these stubs with real implementations. Until then,
   // anything not explicitly listed returns null and is marked processed.
   "checkout.session.completed": handleCheckoutSessionCompleted,
-  "payment_intent.succeeded": async () => ({ paymentRequestId: null }),
+  "payment_intent.succeeded": handlePaymentIntentSucceeded,
   "payment_intent.payment_failed": async () => ({ paymentRequestId: null }),
   "charge.refunded": async () => ({ paymentRequestId: null }),
   "charge.dispute.created": async () => ({ paymentRequestId: null }),
