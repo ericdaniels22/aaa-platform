@@ -110,10 +110,16 @@ export async function listClasses(token: QbApiContext): Promise<QbClass[]> {
 // ---------- Accounts (payment-method mapping) ----------
 
 export async function listDepositAccounts(token: QbApiContext): Promise<QbAccount[]> {
-  // QBO's query parser rejects parentheses in WHERE clauses, so use IN instead
-  // of (AccountType = 'Bank' OR AccountType = 'Other Current Asset').
-  const query =
-    "select * from Account where AccountType IN ('Bank', 'Other Current Asset') AND Active = true MAXRESULTS 500";
+  return listAccountsByType(token, ["Bank", "Other Current Asset"]);
+}
+
+export async function listAccountsByType(
+  token: QbApiContext,
+  accountTypes: string[],
+): Promise<QbAccount[]> {
+  // QBO's query parser rejects parentheses in WHERE clauses, so use IN instead.
+  const inList = accountTypes.map((t) => `'${t.replace(/'/g, "''")}'`).join(", ");
+  const query = `select * from Account where AccountType IN (${inList}) AND Active = true MAXRESULTS 500`;
   const data = await call<{
     QueryResponse?: { Account?: QbAccount[] };
   }>(token, "GET", `/query?query=${encodeURIComponent(query)}`);
