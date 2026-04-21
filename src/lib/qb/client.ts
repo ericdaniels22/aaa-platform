@@ -324,3 +324,29 @@ export async function createPurchase(
   if (!data.Purchase?.Id) throw new Error("QuickBooks returned no Purchase id");
   return { id: data.Purchase.Id, syncToken: data.Purchase.SyncToken };
 }
+
+// ---------- Refund receipts (used by 17c to reconcile Stripe refunds to QB) ----------
+
+export interface QbRefundReceiptWriteResult {
+  id: string;
+  syncToken: string;
+}
+
+export async function createRefundReceipt(
+  token: QbApiContext,
+  payload: Record<string, unknown>,
+): Promise<QbRefundReceiptWriteResult> {
+  const data = await call<{ RefundReceipt?: { Id: string; SyncToken: string } }>(
+    token,
+    "POST",
+    "/refundreceipt",
+    payload,
+  );
+  if (!data.RefundReceipt?.Id) {
+    throw new Error("QuickBooks returned no RefundReceipt id");
+  }
+  return {
+    id: data.RefundReceipt.Id,
+    syncToken: data.RefundReceipt.SyncToken,
+  };
+}

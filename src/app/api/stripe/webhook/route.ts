@@ -14,6 +14,7 @@ import {
 import { handleCheckoutSessionCompleted } from "@/lib/stripe/webhook/handlers/checkout-session-completed";
 import { handlePaymentIntentSucceeded } from "@/lib/stripe/webhook/handlers/payment-intent-succeeded";
 import { handlePaymentIntentFailed } from "@/lib/stripe/webhook/handlers/payment-intent-failed";
+import { handleChargeRefunded } from "@/lib/stripe/webhook/handlers/charge-refunded";
 
 // Webhook handlers need the raw request body for signature verification.
 // Force nodejs runtime + disable response caching.
@@ -30,7 +31,7 @@ const HANDLERS: Record<string, Handler> = {
   "checkout.session.completed": handleCheckoutSessionCompleted,
   "payment_intent.succeeded": handlePaymentIntentSucceeded,
   "payment_intent.payment_failed": handlePaymentIntentFailed,
-  "charge.refunded": async () => ({ paymentRequestId: null }),
+  "charge.refunded": handleChargeRefunded,
   "charge.dispute.created": async () => ({ paymentRequestId: null }),
   "charge.dispute.closed": async () => ({ paymentRequestId: null }),
 };
