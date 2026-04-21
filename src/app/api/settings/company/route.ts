@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { createApiClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
-// GET /api/settings/company — fetch all company settings as key-value object
+// GET /api/settings/company — fetch all company settings for the active org.
 export async function GET() {
   const supabase = createApiClient();
   const { data, error } = await supabase
     .from("company_settings")
-    .select("key, value");
+    .select("key, value")
+    .eq("organization_id", getActiveOrganizationId());
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -20,10 +22,11 @@ export async function GET() {
   return NextResponse.json(settings);
 }
 
-// PUT /api/settings/company — upsert company settings
+// PUT /api/settings/company — upsert company settings for the active org.
 export async function PUT(request: Request) {
   const body = await request.json();
   const supabase = createApiClient();
+  const orgId = getActiveOrganizationId();
 
   const entries = Object.entries(body).filter(
     ([key]) => typeof key === "string" && key.length > 0
@@ -33,8 +36,8 @@ export async function PUT(request: Request) {
     const { error } = await supabase
       .from("company_settings")
       .upsert(
-        { key, value: String(value ?? ""), updated_at: new Date().toISOString() },
-        { onConflict: "key" }
+        { organization_id: orgId, key, value: String(value ?? ""), updated_at: new Date().toISOString() },
+        { onConflict: "organization_id,key" }
       );
 
     if (error) {
