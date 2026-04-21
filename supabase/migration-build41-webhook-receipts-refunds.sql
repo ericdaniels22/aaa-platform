@@ -215,3 +215,21 @@ alter table notifications add constraint notifications_type_check
 --     new_job, status_change, payment, activity, photo, email, overdue,
 --     reminder, payment_received, payment_failed, refund_issued,
 --     dispute_opened, qb_sync_failed
+
+-- ---------------------------------------------------------------------------
+-- 10. Widen qb_mappings.type CHECK to include the 17c payment-subsystem
+--     mapping types. Admins configure:
+--     - 'generic_income_account' / platform_value='stripe_deposits' — QB
+--       income account to credit for standalone deposits/retainers with
+--       no invoice linkage.
+--     - 'stripe_fee_account' / platform_value='stripe_processing_fees' —
+--       QB expense account where the Stripe processing fee is posted as
+--       a Purchase, so gross revenue matches Stripe reports and net
+--       deposits match the bank.
+-- ---------------------------------------------------------------------------
+alter table qb_mappings drop constraint if exists qb_mappings_type_check;
+alter table qb_mappings add constraint qb_mappings_type_check
+  check (type in (
+    'damage_type','payment_method','expense_category',
+    'generic_income_account','stripe_fee_account'
+  ));

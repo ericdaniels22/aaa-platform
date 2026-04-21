@@ -369,6 +369,24 @@ alter table notifications enable row level security;
 drop policy if exists "Allow all on notifications" on notifications;
 create policy "Allow all on notifications" on notifications for all using (true) with check (true);
 grant all on notifications to anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- 10. Widen qb_mappings.type CHECK to include the 17c payment-subsystem
+--     mapping types. Admins configure:
+--     - 'generic_income_account' / platform_value='stripe_deposits' — QB
+--       income account to credit for standalone deposits/retainers with
+--       no invoice linkage.
+--     - 'stripe_fee_account' / platform_value='stripe_processing_fees' —
+--       QB expense account where the Stripe processing fee is posted as
+--       a Purchase, so gross revenue matches Stripe reports and net
+--       deposits match the bank.
+-- ---------------------------------------------------------------------------
+alter table qb_mappings drop constraint if exists qb_mappings_type_check;
+alter table qb_mappings add constraint qb_mappings_type_check
+  check (type in (
+    'damage_type','payment_method','expense_category',
+    'generic_income_account','stripe_fee_account'
+  ));
 ```
 
 - [ ] **Step 2: Apply via Supabase dashboard SQL editor**
@@ -4663,6 +4681,8 @@ Also ensure these `qb_mappings` rows exist (manually via SQL editor if the setti
 - `type='payment_method', platform_value='stripe_ach', qb_entity_id=<Stripe bank account>`
 - `type='stripe_fee_account', platform_value='stripe_processing_fees', qb_entity_id=<Payment Processing Fees expense account>`
 - `type='generic_income_account', platform_value='stripe_deposits', qb_entity_id=<Deposits income account>` (only needed for standalone deposits without an invoice)
+
+Note: the `qb_mappings.type` CHECK constraint is widened by build41 Section 10 to accept `'generic_income_account'` and `'stripe_fee_account'` in addition to the existing 14c/16c values. Without that widening these inserts would fail the CHECK.
 
 Supabase Storage bucket `receipts` — already exists from Build 35 expense-receipts feature (see `supabase/migration-build35-expenses.sql:141`); no action needed.
 
