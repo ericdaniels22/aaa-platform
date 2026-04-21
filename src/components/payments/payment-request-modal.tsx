@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -40,7 +40,33 @@ export function PaymentRequestModal({
   const [title, setTitle] = useState(defaultTitle);
   const [amount, setAmount] = useState<number | "">(defaultAmount ?? "");
   const [expiryDays, setExpiryDays] = useState(defaultExpiryDays);
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [recipientName, setRecipientName] = useState<string | null>(null);
+  const [recipientLoaded, setRecipientLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Prefill the recipient email from the job's linked contact each time the
+  // modal opens. User can edit the field to override before submitting.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setRecipientLoaded(false);
+    fetch(`/api/jobs/${jobId}/contact-email`)
+      .then((r) => (r.ok ? r.json() : { email: null, name: null }))
+      .then((d: { email: string | null; name: string | null }) => {
+        if (cancelled) return;
+        setRecipientEmail(d.email ?? "");
+        setRecipientName(d.name ?? null);
+        setRecipientLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRecipientLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, jobId]);
 
   const onSubmit = async () => {
     if (!title.trim() || typeof amount !== "number" || amount <= 0) {
@@ -49,6 +75,11 @@ export function PaymentRequestModal({
     }
     if (expiryDays < 1 || expiryDays > 30) {
       toast.error("Expiry must be 1\u201330 days");
+      return;
+    }
+    const trimmedEmail = recipientEmail.trim();
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      toast.error("A valid recipient email is required");
       return;
     }
     setSubmitting(true);
@@ -66,6 +97,8 @@ export function PaymentRequestModal({
         title: title.trim(),
         amount,
         link_expiry_days: expiryDays,
+        payer_email: trimmedEmail,
+        payer_name: recipientName,
       }),
     });
     setSubmitting(false);
@@ -78,7 +111,7 @@ export function PaymentRequestModal({
       payment_request: { id: string; job_id: string; status: string };
     };
     onCreated?.(payment_request);
-    toast.success("Payment request created \u2014 send it from the Billing section");
+    toast.success("Payment request created \u2014 click Send to email the customer");
     onOpenChange(false);
   };
 
@@ -90,8 +123,8 @@ export function PaymentRequestModal({
             {invoiceId ? "Request online payment" : "Request deposit"}
           </DialogTitle>
           <DialogDescription>
-            Creates a secure Stripe Checkout link. You can send it from the Billing
-            section after Build 17b ships.
+            Creates a secure Stripe Checkout link. Click Send on the row to email
+            it to the recipient.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -117,6 +150,24 @@ export function PaymentRequestModal({
                 setAmount(v === "" ? "" : Number(v));
               }}
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pr_recipient">Recipient email</Label>
+            <Input
+              id="pr_recipient"
+              type="email"
+              value={recipientEmail}
+              placeholder={
+                recipientLoaded
+                  ? "customer@example.com"
+                  : "Loading customer email\u2026"
+              }
+              onChange={(e) => setRecipientEmail(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Pre-filled from the job&apos;s homeowner contact. Edit to send to a
+              different address.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="pr_expiry">Link expiry (days)</Label>

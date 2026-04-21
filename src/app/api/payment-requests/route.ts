@@ -14,6 +14,8 @@ interface CreateBody {
   link_expiry_days?: number;
   allow_card?: boolean;
   allow_ach?: boolean;
+  payer_email?: string | null;
+  payer_name?: string | null;
 }
 
 const DEFAULT_EXPIRY_DAYS = 14;
@@ -77,6 +79,22 @@ export async function POST(req: NextRequest) {
       customerEmail = contact.email ?? null;
       customerName = [contact.first_name, contact.last_name].filter(Boolean).join(" ") || null;
     }
+  }
+
+  // Caller-supplied override wins over the contact lookup. Lets the user
+  // send a payment request to a different address without editing the
+  // contact record.
+  if (typeof body.payer_email === "string") {
+    const trimmed = body.payer_email.trim();
+    if (trimmed) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+        return NextResponse.json({ error: "invalid_payer_email" }, { status: 400 });
+      }
+      customerEmail = trimmed;
+    }
+  }
+  if (typeof body.payer_name === "string") {
+    customerName = body.payer_name.trim() || customerName;
   }
 
   if (body.invoice_id) {
