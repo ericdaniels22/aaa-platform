@@ -6,6 +6,9 @@ import type {
   PaymentEmailSettings,
   PaymentRequestRow,
 } from "@/lib/payments/types";
+import type { PaymentMergeExtras } from "@/lib/payments/merge-fields";
+import type { Attachment } from "@/lib/payments/email";
+import { generateReceiptPdf } from "@/lib/payments/receipt-pdf";
 
 interface StripeConnectionFees {
   pass_card_fee_to_customer: boolean;
@@ -206,5 +209,232 @@ export async function sendPaymentReminderEmail(
     eventType: "reminder_sent",
     metadata: { provider: sent.provider, message_id: sent.messageId },
   });
+  return sent;
+}
+
+export interface ReceiptEmailInput {
+  paymentRequestId: string;
+  extras: PaymentMergeExtras;
+  attachment?: Attachment;
+}
+
+export async function sendPaymentReceiptEmail(
+  input: ReceiptEmailInput,
+): Promise<{ messageId: string; provider: "resend" | "smtp" }> {
+  const supabase = createServiceClient();
+  const [settings, pr, fees] = await Promise.all([
+    loadSettings(supabase),
+    loadPaymentRequest(supabase, input.paymentRequestId),
+    loadStripeFees(supabase),
+  ]);
+  const recipient = await loadRecipient(supabase, pr);
+
+  const { subject, html } = await resolvePaymentEmailTemplate(
+    supabase,
+    settings.payment_receipt_subject_template,
+    settings.payment_receipt_body_template,
+    pr,
+    { stripeConnection: fees, extras: input.extras },
+  );
+
+  // Generate receipt PDF if caller didn't pass one. Also persist to storage.
+  let attachments: Attachment[] = [];
+  if (input.attachment) {
+    attachments = [input.attachment];
+  } else {
+    try {
+      const pdf = await generateReceiptPdf(supabase, {
+        paymentRequestId: pr.id,
+        methodDisplay: extraMethodDisplay(input.extras),
+        transactionIdDisplay: input.extras.transaction_id
+          ? `…${input.extras.transaction_id.slice(-12)}`
+          : "—",
+        stripeFeeAmount: input.extras.stripe_fee_amount ?? null,
+        netAmount: input.extras.net_amount ?? null,
+      });
+      attachments = [
+        {
+          filename: `receipt-${pr.id.slice(0, 8)}.pdf`,
+          content: pdf,
+          contentType: "application/pdf",
+        },
+      ];
+      // Persist PDF to Storage + update payment_requests.receipt_pdf_path.
+      const storagePath = `${pr.job_id}/${pr.id}.pdf`;
+      try {
+        await supabase.storage.from("receipts").upload(storagePath, pdf, {
+          contentType: "application/pdf",
+          upsert: true,
+        });
+        await supabase
+          .from("payment_requests")
+          .update({ receipt_pdf_path: storagePath })
+          .eq("id", pr.id);
+      } catch (e) {
+        console.warn(
+          `receipt PDF storage upload failed: ${e instanceof Error ? e.message : e}`,
+        );
+      }
+    } catch (e) {
+      console.warn(
+        `receipt PDF generation failed: ${e instanceof Error ? e.message : e}`,
+      );
+    }
+  }
+
+  const sent = await sendPaymentEmail(supabase, settings, {
+    to: recipient.email,
+    subject,
+    html,
+    attachments,
+  });
+
+  await writePaymentEvent(supabase, {
+    paymentRequestId: pr.id,
+    eventType: "email_delivered",
+    metadata: { kind: "receipt", provider: sent.provider, message_id: sent.messageId },
+  });
+
+  return sent;
+}
+
+function extraMethodDisplay(extras: PaymentMergeExtras): string {
+  if (extras.payment_method_type === "us_bank_account") {
+    return extras.bank_name ? `Bank transfer (${extras.bank_name})` : "Bank transfer (ACH)";
+  }
+  if (extras.payment_method_type === "card") {
+    const brand = extras.card_brand
+      ? extras.card_brand
+          .split("_")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ")
+      : "Card";
+    return extras.card_last4 ? `${brand} ending in ${extras.card_last4}` : brand;
+  }
+  return "—";
+}
+
+export type InternalNotificationKind =
+  | "payment_received"
+  | "payment_failed"
+  | "refund_issued"
+  | "dispute_opened";
+
+export interface InternalNotificationInput {
+  paymentRequestId: string;
+  kind: InternalNotificationKind;
+  extras: PaymentMergeExtras;
+  subjectPrefix?: string;
+}
+
+export async function sendPaymentInternalNotification(
+  input: InternalNotificationInput,
+): Promise<{ messageId: string; provider: "resend" | "smtp" } | null> {
+  const supabase = createServiceClient();
+  const [settings, pr] = await Promise.all([
+    loadSettings(supabase),
+    loadPaymentRequest(supabase, input.paymentRequestId),
+  ]);
+
+  const to = settings.internal_notification_to_email || settings.send_from_email;
+  if (!to) return null;
+
+  const { subjectTpl, bodyTpl } = (() => {
+    switch (input.kind) {
+      case "payment_received":
+        return {
+          subjectTpl: settings.payment_received_internal_subject_template,
+          bodyTpl: settings.payment_received_internal_body_template,
+        };
+      case "dispute_opened":
+        // dispute reuses payment_failed_internal_* template + subject override
+        return {
+          subjectTpl: settings.payment_failed_internal_subject_template,
+          bodyTpl: settings.payment_failed_internal_body_template,
+        };
+      case "payment_failed":
+        return {
+          subjectTpl: settings.payment_failed_internal_subject_template,
+          bodyTpl: settings.payment_failed_internal_body_template,
+        };
+      case "refund_issued":
+        return {
+          subjectTpl: settings.refund_issued_internal_subject_template,
+          bodyTpl: settings.refund_issued_internal_body_template,
+        };
+    }
+  })();
+
+  const { subject, html } = await resolvePaymentEmailTemplate(
+    supabase,
+    subjectTpl,
+    bodyTpl,
+    pr,
+    { extras: input.extras },
+  );
+
+  const finalSubject = input.subjectPrefix
+    ? `${input.subjectPrefix}${subject}`
+    : subject;
+
+  const sent = await sendPaymentEmail(supabase, settings, {
+    to,
+    subject: finalSubject,
+    html,
+  });
+
+  await writePaymentEvent(supabase, {
+    paymentRequestId: pr.id,
+    eventType: "email_delivered",
+    metadata: {
+      kind: `internal_${input.kind}`,
+      provider: sent.provider,
+      message_id: sent.messageId,
+    },
+  });
+
+  return sent;
+}
+
+export interface RefundConfirmationInput {
+  paymentRequestId: string;
+  extras: PaymentMergeExtras;
+}
+
+export async function sendRefundConfirmationEmail(
+  input: RefundConfirmationInput,
+): Promise<{ messageId: string; provider: "resend" | "smtp" }> {
+  const supabase = createServiceClient();
+  const [settings, pr, fees] = await Promise.all([
+    loadSettings(supabase),
+    loadPaymentRequest(supabase, input.paymentRequestId),
+    loadStripeFees(supabase),
+  ]);
+  const recipient = await loadRecipient(supabase, pr);
+
+  const { subject, html } = await resolvePaymentEmailTemplate(
+    supabase,
+    settings.refund_confirmation_subject_template,
+    settings.refund_confirmation_body_template,
+    pr,
+    { stripeConnection: fees, extras: input.extras },
+  );
+
+  const sent = await sendPaymentEmail(supabase, settings, {
+    to: recipient.email,
+    subject,
+    html,
+  });
+
+  await writePaymentEvent(supabase, {
+    paymentRequestId: pr.id,
+    eventType: "email_delivered",
+    metadata: {
+      kind: "refund_confirmation",
+      provider: sent.provider,
+      message_id: sent.messageId,
+    },
+  });
+
   return sent;
 }
