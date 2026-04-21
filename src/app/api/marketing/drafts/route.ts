@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 export async function GET(request: NextRequest) {
   const authSupabase = await createServerSupabaseClient();
@@ -16,6 +17,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("marketing_drafts")
     .select("*, image:marketing_assets!image_id(*)")
+    .eq("organization_id", getActiveOrganizationId())
     .order("created_at", { ascending: false });
 
   if (platform) {
@@ -61,6 +63,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await supabase
     .from("marketing_drafts")
     .insert({
+      organization_id: getActiveOrganizationId(),
       platform,
       caption,
       hashtags: hashtags || null,
@@ -109,6 +112,7 @@ export async function PATCH(request: NextRequest) {
     .from("marketing_drafts")
     .update(allowed)
     .eq("id", id)
+    .eq("organization_id", getActiveOrganizationId())
     .select("*, image:marketing_assets!image_id(*)")
     .single();
 
@@ -135,7 +139,8 @@ export async function DELETE(request: NextRequest) {
   const { error } = await supabase
     .from("marketing_drafts")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .eq("organization_id", getActiveOrganizationId());
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
