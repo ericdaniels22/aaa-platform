@@ -7,13 +7,18 @@ export type ClaimResult =
 
 // Attempts to claim the event for processing by inserting into stripe_events.
 // Returns "claimed" on success, "duplicate" if the row already exists.
+// organizationId scopes the event to a tenant — the caller resolves it
+// from event.data.object.metadata.organization_id (with an 18a fallback
+// to the AAA helper for events issued before the cutover).
 export async function claimEvent(
   supabase: SupabaseClient,
   event: Stripe.Event,
+  organizationId: string,
 ): Promise<ClaimResult> {
   const { data, error } = await supabase
     .from("stripe_events")
     .insert({
+      organization_id: organizationId,
       stripe_event_id: event.id,
       event_type: event.type,
       livemode: event.livemode ?? null,

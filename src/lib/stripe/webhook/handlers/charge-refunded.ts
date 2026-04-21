@@ -35,17 +35,20 @@ export async function handleChargeRefunded(
 
   const supabase = createServiceClient();
 
-  // 1. Find the payment by stripe_charge_id.
+  // 1. Find the payment by stripe_charge_id. organization_id comes along
+  //    so downstream inserts (refunds, notifications, activity) can stamp
+  //    the correct tenant.
   const { data: payment, error: payErr } = await supabase
     .from("payments")
     .select(
-      "id, job_id, invoice_id, amount, payment_request_id, stripe_charge_id, received_date",
+      "id, organization_id, job_id, invoice_id, amount, payment_request_id, stripe_charge_id, received_date",
     )
     .eq("stripe_charge_id", chargeId)
     .maybeSingle<
       Pick<
         PaymentRow,
         | "id"
+        | "organization_id"
         | "job_id"
         | "invoice_id"
         | "amount"
@@ -88,6 +91,7 @@ export async function handleChargeRefunded(
     const { data: created, error: crErr } = await supabase
       .from("refunds")
       .insert({
+        organization_id: payment.organization_id,
         payment_id: payment.id,
         payment_request_id: payment.payment_request_id,
         amount: newestRefund.amount / 100,
@@ -222,13 +226,14 @@ export async function handleChargeRefunded(
     );
   }
 
-  // 12. In-app notification (fans out to all admins).
+  // 12. In-app notification (fans out to all admins of the payment's org).
   await writeNotification({
     type: "refund_issued",
     title: `Refund issued: $${refundRow.amount.toFixed(2)} — job ${jobMeta?.job_number ?? "—"}`,
     body: `${refundedByName} refunded $${refundRow.amount.toFixed(2)} for ${pr?.title ?? ""}.`,
     href: `/jobs/${payment.job_id}`,
     jobId: payment.job_id,
+    organizationId: payment.organization_id,
     metadata: {
       payment_id: payment.id,
       refund_id: refundRow.id,

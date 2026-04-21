@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -78,12 +79,14 @@ export default function IntakeForm() {
 
     setSubmitting(true);
     const supabase = createClient();
+    const orgId = getActiveOrganizationId();
 
     try {
       // 1. Create contact
       const { data: contact, error: contactErr } = await supabase
         .from("contacts")
         .insert({
+          organization_id: orgId,
           first_name: getVal("first_name"),
           last_name: getVal("last_name"),
           phone: getVal("phone") || null,
@@ -103,6 +106,7 @@ export default function IntakeForm() {
         const { data: adjuster, error: adjErr } = await supabase
           .from("contacts")
           .insert({
+            organization_id: orgId,
             first_name: nameParts[0] || getVal("adjuster_name"),
             last_name: nameParts.slice(1).join(" ") || "",
             phone: getVal("adjuster_phone") || null,
@@ -120,6 +124,7 @@ export default function IntakeForm() {
       const { data: job, error: jobErr } = await supabase
         .from("jobs")
         .insert({
+          organization_id: orgId,
           contact_id: contact.id,
           damage_type: getVal("damage_type"),
           damage_source: getVal("damage_source") || null,
@@ -143,6 +148,7 @@ export default function IntakeForm() {
         const { error: adjLinkErr } = await supabase
           .from("job_adjusters")
           .insert({
+            organization_id: orgId,
             job_id: job.id,
             contact_id: adjusterContactId,
             is_primary: true,
@@ -152,11 +158,12 @@ export default function IntakeForm() {
 
       // 4. Save custom fields (fields without maps_to)
       if (formConfig) {
-        const customFields: { job_id: string; field_key: string; field_value: string }[] = [];
+        const customFields: { organization_id: string; job_id: string; field_key: string; field_value: string }[] = [];
         for (const section of formConfig.sections) {
           for (const field of section.fields) {
             if (!field.maps_to && !field.is_default && getVal(field.id)) {
               customFields.push({
+                organization_id: orgId,
                 job_id: job.id,
                 field_key: field.id,
                 field_value: getVal(field.id),
@@ -177,6 +184,7 @@ export default function IntakeForm() {
 
       if (activityParts.length > 0) {
         await supabase.from("job_activities").insert({
+          organization_id: orgId,
           job_id: job.id,
           activity_type: "note",
           title: "Intake notes",

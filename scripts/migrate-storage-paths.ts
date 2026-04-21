@@ -19,7 +19,7 @@
 // Exits non-zero if any row ends at status='failed'. See
 // storage_migration_progress for diagnostics in that case.
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const ORG_ID = "a0000000-0000-4000-8000-000000000001";
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -48,7 +48,7 @@ type ProgressRow = {
 };
 
 async function listRecursive(
-  supa: ReturnType<typeof createClient>,
+  supa: SupabaseClient,
   bucket: string,
   prefix = "",
 ): Promise<StorageObject[]> {

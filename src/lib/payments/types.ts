@@ -68,6 +68,7 @@ export interface PaymentEmailMergeExtras {
 
 export interface PaymentRequestRow {
   id: string;
+  organization_id: string;
   job_id: string;
   invoice_id: string | null;
   request_type: "invoice" | "deposit" | "retainer" | "partial";
@@ -103,6 +104,7 @@ export interface PaymentRequestRow {
 
 export interface PaymentRow {
   id: string;
+  organization_id: string;
   job_id: string;
   invoice_id: string | null;
   payment_request_id: string | null;
@@ -134,6 +136,7 @@ export interface PaymentRow {
 
 export interface RefundRow {
   id: string;
+  organization_id: string;
   payment_id: string;
   payment_request_id: string | null;
   amount: number;
@@ -150,6 +153,7 @@ export interface RefundRow {
 
 export interface StripeDisputeRow {
   id: string;
+  organization_id: string;
   payment_id: string | null;
   payment_request_id: string | null;
   stripe_dispute_id: string;
@@ -173,6 +177,7 @@ export interface StripeDisputeRow {
 
 export interface NotificationRow {
   id: string;
+  organization_id: string;
   user_id: string | null;
   type:
     // 14g legacy types

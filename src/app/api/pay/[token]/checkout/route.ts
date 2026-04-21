@@ -164,6 +164,7 @@ export async function POST(
       payment_method_types: [paymentMethodType],
       line_items: lineItems,
       metadata: {
+        organization_id: pr.organization_id,
         payment_request_id: pr.id,
         job_id: pr.job_id,
         invoice_id: pr.invoice_id ?? "",
@@ -172,6 +173,7 @@ export async function POST(
       },
       payment_intent_data: {
         metadata: {
+          organization_id: pr.organization_id,
           payment_request_id: pr.id,
           job_id: pr.job_id,
           invoice_id: pr.invoice_id ?? "",

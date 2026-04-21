@@ -24,6 +24,7 @@ export interface InvoiceLineItemRow {
 
 export interface InvoiceRow {
   id: string;
+  organization_id: string;
   invoice_number: string;
   job_id: string;
   status: InvoiceStatus;
