@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { Photo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
@@ -1591,6 +1592,7 @@ export default function PhotoAnnotator({
           .eq("id", existing.id);
       } else {
         await supabase.from("photo_annotations").insert({
+          organization_id: getActiveOrganizationId(),
           photo_id: currentPhoto.id,
           annotation_data: annotationData,
           created_by: "Eric",

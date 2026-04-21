@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import {
   Photo,
   Job,
@@ -261,6 +262,7 @@ function NewReportPageInner() {
     const { data, error } = await supabase
       .from("photo_reports")
       .insert({
+        organization_id: getActiveOrganizationId(),
         job_id: selectedJobId,
         template_id: selectedTemplateId || null,
         title: reportTitle.trim(),

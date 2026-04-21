@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { PhotoReportTemplate } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import {
@@ -139,11 +140,12 @@ export default function ReportTemplateBuilder({
       ({ error } = await supabase
         .from("photo_report_templates")
         .update(payload)
-        .eq("id", editTemplate.id));
+        .eq("id", editTemplate.id)
+        .eq("organization_id", getActiveOrganizationId()));
     } else {
       ({ error } = await supabase
         .from("photo_report_templates")
-        .insert(payload));
+        .insert({ ...payload, organization_id: getActiveOrganizationId() }));
     }
 
     if (error) {

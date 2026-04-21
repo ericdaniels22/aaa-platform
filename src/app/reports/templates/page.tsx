@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { PhotoReportTemplate } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -89,6 +90,7 @@ export default function TemplatesPage() {
     const { data } = await supabase
       .from("photo_report_templates")
       .select("*")
+      .eq("organization_id", getActiveOrganizationId())
       .order("created_at", { ascending: false });
 
     if (data) setTemplates(data as PhotoReportTemplate[]);
@@ -106,7 +108,8 @@ export default function TemplatesPage() {
     const { error } = await supabase
       .from("photo_report_templates")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("organization_id", getActiveOrganizationId());
 
     if (error) {
       toast.error("Failed to delete template");
@@ -130,9 +133,11 @@ export default function TemplatesPage() {
   async function handleSeedDefaults() {
     setSeeding(true);
     const supabase = createClient();
+    const orgId = getActiveOrganizationId();
+    const seeded = DEFAULT_TEMPLATES.map((t) => ({ ...t, organization_id: orgId }));
     const { error } = await supabase
       .from("photo_report_templates")
-      .insert(DEFAULT_TEMPLATES);
+      .insert(seeded);
 
     if (error) {
       toast.error("Failed to create default templates");

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { Job, JobAdjuster, Contact, JobActivity, Payment, Invoice, Photo, PhotoTag, PhotoReport, Email } from "@/lib/types";
 import FinancialsTab from "@/components/job-detail/financials-tab";
 import { Badge } from "@/components/ui/badge";
@@ -1545,6 +1546,7 @@ function AddAdjusterDialog({
     const supabase = createClient();
     const isPrimary = existingAdjusterIds.length === 0;
     const { error } = await supabase.from("job_adjusters").insert({
+      organization_id: getActiveOrganizationId(),
       job_id: jobId,
       contact_id: contactId,
       is_primary: isPrimary,
@@ -1566,9 +1568,11 @@ function AddAdjusterDialog({
     }
     setSaving(true);
     const supabase = createClient();
+    const orgId = getActiveOrganizationId();
     const { data: newContact, error: contactError } = await supabase
       .from("contacts")
       .insert({
+        organization_id: orgId,
         first_name: createForm.first_name.trim(),
         last_name: createForm.last_name.trim(),
         title: createForm.title.trim() || null,
@@ -1588,6 +1592,7 @@ function AddAdjusterDialog({
 
     const isPrimary = existingAdjusterIds.length === 0;
     const { error: linkError } = await supabase.from("job_adjusters").insert({
+      organization_id: orgId,
       job_id: jobId,
       contact_id: newContact.id,
       is_primary: isPrimary,
