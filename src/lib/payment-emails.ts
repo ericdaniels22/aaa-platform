@@ -237,8 +237,11 @@ export async function sendPaymentReceiptEmail(
     { stripeConnection: fees, extras: input.extras },
   );
 
-  // Generate receipt PDF if caller didn't pass one. Also persist to storage.
+  // Build attachment. Keep the generated Buffer around so we can upload it
+  // to Storage *after* the email succeeds — that way receipt_pdf_path is
+  // a reliable signal of "we emailed this PDF".
   let attachments: Attachment[] = [];
+  let generatedPdf: Buffer | null = null;
   if (input.attachment) {
     attachments = [input.attachment];
   } else {
@@ -252,6 +255,7 @@ export async function sendPaymentReceiptEmail(
         stripeFeeAmount: input.extras.stripe_fee_amount ?? null,
         netAmount: input.extras.net_amount ?? null,
       });
+      generatedPdf = pdf;
       attachments = [
         {
           filename: `receipt-${pr.id.slice(0, 8)}.pdf`,
@@ -259,22 +263,6 @@ export async function sendPaymentReceiptEmail(
           contentType: "application/pdf",
         },
       ];
-      // Persist PDF to Storage + update payment_requests.receipt_pdf_path.
-      const storagePath = `${pr.job_id}/${pr.id}.pdf`;
-      try {
-        await supabase.storage.from("receipts").upload(storagePath, pdf, {
-          contentType: "application/pdf",
-          upsert: true,
-        });
-        await supabase
-          .from("payment_requests")
-          .update({ receipt_pdf_path: storagePath })
-          .eq("id", pr.id);
-      } catch (e) {
-        console.warn(
-          `receipt PDF storage upload failed: ${e instanceof Error ? e.message : e}`,
-        );
-      }
     } catch (e) {
       console.warn(
         `receipt PDF generation failed: ${e instanceof Error ? e.message : e}`,
@@ -289,10 +277,42 @@ export async function sendPaymentReceiptEmail(
     attachments,
   });
 
+  // After email is safely sent, persist the PDF to Storage + update the
+  // admin-facing receipt_pdf_path. Best-effort: Supabase Storage .upload()
+  // does not throw — it returns { data, error }.
+  if (generatedPdf) {
+    const storagePath = `${pr.job_id}/${pr.id}.pdf`;
+    const { error: uploadErr } = await supabase.storage
+      .from("receipts")
+      .upload(storagePath, generatedPdf, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+    if (uploadErr) {
+      console.warn(
+        `receipt PDF storage upload failed: ${uploadErr.message}`,
+      );
+    } else {
+      const { error: updateErr } = await supabase
+        .from("payment_requests")
+        .update({ receipt_pdf_path: storagePath })
+        .eq("id", pr.id);
+      if (updateErr) {
+        console.warn(
+          `receipt_pdf_path update failed: ${updateErr.message}`,
+        );
+      }
+    }
+  }
+
   await writePaymentEvent(supabase, {
     paymentRequestId: pr.id,
     eventType: "email_delivered",
-    metadata: { kind: "receipt", provider: sent.provider, message_id: sent.messageId },
+    metadata: {
+      kind: "receipt",
+      provider: sent.provider,
+      message_id: sent.messageId,
+    },
   });
 
   return sent;

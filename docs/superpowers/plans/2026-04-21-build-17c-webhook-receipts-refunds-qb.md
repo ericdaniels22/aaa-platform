@@ -1580,10 +1580,11 @@ export async function sendPaymentReceiptEmail(
     { stripeConnection: fees, extras: input.extras },
   );
 
-  // Generate receipt PDF if caller didn't pass one. Attachment is optional
-  // — if PDF generation fails, send the email without it (body still links
-  // to Stripe's hosted receipt).
+  // Build attachment. Keep the generated Buffer around so we can upload it
+  // to Storage *after* the email succeeds — that way receipt_pdf_path is
+  // a reliable signal of "we emailed this PDF".
   let attachments: Attachment[] = [];
+  let generatedPdf: Buffer | null = null;
   if (input.attachment) {
     attachments = [input.attachment];
   } else {
@@ -1597,6 +1598,7 @@ export async function sendPaymentReceiptEmail(
         stripeFeeAmount: input.extras.stripe_fee_amount ?? null,
         netAmount: input.extras.net_amount ?? null,
       });
+      generatedPdf = pdf;
       attachments = [
         {
           filename: `receipt-${pr.id.slice(0, 8)}.pdf`,
@@ -1605,8 +1607,9 @@ export async function sendPaymentReceiptEmail(
         },
       ];
     } catch (e) {
-      // Log but don't fail the email.
-      console.warn(`receipt PDF generation failed: ${e instanceof Error ? e.message : e}`);
+      console.warn(
+        `receipt PDF generation failed: ${e instanceof Error ? e.message : e}`,
+      );
     }
   }
 
@@ -1617,10 +1620,42 @@ export async function sendPaymentReceiptEmail(
     attachments,
   });
 
+  // After email is safely sent, persist the PDF to Storage + update the
+  // admin-facing receipt_pdf_path. Best-effort: Supabase Storage .upload()
+  // does not throw — it returns { data, error }.
+  if (generatedPdf) {
+    const storagePath = `${pr.job_id}/${pr.id}.pdf`;
+    const { error: uploadErr } = await supabase.storage
+      .from("receipts")
+      .upload(storagePath, generatedPdf, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+    if (uploadErr) {
+      console.warn(
+        `receipt PDF storage upload failed: ${uploadErr.message}`,
+      );
+    } else {
+      const { error: updateErr } = await supabase
+        .from("payment_requests")
+        .update({ receipt_pdf_path: storagePath })
+        .eq("id", pr.id);
+      if (updateErr) {
+        console.warn(
+          `receipt_pdf_path update failed: ${updateErr.message}`,
+        );
+      }
+    }
+  }
+
   await writePaymentEvent(supabase, {
     paymentRequestId: pr.id,
     eventType: "email_delivered",
-    metadata: { kind: "receipt", provider: sent.provider, message_id: sent.messageId },
+    metadata: {
+      kind: "receipt",
+      provider: sent.provider,
+      message_id: sent.messageId,
+    },
   });
 
   return sent;
@@ -4518,32 +4553,11 @@ export async function GET(
 }
 ```
 
-- [ ] **Step 5: Also ensure the receipt PDF gets saved to storage when the webhook generates it**
+- [ ] **Step 5: Ensure receipt PDF is saved to storage — no-op**
 
-In `src/lib/payment-emails.ts` → `sendPaymentReceiptEmail`, after the PDF is generated, save it to Supabase Storage and update `payment_requests.receipt_pdf_path`:
+Storage upload now happens inside `sendPaymentReceiptEmail` (Task 9) — this step is a no-op for Task 22. Skip.
 
-```typescript
-  // After: const pdf = await generateReceiptPdf(...)
-  const storagePath = `${pr.job_id}/${pr.id}.pdf`;
-  try {
-    await supabase.storage.from("receipts").upload(storagePath, pdf, {
-      contentType: "application/pdf",
-      upsert: true,
-    });
-    await supabase
-      .from("payment_requests")
-      .update({ receipt_pdf_path: storagePath })
-      .eq("id", pr.id);
-  } catch (e) {
-    console.warn(`receipt PDF storage upload failed: ${e instanceof Error ? e.message : e}`);
-  }
-```
-
-Add this block inside the existing `try { ... } catch { ... }` around PDF generation so a storage failure also doesn't break the email send.
-
-**Storage bucket requirement:** The `receipts` bucket must exist. Add a check to the migration or flag as a manual step. Quick sub-step:
-
-- Navigate to Supabase Storage console, create a private bucket named `receipts`. RLS: service-role only. Document this in the final verification checklist.
+**Storage bucket requirement:** The `receipts` bucket already exists from the Build 35 expense-receipts feature (see `supabase/migration-build35-expenses.sql:141`). No action needed.
 
 - [ ] **Step 6: Mount the refund modal in the subsection**
 
@@ -4612,7 +4626,7 @@ Also ensure these `qb_mappings` rows exist (manually via SQL editor if the setti
 - `type='stripe_fee_account', platform_value='stripe_processing_fees', qb_entity_id=<Payment Processing Fees expense account>`
 - `type='generic_income_account', platform_value='stripe_deposits', qb_entity_id=<Deposits income account>` (only needed for standalone deposits without an invoice)
 
-And a Supabase Storage bucket `receipts` must exist (create via Supabase dashboard → Storage → New bucket → private).
+Supabase Storage bucket `receipts` — already exists from Build 35 expense-receipts feature (see `supabase/migration-build35-expenses.sql:141`); no action needed.
 
 ### Webhook setup and signature verification
 
@@ -4818,7 +4832,6 @@ Report to the user:
 **Known compile-time fragility:** Stripe SDK types for `payment_method_details.us_bank_account.bank_name` vary by version. Task 13 Step 5 includes a fallback cast if needed. Flagged inline.
 
 **Known runtime gaps (documented, not fixed in 17c):**
-- Storage bucket `receipts` must be created manually in Supabase (flagged in Task 23 setup).
 - `qb_mappings` rows for `stripe_fee_account`, `generic_income_account`, and optionally `refund_item` must be seeded manually (flagged in Task 23 setup). A future build could add a UI for these.
 
 ---
