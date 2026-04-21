@@ -381,6 +381,7 @@ export default function StripeSettingsClient({
           <WebhookConfigSection
             configured={webhookConfigured}
             lastEventAt={lastEventAt}
+            mode={connection.mode}
           />
         </CardContent>
       </Card>
@@ -411,10 +412,16 @@ export default function StripeSettingsClient({
 function WebhookConfigSection({
   configured,
   lastEventAt,
+  mode,
 }: {
   configured: boolean;
   lastEventAt: string | null;
+  mode: "test" | "live";
 }) {
+  const dashboardUrl =
+    mode === "live"
+      ? "https://dashboard.stripe.com/webhooks"
+      : "https://dashboard.stripe.com/test/webhooks";
   const router = useRouter();
   const [value, setValue] = useState("");
   const [reveal, setReveal] = useState(false);
@@ -487,7 +494,7 @@ function WebhookConfigSection({
           className="underline"
           target="_blank"
           rel="noopener noreferrer"
-          href="https://dashboard.stripe.com/test/webhooks"
+          href={dashboardUrl}
         >
           Stripe Dashboard
         </a>{" "}
@@ -507,7 +514,11 @@ function WebhookConfigSection({
         <code>whsec_</code>) and paste it below.
       </p>
       <div className="flex items-center gap-2">
+        <Label htmlFor="webhook_secret" className="sr-only">
+          Webhook signing secret
+        </Label>
         <Input
+          id="webhook_secret"
           type={reveal ? "text" : "password"}
           placeholder={
             configured ? "whsec_•••••  (paste to replace)" : "whsec_..."
@@ -522,6 +533,8 @@ function WebhookConfigSection({
           variant="outline"
           size="sm"
           onClick={() => setReveal((v) => !v)}
+          aria-label={reveal ? "Hide webhook signing secret" : "Show webhook signing secret"}
+          aria-pressed={reveal}
         >
           {reveal ? "Hide" : "Show"}
         </Button>
