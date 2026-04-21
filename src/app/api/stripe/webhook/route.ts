@@ -52,31 +52,41 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
 
-  const supabase = createServiceClient();
-
-  const claim = await claimEvent(supabase, event);
-  if (claim.status === "duplicate") {
-    return NextResponse.json({ ok: true, duplicate: true });
-  }
-
-  const handler = HANDLERS[event.type];
-  if (!handler) {
-    // Unknown event type — we still stored it (good for audit). Mark processed
-    // so Stripe doesn't retry. Nothing to do.
-    await markProcessed(supabase, claim.rowId, null);
-    return NextResponse.json({ ok: true, handled: false });
-  }
-
   try {
-    const result = await handler(event);
-    await markProcessed(supabase, claim.rowId, result.paymentRequestId);
-    return NextResponse.json({ ok: true });
+    const supabase = createServiceClient();
+
+    const claim = await claimEvent(supabase, event);
+    if (claim.status === "duplicate") {
+      return NextResponse.json({ ok: true, duplicate: true });
+    }
+
+    const handler = HANDLERS[event.type];
+    if (!handler) {
+      // Unknown event type — we still stored it (good for audit). Mark processed
+      // so Stripe doesn't retry. Nothing to do.
+      await markProcessed(supabase, claim.rowId, null);
+      return NextResponse.json({ ok: true, handled: false });
+    }
+
+    try {
+      const result = await handler(event);
+      await markProcessed(supabase, claim.rowId, result.paymentRequestId);
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(
+        `[stripe/webhook] handler failed for ${event.type} ${event.id}: ${msg}`,
+      );
+      await releaseEvent(supabase, claim.rowId, e);
+      return NextResponse.json({ error: "internal_error" }, { status: 500 });
+    }
   } catch (e) {
+    // Catches failures of claimEvent / markProcessed themselves — ensures
+    // we always respond with JSON, not Next's HTML 500 page.
     const msg = e instanceof Error ? e.message : String(e);
     console.error(
-      `[stripe/webhook] handler failed for ${event.type} ${event.id}: ${msg}`,
+      `[stripe/webhook] dispatch failed for ${event.type} ${event.id}: ${msg}`,
     );
-    await releaseEvent(supabase, claim.rowId, e);
     return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
 }
