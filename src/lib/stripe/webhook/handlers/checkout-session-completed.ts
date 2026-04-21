@@ -23,21 +23,24 @@ export async function handleCheckoutSessionCompleted(
   const payerEmail =
     session.customer_details?.email ?? session.customer_email ?? null;
   const payerName = session.customer_details?.name ?? null;
-  const paymentMethodType =
-    (session.payment_method_types?.[0] as string | undefined) === "us_bank_account"
-      ? "us_bank_account"
-      : "card";
   const paymentIntentId =
     typeof session.payment_intent === "string"
       ? session.payment_intent
       : session.payment_intent?.id ?? null;
 
-  const patch: Record<string, unknown> = {
-    payment_method_type: paymentMethodType,
-  };
+  // Intentionally NOT setting payment_method_type here — the Checkout Session's
+  // payment_method_types is the configured allow-list (which can include both
+  // "card" and "us_bank_account" simultaneously), not what the customer paid
+  // with. Task 13's payment_intent.succeeded handler writes the authoritative
+  // value from charge.payment_method_details.type.
+  const patch: Record<string, unknown> = {};
   if (payerEmail) patch.payer_email = payerEmail;
   if (payerName) patch.payer_name = payerName;
   if (paymentIntentId) patch.stripe_payment_intent_id = paymentIntentId;
+
+  if (Object.keys(patch).length === 0) {
+    return { paymentRequestId };
+  }
 
   const { error } = await supabase
     .from("payment_requests")
