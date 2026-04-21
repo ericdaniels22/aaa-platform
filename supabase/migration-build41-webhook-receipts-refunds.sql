@@ -39,7 +39,7 @@ alter table payments add constraint payments_status_check
 
 -- ---------------------------------------------------------------------------
 -- 3. Add Stripe + QB columns to payments.
---    qb_payment_id already exists from build16-series. Add companion sync
+--    qb_payment_id already exists from build38. Add companion sync
 --    status + timestamps + error, and Stripe-specific identifiers.
 -- ---------------------------------------------------------------------------
 alter table payments add column if not exists payment_request_id uuid references payment_requests(id) on delete set null;
@@ -156,6 +156,10 @@ create table if not exists stripe_disputes (
   stripe_dispute_id text unique not null,
   amount numeric(10,2),
   reason text,
+  -- nullable: if Stripe introduces a new dispute status we haven't coded for,
+  -- the handler's normalizeStatus() returns null rather than throwing. The
+  -- row is still inserted so nothing is lost; status gets updated on the
+  -- next charge.dispute.* event.
   status text check (status in (
     'warning_needs_response','warning_under_review','warning_closed',
     'needs_response','under_review','won','lost'
@@ -173,7 +177,7 @@ create index if not exists idx_stripe_disputes_payment_id on stripe_disputes(pay
 drop trigger if exists trg_stripe_disputes_updated_at on stripe_disputes;
 create trigger trg_stripe_disputes_updated_at
   before update on stripe_disputes
-  for each row execute function set_updated_at();
+  for each row execute function update_updated_at();
 
 alter table stripe_disputes enable row level security;
 drop policy if exists "Allow all on stripe_disputes" on stripe_disputes;
@@ -187,6 +191,9 @@ grant all on stripe_disputes to anon, authenticated, service_role;
 -- ---------------------------------------------------------------------------
 create table if not exists notifications (
   id uuid primary key default gen_random_uuid(),
+  -- nullable by design: NULL user_profile_id is reserved for broadcast
+  -- notifications (visible to all admins), e.g. QB sync failures. Per-user
+  -- filtering happens at read time.
   user_profile_id uuid references user_profiles(id) on delete cascade,
   type text not null check (type in (
     'payment_received','payment_failed','refund_issued',
