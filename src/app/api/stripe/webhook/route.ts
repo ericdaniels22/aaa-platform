@@ -11,6 +11,7 @@ import {
   markProcessed,
   releaseEvent,
 } from "@/lib/stripe/webhook/idempotency";
+import { handleCheckoutSessionCompleted } from "@/lib/stripe/webhook/handlers/checkout-session-completed";
 
 // Webhook handlers need the raw request body for signature verification.
 // Force nodejs runtime + disable response caching.
@@ -24,7 +25,7 @@ type Handler = (event: Stripe.Event) => Promise<HandlerResult>;
 const HANDLERS: Record<string, Handler> = {
   // Tasks 12-19 replace these stubs with real implementations. Until then,
   // anything not explicitly listed returns null and is marked processed.
-  "checkout.session.completed": async () => ({ paymentRequestId: null }),
+  "checkout.session.completed": handleCheckoutSessionCompleted,
   "payment_intent.succeeded": async () => ({ paymentRequestId: null }),
   "payment_intent.payment_failed": async () => ({ paymentRequestId: null }),
   "charge.refunded": async () => ({ paymentRequestId: null }),
