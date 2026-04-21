@@ -1,6 +1,14 @@
 // DB row shapes + QB payload types shared across the sync lib.
 
-export type QbMappingType = "damage_type" | "payment_method" | "expense_category";
+export type QbMappingType =
+  | "damage_type"
+  | "payment_method"
+  | "expense_category"
+  // 17c — standalone deposits post against a generic income account; Stripe
+  // processing fees post as a Purchase against an expense account. Both are
+  // admin-configured via qb_mappings rows.
+  | "generic_income_account"
+  | "stripe_fee_account";
 
 export type QbSyncEntityType = "customer" | "sub_customer" | "invoice" | "payment";
 export type QbSyncAction = "create" | "update" | "delete" | "void";
@@ -127,10 +135,23 @@ export interface QbInvoiceWriteResult {
 
 // ---------- Payment ----------
 
-export interface QbPaymentLine {
+// 17c — invoice-linked payments use the LinkedTxn variant; standalone
+// deposits (no invoice) use the PaymentLineDetail variant to post against
+// a generic income account. QbPaymentLine is the union of both shapes.
+export interface QbPaymentLineInvoice {
   Amount: number;
   LinkedTxn: Array<{ TxnId: string; TxnType: "Invoice" }>;
 }
+
+export interface QbPaymentLineGeneric {
+  Amount: number;
+  DetailType: "PaymentLineDetail";
+  PaymentLineDetail: {
+    DepositToAccountRef: { value: string };
+  };
+}
+
+export type QbPaymentLine = QbPaymentLineInvoice | QbPaymentLineGeneric;
 
 export interface QbPaymentPayload {
   Id?: string;

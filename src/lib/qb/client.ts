@@ -303,3 +303,24 @@ export async function deletePayment(
     SyncToken: syncToken,
   });
 }
+
+// ---------- Purchases (used by 17c to post the Stripe processing fee as an expense) ----------
+
+export interface QbPurchaseWriteResult {
+  id: string;
+  syncToken: string;
+}
+
+export async function createPurchase(
+  token: QbApiContext,
+  payload: Record<string, unknown>,
+): Promise<QbPurchaseWriteResult> {
+  const data = await call<{ Purchase?: { Id: string; SyncToken: string } }>(
+    token,
+    "POST",
+    "/purchase",
+    payload,
+  );
+  if (!data.Purchase?.Id) throw new Error("QuickBooks returned no Purchase id");
+  return { id: data.Purchase.Id, syncToken: data.Purchase.SyncToken };
+}
