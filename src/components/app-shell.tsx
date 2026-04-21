@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const AUTH_ROUTES = ["/login", "/logout"];
 const FULL_BLEED_ROUTES = ["/email"];
 // Public customer-facing routes render without the internal app chrome.
-const PUBLIC_ROUTES = ["/sign"];
+const PUBLIC_ROUTES = ["/sign", "/pay"];
 // Internal routes that still require auth (handled in the page itself)
 // but render full-screen without the sidebar — used for the tablet
 // in-person signing handoff where the iPad is given to the customer.
