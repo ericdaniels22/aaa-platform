@@ -62,6 +62,7 @@ export async function sendContractReminder(
   if (opts.skipSchedule) {
     // Manual reminder path: audit only, don't touch counter or schedule.
     const { error } = await supabase.from("contract_events").insert({
+      organization_id: contract.organization_id,
       contract_id: contract.id,
       signer_id: active.id,
       event_type: "reminder_sent",

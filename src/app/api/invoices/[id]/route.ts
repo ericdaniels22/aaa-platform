@@ -8,6 +8,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import {
   computeTotals,
   type InvoiceLineItemInput,
@@ -147,7 +148,9 @@ export async function PATCH(
       patch.tax_amount = taxAmount;
       patch.total_amount = total;
       patch.tax_rate = effectiveRate;
+      const orgId = current.organization_id ?? getActiveOrganizationId();
       lineRowsToReplace = items.map((li, idx) => ({
+        organization_id: orgId,
         invoice_id: id,
         sort_order: idx,
         description: li.description,
@@ -172,10 +175,12 @@ export async function PATCH(
   }
 
   if (lineRowsToReplace) {
+    const lineOrgId = current.organization_id ?? getActiveOrganizationId();
     const { error: delErr } = await service
       .from("invoice_line_items")
       .delete()
-      .eq("invoice_id", id);
+      .eq("invoice_id", id)
+      .eq("organization_id", lineOrgId);
     if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
     const { error: insErr } = await service
       .from("invoice_line_items")

@@ -1,7 +1,18 @@
+// Next 16 renamed `middleware` → `proxy`. This file replaces the old
+// middleware.ts (which was silently ignored on Next 16, leaving the app
+// completely unauthenticated). The exported function MUST be named `proxy`
+// (or be the default export); `middleware` is no longer recognised.
+//
+// Caught by: scratch rehearsal smoke test (2026-04-22). /settings/users
+//   showed Eric as signed in but /api/settings/users returned [] because
+//   no Supabase session cookies were ever set. Tracing back: the file
+//   middleware.ts at the repo root never ran, so no session refresh ever
+//   happened and no auth gate redirected unauthenticated users to /login.
+
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

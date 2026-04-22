@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import {
   computeTotals,
   type CreateInvoiceInput,
@@ -35,6 +36,7 @@ export async function GET(request: Request) {
       "*, jobs!inner(id, job_number, property_address, contact_id, contacts:contact_id(first_name, last_name))",
       { count: "exact" },
     )
+    .eq("organization_id", getActiveOrganizationId())
     .order("issued_date", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -82,10 +84,12 @@ export async function POST(request: Request) {
   const issued = body.issuedDate ?? new Date().toISOString();
   const due = body.dueDate === null ? null : (body.dueDate ?? addDays(issued, 30));
 
+  const orgId = getActiveOrganizationId();
   const service = createServiceClient();
   const { data: inv, error: invErr } = await service
     .from("invoices")
     .insert({
+      organization_id: orgId,
       job_id: body.jobId,
       status: "draft",
       issued_date: issued,
@@ -105,6 +109,7 @@ export async function POST(request: Request) {
   }
 
   const rows = items.map((li, idx) => ({
+    organization_id: orgId,
     invoice_id: inv.id,
     sort_order: idx,
     description: li.description,

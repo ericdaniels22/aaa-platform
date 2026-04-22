@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 interface CreatePaymentBody {
   jobId: string;
@@ -29,6 +30,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("payments")
     .select("*")
+    .eq("organization_id", getActiveOrganizationId())
     .order("received_date", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
   if (invoiceId) query = query.eq("invoice_id", invoiceId);
@@ -49,12 +51,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "jobId, source, method, amount required" }, { status: 400 });
   }
 
+  const orgId = getActiveOrganizationId();
   const service = createServiceClient();
   if (body.invoiceId) {
     const { data: inv } = await service
       .from("invoices")
       .select("status")
       .eq("id", body.invoiceId)
+      .eq("organization_id", orgId)
       .maybeSingle<{ status: string }>();
     if (inv?.status === "draft") {
       return NextResponse.json(
@@ -67,6 +71,7 @@ export async function POST(request: Request) {
   const { data, error } = await service
     .from("payments")
     .insert({
+      organization_id: orgId,
       job_id: body.jobId,
       invoice_id: body.invoiceId ?? null,
       source: body.source,

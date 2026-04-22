@@ -4,6 +4,7 @@ import {
   verifyPaymentLinkToken,
   InvalidPaymentLinkTokenError,
 } from "@/lib/payment-link-tokens";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 interface CompanyBrand {
   name: string;
@@ -17,6 +18,7 @@ async function loadCompany(): Promise<CompanyBrand> {
   const { data } = await supabase
     .from("company_settings")
     .select("key, value")
+    .eq("organization_id", getActiveOrganizationId())
     .in("key", ["company_name", "phone", "email", "logo_url"]);
   const m = new Map<string, string | null>(
     (data ?? []).map((r: { key: string; value: string | null }) => [

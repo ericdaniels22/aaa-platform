@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission } from "@/lib/permissions-api";
 import { getStripeClient, StripeNotConnectedError } from "@/lib/stripe";
 import { generatePaymentLinkToken } from "@/lib/payment-link-tokens";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 interface CreateBody {
   job_id: string;
@@ -58,12 +59,14 @@ export async function POST(req: NextRequest) {
   }
   const { client: stripe, connection } = stripeCtx;
 
+  const orgId = getActiveOrganizationId();
   const supabase = createServiceClient();
 
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
     .select("id, contact_id, job_number")
     .eq("id", body.job_id)
+    .eq("organization_id", orgId)
     .maybeSingle();
   if (jobErr || !job) return NextResponse.json({ error: "job_not_found" }, { status: 404 });
 
@@ -172,6 +175,7 @@ export async function POST(req: NextRequest) {
       },
     ],
     metadata: {
+      organization_id: orgId,
       payment_request_id: paymentRequestId,
       job_id: body.job_id,
       invoice_id: body.invoice_id ?? "",
@@ -179,6 +183,7 @@ export async function POST(req: NextRequest) {
     },
     payment_intent_data: {
       metadata: {
+        organization_id: orgId,
         payment_request_id: paymentRequestId,
         job_id: body.job_id,
         invoice_id: body.invoice_id ?? "",
@@ -201,6 +206,7 @@ export async function POST(req: NextRequest) {
   const { data: inserted, error: insertErr } = await supabase
     .from("payment_requests")
     .insert({
+      organization_id: orgId,
       id: paymentRequestId,
       job_id: body.job_id,
       invoice_id: body.invoice_id ?? null,
@@ -265,6 +271,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabase
     .from("payment_requests")
     .select("*")
+    .eq("organization_id", getActiveOrganizationId())
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

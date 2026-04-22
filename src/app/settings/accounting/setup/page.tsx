@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
 import { getActiveConnection } from "@/lib/qb/tokens";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import SetupWizardClient from "./setup-wizard-client";
 
 // Server gate + bootstrapping. Loads the damage_types list (platform
@@ -13,12 +14,14 @@ export default async function AccountingSetupPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("user_profiles")
+  const orgId = getActiveOrganizationId();
+  const { data: membership } = await supabase
+    .from("user_organizations")
     .select("role")
-    .eq("id", user.id)
+    .eq("user_id", user.id)
+    .eq("organization_id", orgId)
     .maybeSingle<{ role: string }>();
-  if (profile?.role !== "admin") redirect("/settings/accounting");
+  if (membership?.role !== "admin") redirect("/settings/accounting");
 
   const service = createServiceClient();
   const conn = await getActiveConnection(service);
@@ -27,6 +30,7 @@ export default async function AccountingSetupPage() {
   const { data: damageTypes } = await service
     .from("damage_types")
     .select("name, display_label")
+    .or(`organization_id.is.null,organization_id.eq.${orgId}`)
     .order("sort_order", { ascending: true });
 
   return (

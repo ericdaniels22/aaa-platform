@@ -1,19 +1,22 @@
 import { NextResponse } from "next/server";
 import { createApiClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
-// GET /api/settings/damage-types
+// GET /api/settings/damage-types — NULL-org defaults plus this org's rows.
 export async function GET() {
   const supabase = createApiClient();
+  const orgId = getActiveOrganizationId();
   const { data, error } = await supabase
     .from("damage_types")
     .select("*")
+    .or(`organization_id.is.null,organization_id.eq.${orgId}`)
     .order("sort_order");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }
 
-// POST /api/settings/damage-types — create new type
+// POST /api/settings/damage-types — create new (always org-owned) type.
 export async function POST(request: Request) {
   const body = await request.json();
   const { name, display_label, bg_color, text_color, icon } = body;
@@ -23,10 +26,12 @@ export async function POST(request: Request) {
   }
 
   const supabase = createApiClient();
+  const orgId = getActiveOrganizationId();
 
   const { data: existing } = await supabase
     .from("damage_types")
     .select("sort_order")
+    .or(`organization_id.is.null,organization_id.eq.${orgId}`)
     .order("sort_order", { ascending: false })
     .limit(1);
 
@@ -35,6 +40,7 @@ export async function POST(request: Request) {
   const { data, error } = await supabase
     .from("damage_types")
     .insert({
+      organization_id: orgId,
       name: name.toLowerCase().replace(/\s+/g, "_"),
       display_label,
       bg_color: bg_color || "#F1EFE8",
@@ -56,10 +62,11 @@ export async function POST(request: Request) {
   return NextResponse.json(data, { status: 201 });
 }
 
-// PUT /api/settings/damage-types — bulk update
+// PUT /api/settings/damage-types — bulk update, active-org rows only.
 export async function PUT(request: Request) {
   const body = await request.json();
   const supabase = createApiClient();
+  const orgId = getActiveOrganizationId();
 
   if (Array.isArray(body)) {
     for (const item of body) {
@@ -72,7 +79,8 @@ export async function PUT(request: Request) {
           icon: item.icon,
           sort_order: item.sort_order,
         })
-        .eq("id", item.id);
+        .eq("id", item.id)
+        .eq("organization_id", orgId);
 
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -83,7 +91,8 @@ export async function PUT(request: Request) {
   const { error } = await supabase
     .from("damage_types")
     .update({ display_label, bg_color, text_color, icon, sort_order })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("organization_id", orgId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
@@ -96,20 +105,22 @@ export async function DELETE(request: Request) {
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
   const supabase = createApiClient();
+  const orgId = getActiveOrganizationId();
 
   const { data: dtype } = await supabase
     .from("damage_types")
-    .select("is_default, name")
+    .select("is_default, name, organization_id")
     .eq("id", id)
     .single();
 
-  if (dtype?.is_default) {
+  if (dtype?.is_default || dtype?.organization_id === null) {
     return NextResponse.json({ error: "Default damage types cannot be deleted" }, { status: 403 });
   }
 
   const { count } = await supabase
     .from("jobs")
     .select("*", { count: "exact", head: true })
+    .eq("organization_id", orgId)
     .eq("damage_type", dtype?.name || "");
 
   if (count && count > 0) {
@@ -119,7 +130,11 @@ export async function DELETE(request: Request) {
     );
   }
 
-  const { error } = await supabase.from("damage_types").delete().eq("id", id);
+  const { error } = await supabase
+    .from("damage_types")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", orgId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }

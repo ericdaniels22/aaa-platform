@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
 import { getActiveConnection } from "@/lib/qb/tokens";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import AccountingSettingsClient from "./accounting-settings-client";
 
 // Server-side gate: admin + manage_accounting + access_settings. Fetches
@@ -12,20 +13,21 @@ export default async function AccountingSettingsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle<{ role: string }>();
-  const isAdmin = profile?.role === "admin";
+  const { data: membership } = await supabase
+    .from("user_organizations")
+    .select("id, role")
+    .eq("user_id", user.id)
+    .eq("organization_id", getActiveOrganizationId())
+    .maybeSingle<{ id: string; role: string }>();
+  const isAdmin = membership?.role === "admin";
 
   // Permissions check (admin shortcut, then two named perms).
   let canAccess = isAdmin;
-  if (!canAccess) {
+  if (!canAccess && membership) {
     const { data: perms } = await supabase
-      .from("user_permissions")
+      .from("user_organization_permissions")
       .select("permission_key, granted")
-      .eq("user_id", user.id)
+      .eq("user_organization_id", membership.id)
       .in("permission_key", ["access_settings", "manage_accounting"]);
     const ok = new Set((perms ?? []).filter((p) => p.granted).map((p) => p.permission_key));
     canAccess = ok.has("access_settings") && ok.has("manage_accounting");

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { buildSystemPrompt } from "@/lib/jarvis/prompts/jarvis-core";
 import {
   jarvisToolDefinitions,
@@ -53,15 +54,22 @@ export async function POST(request: NextRequest) {
     // Service client for broad data access
     const supabase = createServiceClient();
 
-    // Fetch user profile
+    // Fetch user profile + active-org membership role.
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("full_name, role")
+      .select("full_name")
       .eq("id", user.id)
       .single();
 
+    const { data: membership } = await supabase
+      .from("user_organizations")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("organization_id", getActiveOrganizationId())
+      .maybeSingle<{ role: string }>();
+
     const userName = profile?.full_name || "User";
-    const userRole = profile?.role || "crew_member";
+    const userRole = membership?.role || "crew_member";
 
     // Build context for system prompt
     let jobData = null;

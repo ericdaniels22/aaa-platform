@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { PhotoTag } from "@/lib/types";
 import {
   Dialog,
@@ -112,11 +113,14 @@ export default function PhotoUploadModal({
 
     setUploading(true);
     const supabase = createClient();
+    const orgId = getActiveOrganizationId();
     let successCount = 0;
 
     for (const filePreview of files) {
       const ext = filePreview.file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const fileName = `${jobId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      // Path: {org_id}/{job_id}/{timestamp}-rand.ext — the org_id prefix
+      // matches the post-18a rename layout (scripts/migrate-storage-paths.ts).
+      const fileName = `${orgId}/${jobId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
       // Upload to Supabase Storage
       const { error: storageError } = await supabase.storage
@@ -137,6 +141,7 @@ export default function PhotoUploadModal({
       const { data: photoData, error: insertError } = await supabase
         .from("photos")
         .insert({
+          organization_id: orgId,
           job_id: jobId,
           storage_path: fileName,
           caption: filePreview.caption || null,
@@ -157,6 +162,7 @@ export default function PhotoUploadModal({
       // Insert tag assignments
       if (filePreview.tags.length > 0 && photoData) {
         const tagAssignments = filePreview.tags.map((tagId) => ({
+          organization_id: orgId,
           photo_id: photoData.id,
           tag_id: tagId,
         }));

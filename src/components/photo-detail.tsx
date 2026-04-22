@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { Photo, PhotoTag } from "@/lib/types";
 import {
   Dialog,
@@ -149,8 +150,10 @@ export default function PhotoDetailModal({
       .eq("photo_id", photo.id);
 
     if (assignedTagIds.length > 0) {
+      const orgId = getActiveOrganizationId();
       await supabase.from("photo_tag_assignments").insert(
         assignedTagIds.map((tagId) => ({
+          organization_id: orgId,
           photo_id: photo.id,
           tag_id: tagId,
         }))

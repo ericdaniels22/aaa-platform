@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { JobActivity } from "@/lib/types";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,7 @@ export default function ActivityTimeline({
     const supabase = createClient();
 
     const { error } = await supabase.from("job_activities").insert({
+      organization_id: getActiveOrganizationId(),
       job_id: jobId,
       activity_type: activityType,
       title: title.trim(),

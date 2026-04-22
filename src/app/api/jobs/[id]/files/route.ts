@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient } from "@/lib/supabase-api";
 import { randomUUID } from "crypto";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
-// GET /api/jobs/[id]/files — list files for a job
+// GET /api/jobs/[id]/files — list files for a job (scoped to active org).
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -13,6 +14,7 @@ export async function GET(
   const { data, error } = await supabase
     .from("job_files")
     .select("*")
+    .eq("organization_id", getActiveOrganizationId())
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
 
@@ -38,13 +40,15 @@ export async function POST(
   }
 
   const supabase = createApiClient();
+  const orgId = getActiveOrganizationId();
   const succeeded: unknown[] = [];
   const failed: { filename: string; error: string }[] = [];
 
   for (const file of files) {
     try {
       const uuid = randomUUID();
-      const storagePath = `${jobId}/${uuid}-${file.name}`;
+      // Org-prefixed path to match the post-18a rename layout.
+      const storagePath = `${orgId}/${jobId}/${uuid}-${file.name}`;
 
       const arrayBuffer = await file.arrayBuffer();
       const { error: uploadError } = await supabase.storage
@@ -62,6 +66,7 @@ export async function POST(
       const { data: row, error: insertError } = await supabase
         .from("job_files")
         .insert({
+          organization_id: orgId,
           job_id: jobId,
           filename: file.name,
           storage_path: storagePath,

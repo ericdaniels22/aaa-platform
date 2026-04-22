@@ -23,10 +23,10 @@ export async function POST(request: NextRequest) {
 
   const supabase = createApiClient();
 
-  // Get account for from address
+  // Get account for from address + org scope
   const { data: account } = await supabase
     .from("email_accounts")
-    .select("email_address, display_name")
+    .select("email_address, display_name, organization_id")
     .eq("id", accountId)
     .single();
 
@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
   const snippet = (bodyText || "").replace(/\s+/g, " ").trim().slice(0, 200);
 
   const draftData = {
+    organization_id: account.organization_id,
     account_id: accountId,
     job_id: jobId || null,
     message_id: draftId || `draft-${Date.now()}`,

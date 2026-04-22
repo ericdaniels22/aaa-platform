@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -78,6 +79,7 @@ export default function RecordPaymentModal({
     const supabase = createClient();
 
     const { error } = await supabase.from("payments").insert({
+      organization_id: getActiveOrganizationId(),
       job_id: jobId,
       source,
       method,

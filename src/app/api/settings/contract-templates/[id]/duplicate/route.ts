@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createApiClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 // POST /api/settings/contract-templates/[id]/duplicate
 export async function POST(
@@ -8,11 +9,13 @@ export async function POST(
 ) {
   const { id } = await params;
   const supabase = createApiClient();
+  const orgId = getActiveOrganizationId();
 
   const { data: source, error: fetchErr } = await supabase
     .from("contract_templates")
     .select("*")
     .eq("id", id)
+    .eq("organization_id", orgId)
     .maybeSingle();
 
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
@@ -21,6 +24,7 @@ export async function POST(
   const { data: inserted, error: insertErr } = await supabase
     .from("contract_templates")
     .insert({
+      organization_id: orgId,
       name: `${source.name} (Copy)`,
       description: source.description,
       content: source.content,

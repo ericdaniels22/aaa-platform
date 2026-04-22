@@ -16,6 +16,7 @@ import { handlePaymentIntentSucceeded } from "@/lib/stripe/webhook/handlers/paym
 import { handlePaymentIntentFailed } from "@/lib/stripe/webhook/handlers/payment-intent-failed";
 import { handleChargeRefunded } from "@/lib/stripe/webhook/handlers/charge-refunded";
 import { handleChargeDisputeCreated, handleChargeDisputeClosed } from "@/lib/stripe/webhook/handlers/charge-dispute";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 // Webhook handlers need the raw request body for signature verification.
 // Force nodejs runtime + disable response caching.
@@ -36,6 +37,18 @@ const HANDLERS: Record<string, Handler> = {
   "charge.dispute.created": handleChargeDisputeCreated,
   "charge.dispute.closed": handleChargeDisputeClosed,
 };
+
+// Resolve the org id for a Stripe event. Prefers the metadata written on the
+// event's object (set by our Checkout Session creation code). Falls back to
+// the AAA hardcode for events issued before the 18a deploy — those
+// pre-18a events legitimately belong to AAA.
+// TODO(18b): drop the fallback once old event IDs have aged out.
+function resolveOrgFromStripeEvent(event: Stripe.Event): string {
+  const obj = event.data?.object as { metadata?: Record<string, string> } | undefined;
+  const metaOrg = obj?.metadata?.organization_id;
+  if (metaOrg && typeof metaOrg === "string" && metaOrg.length > 0) return metaOrg;
+  return getActiveOrganizationId();
+}
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
@@ -59,8 +72,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const supabase = createServiceClient();
+    const orgId = resolveOrgFromStripeEvent(event);
 
-    const claim = await claimEvent(supabase, event);
+    const claim = await claimEvent(supabase, event, orgId);
     if (claim.status === "duplicate") {
       return NextResponse.json({ ok: true, duplicate: true });
     }

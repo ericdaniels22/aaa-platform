@@ -117,6 +117,7 @@ export async function handlePaymentIntentSucceeded(
   const { data: inserted, error: insErr } = await supabase
     .from("payments")
     .insert({
+      organization_id: pr.organization_id,
       job_id: pr.job_id,
       invoice_id: pr.invoice_id,
       payment_request_id: pr.id,
@@ -235,6 +236,7 @@ export async function handlePaymentIntentSucceeded(
     body: `${payerName ?? "Customer"} paid ${formatUsdInline(amountReceived)} for ${pr.title}.`,
     href: `/jobs/${pr.job_id}`,
     jobId: pr.job_id,
+    organizationId: pr.organization_id,
     metadata: { payment_request_id: pr.id, payment_id: paymentId },
   }).catch((e) => {
     console.error(
@@ -267,6 +269,7 @@ export async function handlePaymentIntentSucceeded(
       body: msg,
       href: `/jobs/${pr.job_id}`,
       jobId: pr.job_id,
+      organizationId: pr.organization_id,
       priority: "high",
       metadata: { payment_id: paymentId },
     }).catch(() => undefined);
@@ -283,6 +286,7 @@ export async function handlePaymentIntentSucceeded(
       body: `Payment request ${pr.id.slice(0, 8)} charged ${formatUsdInline(amountReceived)} vs. ${formatUsdInline(expected)} expected. Review before reconciling to QB.`,
       href: `/jobs/${pr.job_id}`,
       jobId: pr.job_id,
+      organizationId: pr.organization_id,
       metadata: {
         payment_request_id: pr.id,
         payment_id: paymentId,

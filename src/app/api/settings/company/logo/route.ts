@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { createApiClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/svg+xml", "image/webp"];
 const MAX_SIZE = 2 * 1024 * 1024; // 2MB
 
-// POST /api/settings/company/logo — upload company logo
+// POST /api/settings/company/logo — upload company logo (org-prefixed path).
 export async function POST(request: Request) {
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
@@ -28,11 +29,13 @@ export async function POST(request: Request) {
   }
 
   const supabase = createApiClient();
+  const orgId = getActiveOrganizationId();
 
-  // Delete old logo if exists
+  // Delete old logo if exists (scoped to org)
   const { data: existing } = await supabase
     .from("company_settings")
     .select("value")
+    .eq("organization_id", orgId)
     .eq("key", "logo_path")
     .maybeSingle();
 
@@ -40,9 +43,9 @@ export async function POST(request: Request) {
     await supabase.storage.from("company-assets").remove([existing.value]);
   }
 
-  // Upload new logo
+  // Upload new logo at {org_id}/logo/{timestamp}-rand.ext
   const ext = file.name.split(".").pop() || "png";
-  const fileName = `logo/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const fileName = `${orgId}/logo/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
   const { error: uploadError } = await supabase.storage
@@ -63,8 +66,8 @@ export async function POST(request: Request) {
   await supabase
     .from("company_settings")
     .upsert(
-      { key: "logo_path", value: fileName, updated_at: new Date().toISOString() },
-      { onConflict: "key" }
+      { organization_id: orgId, key: "logo_path", value: fileName, updated_at: new Date().toISOString() },
+      { onConflict: "organization_id,key" }
     );
 
   // Return public URL

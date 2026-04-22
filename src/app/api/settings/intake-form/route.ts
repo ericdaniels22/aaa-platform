@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { createApiClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
-// GET /api/settings/intake-form — fetch latest form config
+// GET /api/settings/intake-form — fetch latest form config for the active org.
 export async function GET() {
   const supabase = createApiClient();
   const { data, error } = await supabase
     .from("form_config")
     .select("*")
+    .eq("organization_id", getActiveOrganizationId())
     .order("version", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -15,7 +17,7 @@ export async function GET() {
   return NextResponse.json(data || { config: { sections: [] }, version: 0 });
 }
 
-// POST /api/settings/intake-form — save new version
+// POST /api/settings/intake-form — save new version (org-scoped).
 export async function POST(request: Request) {
   const { config } = await request.json();
 
@@ -24,11 +26,13 @@ export async function POST(request: Request) {
   }
 
   const supabase = createApiClient();
+  const orgId = getActiveOrganizationId();
 
-  // Get current max version
+  // Get current max version for this org
   const { data: current } = await supabase
     .from("form_config")
     .select("version")
+    .eq("organization_id", orgId)
     .order("version", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -38,6 +42,7 @@ export async function POST(request: Request) {
   const { data, error } = await supabase
     .from("form_config")
     .insert({
+      organization_id: orgId,
       config,
       version: nextVersion,
       created_by: "admin",

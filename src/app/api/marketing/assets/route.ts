@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"];
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
@@ -18,6 +19,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("marketing_assets")
     .select("*")
+    .eq("organization_id", getActiveOrganizationId())
     .order("created_at", { ascending: false });
 
   if (tags) {
@@ -65,9 +67,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const orgId = getActiveOrganizationId();
   const supabase = createServiceClient();
   const ext = file.name.split(".").pop() || "png";
-  const storagePath = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const storagePath = `${orgId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
   const { error: uploadError } = await supabase.storage
@@ -88,6 +91,7 @@ export async function POST(request: NextRequest) {
   const { data, error: insertError } = await supabase
     .from("marketing_assets")
     .insert({
+      organization_id: orgId,
       file_name: file.name,
       storage_path: storagePath,
       description: description || null,
@@ -118,13 +122,15 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
+  const orgId = getActiveOrganizationId();
   const supabase = createServiceClient();
 
-  // Get the asset to find storage path
+  // Get the asset to find storage path (scoped to org)
   const { data: asset } = await supabase
     .from("marketing_assets")
     .select("storage_path")
     .eq("id", id)
+    .eq("organization_id", orgId)
     .single();
 
   if (!asset) {
@@ -138,7 +144,8 @@ export async function DELETE(request: NextRequest) {
   const { error } = await supabase
     .from("marketing_assets")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .eq("organization_id", orgId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

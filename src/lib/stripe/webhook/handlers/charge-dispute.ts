@@ -38,21 +38,30 @@ export async function handleChargeDisputeCreated(
 
   const { data: payment } = await supabase
     .from("payments")
-    .select("id, job_id, payment_request_id")
+    .select("id, organization_id, job_id, payment_request_id")
     .eq("stripe_charge_id", chargeId)
-    .maybeSingle<Pick<PaymentRow, "id" | "job_id" | "payment_request_id">>();
+    .maybeSingle<Pick<PaymentRow, "id" | "organization_id" | "job_id" | "payment_request_id">>();
 
   const status = normalizeStatus(dispute.status);
   const dueBy = dispute.evidence_details?.due_by
     ? new Date(dispute.evidence_details.due_by * 1000).toISOString()
     : null;
 
+  // Dispute rows need an organization_id. If we can't resolve the parent
+  // payment (e.g. the charge is unknown to us), abort the insert — better
+  // to log and drop than write with NULL.
+  if (!payment) {
+    console.warn(`[stripe/webhook] charge.dispute.created ${dispute.id} — no payment for charge ${chargeId}`);
+    return { paymentRequestId: null };
+  }
+
   const { error: upErr } = await supabase
     .from("stripe_disputes")
     .upsert(
       {
-        payment_id: payment?.id ?? null,
-        payment_request_id: payment?.payment_request_id ?? null,
+        organization_id: payment.organization_id,
+        payment_id: payment.id,
+        payment_request_id: payment.payment_request_id,
         stripe_dispute_id: dispute.id,
         amount: dispute.amount / 100,
         reason: dispute.reason,
@@ -66,7 +75,7 @@ export async function handleChargeDisputeCreated(
     );
   if (upErr) throw new Error(`stripe_disputes upsert: ${upErr.message}`);
 
-  if (payment?.payment_request_id) {
+  if (payment.payment_request_id) {
     await writePaymentEvent(supabase, {
       paymentRequestId: payment.payment_request_id,
       eventType: "dispute_opened",
@@ -105,11 +114,12 @@ export async function handleChargeDisputeCreated(
       href: `/jobs/${payment.job_id}`,
       priority: "high",
       jobId: payment.job_id,
+      organizationId: payment.organization_id,
       metadata: { stripe_dispute_id: dispute.id },
     }).catch(() => undefined);
   }
 
-  return { paymentRequestId: payment?.payment_request_id ?? null };
+  return { paymentRequestId: payment.payment_request_id ?? null };
 }
 
 export async function handleChargeDisputeClosed(
