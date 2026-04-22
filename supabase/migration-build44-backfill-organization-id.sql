@@ -4,10 +4,18 @@
 -- Purpose:   Populate the nullable column added in build43. Bucket-A is a
 --            trivial UPDATE to the AAA UUID. Bucket-B denormalizes from
 --            the parent row — dependency order matters so parents are
---            populated before children.
+--            populated before children. A final orphan-fallback step
+--            attributes any bucket-B rows whose parent is missing to AAA
+--            (single-tenant pre-build42, so all data is AAA's anyway).
 -- Depends on: build43 (columns exist).
 -- Revert:    UPDATE public.{table} SET organization_id = NULL per bucket
 --            A/B table. See -- ROLLBACK --- block at bottom.
+--
+-- Prod note (2026-04-22 apply): the parent-denormalization joins left 9
+-- contract_events rows still NULL on prod — they were audit events from
+-- contracts that had been hard-deleted (orphaned). The orphan-fallback
+-- step below handles them. Without it the safety assertion at the bottom
+-- raises and the entire migration rolls back.
 
 do $$
 declare
@@ -123,6 +131,29 @@ begin
      set organization_id = p.organization_id
     from public.photos p
    where pa.photo_id = p.id and pa.organization_id is null;
+
+  -- -------------------------------------------------------------------------
+  -- Bucket B (orphan fallback): rows whose parent row has been hard-deleted
+  -- have nothing to denormalize from, so the parent-join UPDATEs above leave
+  -- them NULL. Pre-build42 the platform was single-tenant AAA, so every
+  -- pre-existing row is AAA-owned by definition. Attribute remaining NULLs
+  -- to AAA. (Caught in prod 2026-04-22 — 9 contract_events from deleted
+  -- contracts. No other table had orphans, but applying this defensively
+  -- to all bucket-B tables costs nothing if there are no orphans.)
+  -- -------------------------------------------------------------------------
+  update public.job_activities          set organization_id = aaa_id where organization_id is null;
+  update public.job_adjusters           set organization_id = aaa_id where organization_id is null;
+  update public.job_custom_fields       set organization_id = aaa_id where organization_id is null;
+  update public.job_files               set organization_id = aaa_id where organization_id is null;
+  update public.invoice_line_items      set organization_id = aaa_id where organization_id is null;
+  update public.line_items              set organization_id = aaa_id where organization_id is null;
+  update public.emails                  set organization_id = aaa_id where organization_id is null;
+  update public.email_attachments       set organization_id = aaa_id where organization_id is null;
+  update public.email_signatures        set organization_id = aaa_id where organization_id is null;
+  update public.contract_signers        set organization_id = aaa_id where organization_id is null;
+  update public.contract_events         set organization_id = aaa_id where organization_id is null;
+  update public.photo_tag_assignments   set organization_id = aaa_id where organization_id is null;
+  update public.photo_annotations       set organization_id = aaa_id where organization_id is null;
 
   -- -------------------------------------------------------------------------
   -- Bucket D — intentionally LEFT NULL (Nookleus-provided defaults):
