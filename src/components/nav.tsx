@@ -201,7 +201,7 @@ export default function Sidebar() {
                     render={
                       <button
                         onClick={handleSignOut}
-                        className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition-colors"
+                        className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
                         aria-label="Sign out"
                       >
                         <LogOut size={16} />
@@ -232,7 +232,7 @@ export default function Sidebar() {
                 </div>
                 <button
                   onClick={handleSignOut}
-                  className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition-colors"
+                  className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
                   aria-label="Sign out"
                   title="Sign out"
                 >
