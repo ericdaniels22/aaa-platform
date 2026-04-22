@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createApiClient, createServiceClient } from "@/lib/supabase-api";
+import { createServiceClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 const ALL_PERMISSIONS = [
@@ -25,8 +26,12 @@ const ROLE_DEFAULTS: Record<string, string[]> = {
 
 // GET /api/settings/users — list all members of the active org with their
 // user_profiles joined. Role is sourced from user_organizations (per-org).
+// Uses the cookie-aware SSR client so RLS sees the caller's auth.uid() and
+// the user_orgs_member_read policy (build51) grants visibility into other
+// members of the same org. The plain createApiClient() runs anonymously and
+// would return [] under post-build49 RLS.
 export async function GET() {
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const orgId = getActiveOrganizationId();
 
   const { data: memberships, error } = await supabase
