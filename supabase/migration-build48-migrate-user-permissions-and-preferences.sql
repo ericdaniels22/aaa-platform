@@ -344,6 +344,10 @@ $$;
 -- kept during 18a for revert safety) and user_organization_permissions
 -- (the new source of truth). Requires p_user_organization_id so the
 -- writes can land on the correct membership.
+--
+-- DROP first because the pre-18a signature uses (p_user_id, p_role) and
+-- Postgres refuses to rename positional parameters via CREATE OR REPLACE.
+drop function if exists public.set_default_permissions(uuid, text);
 create or replace function public.set_default_permissions(p_user_organization_id uuid, p_role text)
 returns void
 language plpgsql
