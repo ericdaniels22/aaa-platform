@@ -70,10 +70,12 @@ All eight must return `true`. If any is `false`, **STOP (Rule C material)** — 
 ```bash
 # Q2: Git state clean
 git status                          # Working tree clean
-git log origin/main -1 --oneline    # Latest commit should be c19278a (18a build53/54 patches)
+git log origin/main -1 --oneline    # Latest commit should be 0f05ee6 (plan v2 + Session A prompt commit)
 ```
 
 Record both results in your run log. Proceed only if both queries pass.
+
+**Note on 18a patches (build53/build54) already applied:** The 10 `transitional_allow_all_*` policies you see on prod are from build53 (applied 2026-04-22). The 8 QB trigger functions (`trg_qb_enqueue_*`) were patched to include `organization_id` in their `INSERT INTO qb_sync_log` statements via build54 (same date). Both migration files exist in `supabase/`. These are expected state, not drift — your SQL trigger audit (deliverable 8) will encounter the 8 QB triggers and should classify them as `SAFE (already sets organization_id)`.
 
 ---
 
@@ -218,7 +220,7 @@ Structure:
 -- Only needed if Session C step 8 fails and step 9 smoke doesn't pass.
 
 -- === Section 1: Legacy allow-all policies (48) ===
-CREATE POLICY "<name>" ON public.<table> FOR <cmd> TO <roles>
+CREATE POLICY "<policy_name>" ON public.<table_name> FOR <cmd> TO <roles>
   USING (<qual>) WITH CHECK (<with_check>);
 -- (repeat)
 
@@ -273,7 +275,7 @@ ORDER BY n.nspname, p.proname;
 For each function, inspect its body. Categorize:
 
 - **SAFE (no org-scoped INSERTs):** Function does not INSERT into any org-scoped table.
-- **SAFE (already sets organization_id):** Function INSERTs into org-scoped tables and correctly sources `organization_id` from NEW/OLD or a parent row lookup.
+- **SAFE (already sets organization_id):** Function INSERTs into org-scoped tables and correctly sources `organization_id` from NEW/OLD or a parent row lookup. **The 8 `trg_qb_enqueue_*` trigger functions were patched in build54 to set organization_id on their qb_sync_log INSERTs — they belong in this category.**
 - **WARN (may miss organization_id):** Function INSERTs into an org-scoped table without clearly sourcing `organization_id`. Requires investigation.
 
 For anything in WARN: **STOP (Rule C material)**. Report to Eric. Do not author a patch in Session A — that's a plan change.
