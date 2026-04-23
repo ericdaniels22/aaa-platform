@@ -6,7 +6,7 @@
 **Depends on:** Build 18a (complete, commit `c19278a` on main)
 **Precedes:** Build 18c (workspace switcher UI + Eric's Test Company membership)
 
----
+----
 
 ## 1. Context & Goals
 
@@ -586,6 +586,7 @@ This log is the source of truth if Session C aborts. Read it first when resuming
 
 Not required for 18b completion, but tracked:
 
+- **Public-route org resolution (must-fix before 18c ships):** Three public pages (`src/app/(public)/sign/[token]/page.tsx`, `src/app/(public)/pay/[token]/page.tsx`, `src/app/(public)/pay/[token]/success/page.tsx`) currently use the pattern `.eq("organization_id", orgId ?? AAA_ORGANIZATION_ID)` where `orgId` comes from the JWT. These routes are hit by unauthenticated customers via magic link, so `orgId` is always `null`, and the AAA fallback always wins. This works today because AAA is the only tenant with data, but it silently returns "not found" for any Test Company signing/payment link after 18c. **Fix pattern:** derive `organization_id` from the token row itself. Both `contracts.link_token` and `payment_requests.link_token` are unique, and their rows carry `organization_id`. Look up the row by token first, then use that row's `organization_id` for any further queries about the same contract/payment. The `AAA_ORGANIZATION_ID` constant in `src/lib/supabase/get-active-org.ts` stays (it's legitimate for scripts and migrations); only the three public pages change.
 - Delete scratch Supabase project (~24h after prod green)
 - Storage migration script run (74 files, path rename)
 - `user_permissions` table drop (2+ weeks post-18b)
