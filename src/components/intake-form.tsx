@@ -79,7 +79,12 @@ export default function IntakeForm() {
 
     setSubmitting(true);
     const supabase = createClient();
-    const orgId = getActiveOrganizationId();
+    const orgId = await getActiveOrganizationId(supabase);
+    if (!orgId) {
+      toast.error("No active organization — please sign in again.");
+      setSubmitting(false);
+      return;
+    }
 
     try {
       // 1. Create contact

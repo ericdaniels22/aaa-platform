@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 // GET /api/settings/users/[id]/permissions — from user_organization_permissions
@@ -20,7 +21,8 @@ export async function GET(
     );
   }
 
-  const orgId = getActiveOrganizationId();
+  const supabase = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(supabase);
   const { data: membership } = await service
     .from("user_organizations")
     .select("id")
@@ -64,7 +66,8 @@ export async function PUT(
     );
   }
 
-  const orgId = getActiveOrganizationId();
+  const supabase = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(supabase);
   const { data: membership } = await service
     .from("user_organizations")
     .select("id")

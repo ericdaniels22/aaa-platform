@@ -1,5 +1,6 @@
 import type { Tool } from "@anthropic-ai/sdk/resources/messages";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 // --- Types ---
 
@@ -741,18 +742,24 @@ async function toolCreateAlert(
 ) {
   const { supabase } = ctx;
 
-  // Alerts are tenant-scoped. If the alert references a job, use its org;
-  // otherwise fall back to the hardcoded 18a default (AAA).
-  let orgId: string;
+  // Alerts are tenant-scoped. If the alert references a job, use the job's
+  // organization. Otherwise use the caller's active org from the JWT claim.
+  // If neither is available the insert will fail on NOT NULL — loud, per the
+  // 18b contract.
+  let orgId: string | null = null;
   if (input.job_id) {
     const { data: job } = await supabase
       .from("jobs")
       .select("organization_id")
       .eq("id", input.job_id)
       .maybeSingle<{ organization_id: string }>();
-    orgId = job?.organization_id ?? "a0000000-0000-4000-8000-000000000001";
-  } else {
-    orgId = "a0000000-0000-4000-8000-000000000001";
+    orgId = job?.organization_id ?? null;
+  }
+  if (!orgId) {
+    orgId = await getActiveOrganizationId(supabase);
+  }
+  if (!orgId) {
+    return { error: "no active organization — cannot create alert" };
   }
 
   const { data, error } = await supabase

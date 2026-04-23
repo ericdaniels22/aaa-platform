@@ -32,7 +32,7 @@ export async function POST(
 
   if (pr.stripe_checkout_session_id) {
     try {
-      const { client } = await getStripeClient();
+      const { client } = await getStripeClient(pr.organization_id);
       await client.checkout.sessions.expire(pr.stripe_checkout_session_id);
     } catch {
       // Session may already be expired or Stripe may be temporarily unreachable.

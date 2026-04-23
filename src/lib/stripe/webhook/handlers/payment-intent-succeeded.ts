@@ -63,8 +63,9 @@ export async function handlePaymentIntentSucceeded(
     // row exists. Fall through and re-do the insert + side effects.
   }
 
-  // Expand the charge to get fee data
-  const { client: stripe } = await getStripeClient();
+  // Expand the charge to get fee data. Webhook has no session — scope to
+  // the payment_request's org.
+  const { client: stripe } = await getStripeClient(pr.organization_id);
   const latestChargeId =
     typeof pi.latest_charge === "string"
       ? pi.latest_charge

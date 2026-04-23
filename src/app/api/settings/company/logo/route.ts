@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/svg+xml", "image/webp"];
@@ -28,8 +28,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const supabase = createApiClient();
-  const orgId = getActiveOrganizationId();
+  const supabase = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(supabase);
 
   // Delete old logo if exists (scoped to org)
   const { data: existing } = await supabase

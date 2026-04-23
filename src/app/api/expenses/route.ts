@@ -24,7 +24,7 @@ async function requireLogExpenses() {
   const { data: profile } = await supabase.from("user_profiles").select("full_name").eq("id", user.id).maybeSingle();
   if (!profile) return { ok: false as const, response: NextResponse.json({ error: "Profile not found" }, { status: 403 }) };
 
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
   const { data: membership } = await supabase
     .from("user_organizations")
     .select("id, role")

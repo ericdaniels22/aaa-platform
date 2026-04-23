@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("payments")
     .select("*")
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(supabase))
     .order("received_date", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
   if (invoiceId) query = query.eq("invoice_id", invoiceId);
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "jobId, source, method, amount required" }, { status: 400 });
   }
 
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
   const service = createServiceClient();
   if (body.invoiceId) {
     const { data: inv } = await service

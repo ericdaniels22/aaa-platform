@@ -88,7 +88,7 @@ export default function ActivityTimeline({
     const supabase = createClient();
 
     const { error } = await supabase.from("job_activities").insert({
-      organization_id: getActiveOrganizationId(),
+      organization_id: await getActiveOrganizationId(supabase),
       job_id: jobId,
       activity_type: activityType,
       title: title.trim(),

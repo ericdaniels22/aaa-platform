@@ -1546,7 +1546,7 @@ function AddAdjusterDialog({
     const supabase = createClient();
     const isPrimary = existingAdjusterIds.length === 0;
     const { error } = await supabase.from("job_adjusters").insert({
-      organization_id: getActiveOrganizationId(),
+      organization_id: await getActiveOrganizationId(supabase),
       job_id: jobId,
       contact_id: contactId,
       is_primary: isPrimary,
@@ -1568,7 +1568,7 @@ function AddAdjusterDialog({
     }
     setSaving(true);
     const supabase = createClient();
-    const orgId = getActiveOrganizationId();
+    const orgId = await getActiveOrganizationId(supabase);
     const { data: newContact, error: contactError } = await supabase
       .from("contacts")
       .insert({

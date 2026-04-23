@@ -141,11 +141,11 @@ export default function ReportTemplateBuilder({
         .from("photo_report_templates")
         .update(payload)
         .eq("id", editTemplate.id)
-        .eq("organization_id", getActiveOrganizationId()));
+        .eq("organization_id", await getActiveOrganizationId(supabase)));
     } else {
       ({ error } = await supabase
         .from("photo_report_templates")
-        .insert({ ...payload, organization_id: getActiveOrganizationId() }));
+        .insert({ ...payload, organization_id: await getActiveOrganizationId(supabase) }));
     }
 
     if (error) {

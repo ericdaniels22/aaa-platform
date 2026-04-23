@@ -150,7 +150,7 @@ export default function PhotoDetailModal({
       .eq("photo_id", photo.id);
 
     if (assignedTagIds.length > 0) {
-      const orgId = getActiveOrganizationId();
+      const orgId = await getActiveOrganizationId(supabase);
       await supabase.from("photo_tag_assignments").insert(
         assignedTagIds.map((tagId) => ({
           organization_id: orgId,

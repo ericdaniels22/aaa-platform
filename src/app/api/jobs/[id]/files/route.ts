@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { randomUUID } from "crypto";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
@@ -9,12 +9,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: jobId } = await params;
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   const { data, error } = await supabase
     .from("job_files")
     .select("*")
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(supabase))
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
 
@@ -39,8 +39,8 @@ export async function POST(
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
   }
 
-  const supabase = createApiClient();
-  const orgId = getActiveOrganizationId();
+  const supabase = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(supabase);
   const succeeded: unknown[] = [];
   const failed: { filename: string; error: string }[] = [];
 

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 // GET /api/settings/statuses — returns NULL-org defaults plus this org's customizations.
 export async function GET() {
-  const supabase = createApiClient();
-  const orgId = getActiveOrganizationId();
+  const supabase = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(supabase);
   const { data, error } = await supabase
     .from("job_statuses")
     .select("*")
@@ -25,8 +25,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "name and display_label are required" }, { status: 400 });
   }
 
-  const supabase = createApiClient();
-  const orgId = getActiveOrganizationId();
+  const supabase = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(supabase);
 
   // Get max sort_order (across defaults + this org's rows).
   const { data: existing } = await supabase
@@ -66,8 +66,8 @@ export async function POST(request: Request) {
 // touches the active org's rows; defaults (NULL-org) are immutable here.
 export async function PUT(request: Request) {
   const body = await request.json();
-  const supabase = createApiClient();
-  const orgId = getActiveOrganizationId();
+  const supabase = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(supabase);
 
   if (Array.isArray(body)) {
     for (const item of body) {
@@ -104,8 +104,8 @@ export async function DELETE(request: Request) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
-  const supabase = createApiClient();
-  const orgId = getActiveOrganizationId();
+  const supabase = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(supabase);
 
   // Read the target row to check default + get the name.
   const { data: status } = await supabase

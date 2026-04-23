@@ -14,7 +14,7 @@ export default async function AccountingSetupPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
   const { data: membership } = await supabase
     .from("user_organizations")
     .select("role")

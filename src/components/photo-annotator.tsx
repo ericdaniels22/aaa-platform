@@ -1592,7 +1592,7 @@ export default function PhotoAnnotator({
           .eq("id", existing.id);
       } else {
         await supabase.from("photo_annotations").insert({
-          organization_id: getActiveOrganizationId(),
+          organization_id: await getActiveOrganizationId(supabase),
           photo_id: currentPhoto.id,
           annotation_data: annotationData,
           created_by: "Eric",

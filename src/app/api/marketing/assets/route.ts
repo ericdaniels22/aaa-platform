@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("marketing_assets")
     .select("*")
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(authSupabase))
     .order("created_at", { ascending: false });
 
   if (tags) {
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(authSupabase);
   const supabase = createServiceClient();
   const ext = file.name.split(".").pop() || "png";
   const storagePath = `${orgId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
@@ -122,7 +122,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(authSupabase);
   const supabase = createServiceClient();
 
   // Get the asset to find storage path (scoped to org)

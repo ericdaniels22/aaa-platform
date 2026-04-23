@@ -15,7 +15,7 @@ export async function requireViewAccounting(): Promise<AuthResult> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, response: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
 
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
   const { data: membership } = await supabase
     .from("user_organizations")
     .select("id, role")

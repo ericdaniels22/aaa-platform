@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   let query = service
     .from("qb_mappings")
     .select("*")
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(supabase))
     .order("platform_value", { ascending: true });
   if (type) query = query.eq("type", type);
   const { data, error } = await query;
@@ -50,7 +50,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "type and mappings required" }, { status: 400 });
   }
 
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
   const service = createServiceClient();
   const { error: delErr } = await service
     .from("qb_mappings")

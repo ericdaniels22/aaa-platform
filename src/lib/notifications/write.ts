@@ -1,5 +1,4 @@
 import { createServiceClient } from "@/lib/supabase-api";
-import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import type { NotificationRow } from "@/lib/payments/types";
 
 export type NotificationType = NotificationRow["type"];
@@ -14,15 +13,19 @@ export interface WriteNotificationInput {
   metadata?: Record<string, unknown>;
   // If provided, notify only this user. Default: fan out to all active admins.
   userId?: string | null;
-  // Org scope for the notification row(s). Defaults to the active org helper.
-  organizationId?: string;
+  // Org scope for the notification row(s). Required — writeNotification uses a
+  // service client, so it cannot resolve the active org from a session JWT.
+  // Callers in webhook context source this from the row they're reacting to
+  // (e.g. `payment.organization_id`); callers in request context source it
+  // via `getActiveOrganizationId(supabase)` at the call site.
+  organizationId: string;
 }
 
 export async function writeNotification(
   input: WriteNotificationInput,
 ): Promise<void> {
   const supabase = createServiceClient();
-  const orgId = input.organizationId ?? getActiveOrganizationId();
+  const orgId = input.organizationId;
 
   const row = {
     organization_id: orgId,

@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   let query = service
     .from("qb_sync_log")
     .select("*", { count: "exact" })
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(supabase))
     .order("status", { ascending: true }) // 'failed' < 'queued' < 'skipped_dry_run' < 'synced'
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);

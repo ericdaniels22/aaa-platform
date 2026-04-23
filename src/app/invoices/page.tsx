@@ -12,7 +12,7 @@ export default async function InvoicesPage() {
     .from("user_organizations")
     .select("id, role")
     .eq("user_id", user.id)
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(supabase))
     .maybeSingle<{ id: string; role: string }>();
   const isAdmin = membership?.role === "admin";
   let canView = isAdmin;

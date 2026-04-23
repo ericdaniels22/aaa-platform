@@ -68,7 +68,7 @@ export async function handleChargeRefunded(
   //    fires charge.refunded once per refund, but the event payload itself
   //    doesn't include which refund object triggered the fire, so we
   //    fetch the list and take the most recent.
-  const { client: stripe } = await getStripeClient();
+  const { client: stripe } = await getStripeClient(payment.organization_id);
   const refundList = await stripe.refunds.list({ charge: chargeId, limit: 10 });
   if (!refundList.data.length) {
     console.warn(

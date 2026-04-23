@@ -36,7 +36,7 @@ export async function GET(request: Request) {
       "*, jobs!inner(id, job_number, property_address, contact_id, contacts:contact_id(first_name, last_name))",
       { count: "exact" },
     )
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(supabase))
     .order("issued_date", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
   const issued = body.issuedDate ?? new Date().toISOString();
   const due = body.dueDate === null ? null : (body.dueDate ?? addDays(issued, 30));
 
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
   const service = createServiceClient();
   const { data: inv, error: invErr } = await service
     .from("invoices")

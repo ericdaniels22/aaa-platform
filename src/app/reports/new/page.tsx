@@ -262,7 +262,7 @@ function NewReportPageInner() {
     const { data, error } = await supabase
       .from("photo_reports")
       .insert({
-        organization_id: getActiveOrganizationId(),
+        organization_id: await getActiveOrganizationId(supabase),
         job_id: selectedJobId,
         template_id: selectedTemplateId || null,
         title: reportTitle.trim(),

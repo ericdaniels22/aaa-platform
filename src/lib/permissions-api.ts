@@ -2,10 +2,10 @@
 // Mirrors the shape of requireAdmin() in src/lib/qb/auth.ts so the call site
 // looks identical: `if (!gate.ok) return gate.response;`
 //
-// 18a source of truth: user_organizations.role (scoped to the active org)
-// and user_organization_permissions.granted. The legacy user_permissions
-// table is deprecated but still present — do not read from it here.
-// TODO(18b): replace getActiveOrganizationId() with a session-sourced read.
+// Source of truth: user_organizations.role (scoped to the active org) and
+// user_organization_permissions.granted. The legacy user_permissions table
+// is deprecated but still present — do not read from it here. The active
+// org is sourced from the JWT claim via getActiveOrganizationId.
 
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -28,7 +28,7 @@ export async function requirePermission(
       response: NextResponse.json({ error: "not authenticated" }, { status: 401 }),
     };
   }
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
   const { data: membership } = await supabase
     .from("user_organizations")
     .select("id, role")

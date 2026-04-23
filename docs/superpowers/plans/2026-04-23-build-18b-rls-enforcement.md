@@ -199,34 +199,36 @@ This order is critical. Every step must complete successfully before the next be
 | # | Step | Actor | Blocking | Notes |
 |---|---|---|---|---|
 | 1 | Apply migration: create `custom_access_token_hook` function + grants | Claude Code | Yes | Safe, additive. No behavior change yet. |
-| 2 | Apply migration: drop 3 policies (invoice_email_settings_admin + 2 knowledge_* broad-read) | Claude Code | Yes | Part of policy audit, one migration. |
-| 3 | **MANUAL:** Eric enables hook in Supabase dashboard | Eric | Yes | 30-second toggle. |
-| 4 | Verify hook is injecting claim (log out, log in, decode new JWT) | Eric | Yes | If claim is missing, roll back steps 1-3 and investigate. |
-| 5 | Verify `nookleus.active_organization_id()` returns AAA's UUID for Eric's session | Claude Code | Yes | Direct SQL check. |
-| 6 | Deploy code sweep changes (merge `18b-prep` → main, Vercel auto-deploys) | Claude Code + Eric | Yes | App now reads JWT, not AAA constant. |
-| 7 | Smoke test: intake, jobs, photos, contacts, settings, jarvis — each renders AAA data only | Eric | Yes | If any smoke fails, roll back to step 6. |
-| 8 | Apply migration: drop 48 legacy + 10 transitional policies | Claude Code | Yes | Tenant isolation is now the sole gate. |
-| 9 | Smoke test again, full sweep | Eric | Yes | Same tests, verify nothing broke. |
-| 10 | Apply migration: drop `nookleus.aaa_organization_id()` helper | Claude Code | No | Cosmetic cleanup. |
-| 11 | Service-role sanity test: verify a raw service-role query sees both AAA and Test Company data | Claude Code | No | Confirms service role bypasses RLS as expected. |
-| 12 | Mark 18b complete, update handoff doc | Claude Code | No | |
+| 2 | Apply migration: patch 7 contract RPCs to include `organization_id` in contract_events INSERTs | Claude Code | Yes | build59. Fixes a pre-existing NOT NULL defect surfaced during Session A SQL audit; safe, additive function rewrites. |
+| 3 | Apply migration: drop 3 policies (invoice_email_settings_admin + 2 knowledge_* broad-read) | Claude Code | Yes | Part of policy audit, one migration. |
+| 4 | **MANUAL:** Eric enables hook in Supabase dashboard | Eric | Yes | 30-second toggle. |
+| 5 | Verify hook is injecting claim (log out, log in, decode new JWT) | Eric | Yes | If claim is missing, roll back steps 1-4 and investigate. |
+| 6 | Verify `nookleus.active_organization_id()` returns AAA's UUID for Eric's session | Claude Code | Yes | Direct SQL check. |
+| 7 | Deploy code sweep changes (merge `18b-prep` → main, Vercel auto-deploys) | Claude Code + Eric | Yes | App now reads JWT, not AAA constant. |
+| 8 | Smoke test: intake, jobs, photos, contacts, settings, jarvis — each renders AAA data only | Eric | Yes | If any smoke fails, roll back to step 7. |
+| 9 | Apply migration: drop 48 legacy + 10 transitional policies | Claude Code | Yes | Tenant isolation is now the sole gate. |
+| 10 | Smoke test again, full sweep | Eric | Yes | Same tests, verify nothing broke. |
+| 11 | Apply migration: drop `nookleus.aaa_organization_id()` helper | Claude Code | No | Cosmetic cleanup. |
+| 12 | Service-role sanity test: verify a raw service-role query sees both AAA and Test Company data | Claude Code | No | Confirms service role bypasses RLS as expected. |
+| 13 | Mark 18b complete, update handoff doc | Claude Code | No | |
 
-If step 3 or 4 fails: the hook itself is broken. Roll back step 1's grants (drop the function), investigate, retry. This is the only step requiring external coordination.
+If step 4 or 5 fails: the hook itself is broken. Roll back step 1's grants (drop the function), investigate, retry. This is the only step requiring external coordination.
 
-If step 7 or 9 fails: app has a missed call site. Claude Code identifies the file, patches it, redeploys. Does NOT proceed to step 8 with failures outstanding.
+If step 8 or 10 fails: app has a missed call site. Claude Code identifies the file, patches it, redeploys. Does NOT proceed to step 9 with failures outstanding.
 
 ---
 
 ## 7. Migration Plan
 
-Four migrations for 18b:
+Five migrations for 18b:
 
 - **build55:** Create `custom_access_token_hook` function, apply grants, grant `SELECT` on `user_organizations` to `supabase_auth_admin`.
+- **build59:** Patch 7 contract RPC functions (`activate_next_signer`, `mark_contract_expired`, `mark_contract_sent`, `mark_reminder_sent`, `record_signer_signature`, `resend_contract_link`, `void_contract`) to include `organization_id` when INSERTing into `public.contract_events`. Same defect class as build54 (QB triggers / qb_sync_log), different table. Discovered by the Session A SQL audit. Additive `CREATE OR REPLACE` only; no DDL on tables, no data changes.
 - **build56:** Policy surgery — drop 3 policies (invoice_email_settings_admin, 2 knowledge_* broad-read).
 - **build57:** Drop 48 legacy allow-alls + 10 transitional_allow_all_* policies. Exact DROP list built from live pg_policies query in Session A.
 - **build58:** Drop `nookleus.aaa_organization_id()` helper function.
 
-Migrations are applied in order, each in its own transaction. Build56 runs *before* the hook is enabled (dashboard toggle, step 3). Build57 runs *after* the hook is enabled AND the code sweep is deployed (step 8). Build58 is cosmetic cleanup at the end (step 10).
+Migrations are applied in order, each in its own transaction. Build59 runs right after build55 and before build56 (§6 step 2): earliest point, since the underlying defect exists today and build57 would otherwise flip enforcement on while these INSERTs still lack `organization_id`. Build56 runs before the hook is enabled (dashboard toggle, step 4). Build57 runs after the hook is enabled AND the code sweep is deployed (step 9). Build58 is cosmetic cleanup at the end (step 11).
 
 ---
 
@@ -397,9 +399,17 @@ SELECT
 -- All three TRUE = step 1 complete
 ```
 
-**Step 2: Three custom policies dropped**
+**Step 2: Contract RPCs patched (build59)**
 ```sql
-SELECT count(*) = 0 AS step_2_complete
+-- Every patched function's body should reference `organization_id` in the
+-- contract_events INSERT. Spot-check one fast function:
+SELECT pg_get_functiondef('public.mark_contract_expired(uuid)'::regprocedure) ILIKE '%INSERT INTO contract_events (organization_id%' AS mark_contract_expired_patched;
+-- TRUE = step 2 complete
+```
+
+**Step 3: Three custom policies dropped**
+```sql
+SELECT count(*) = 0 AS step_3_complete
 FROM pg_policies
 WHERE schemaname = 'public'
   AND policyname IN (
@@ -407,10 +417,10 @@ WHERE schemaname = 'public'
     'Authenticated users can read knowledge chunks',
     'Authenticated users can read knowledge documents'
   );
--- TRUE = step 2 complete
+-- TRUE = step 3 complete
 ```
 
-**Step 3: Hook enabled in dashboard**
+**Step 4: Hook enabled in dashboard**
 
 Dashboard state is not directly queryable via SQL. Verify by calling the function with a simulated event and confirming the shape of the return:
 
@@ -424,15 +434,15 @@ SELECT public.custom_access_token_hook(
 -- Expected: 'a0000000-0000-4000-8000-000000000001' (AAA's UUID)
 ```
 
-This tests the function works. Step 3 is "the toggle is on" which means the function is actually called on token issuance — that's verified by step 4.
+This tests the function works. Step 4 is "the toggle is on" which means the function is actually called on token issuance — that's verified by step 5.
 
-**Step 4: New JWTs carry the claim**
+**Step 5: New JWTs carry the claim**
 
 Eric performs in browser: log out completely (clear session), log back in, open DevTools → Application → Cookies, find the `sb-*-auth-token` cookie, decode the JWT at jwt.io (or copy the access_token and paste). Expected: `app_metadata.active_organization_id` is present and equals AAA's UUID.
 
-If missing: the hook is created (step 1) but not enabled (step 3). Re-verify the dashboard toggle.
+If missing: the hook is created (step 1) but not enabled (step 4). Re-verify the dashboard toggle.
 
-**Step 5: `active_organization_id()` resolves correctly**
+**Step 6: `active_organization_id()` resolves correctly**
 
 Requires being logged in to the app. The function reads `auth.jwt()` which only populates in an active authenticated session. For a mid-session verification, Claude Code can run:
 
@@ -449,9 +459,9 @@ SELECT (
 -- Expected: a0000000-0000-4000-8000-000000000001
 ```
 
-Real-session verification happens when Eric hits any page (step 7 smoke test) and sees data.
+Real-session verification happens when Eric hits any page (step 8 smoke test) and sees data.
 
-**Step 6: Code sweep deployed**
+**Step 7: Code sweep deployed**
 ```bash
 # From Eric's terminal
 git log origin/main -1 --format='%H %s'
@@ -464,11 +474,11 @@ curl -s https://<your-vercel-domain>/api/health 2>/dev/null | grep -o '"commit":
 # If you have a version endpoint; otherwise rely on Vercel dashboard visual
 ```
 
-**Step 7: Post-sweep smoke green**
+**Step 8: Post-sweep smoke green**
 
 Human-verified. Claude Code cannot determine this automatically. The run log (§12.5) captures "PASS" / "FAIL" per test.
 
-**Step 8: 58 policies dropped**
+**Step 9: 58 policies dropped**
 ```sql
 SELECT
   (SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND policyname LIKE 'transitional_allow_all_%') = 0 AS transitional_gone,
@@ -478,32 +488,32 @@ SELECT
      AND (qual = 'true' OR (qual IS NULL AND with_check = 'true'))
      AND policyname NOT LIKE 'tenant_isolation_%'
   ) = 0 AS legacy_allow_alls_gone;
--- Both TRUE = step 8 complete
+-- Both TRUE = step 9 complete
 ```
 
-**Step 9: Post-drop smoke green** — same as step 7, human-verified.
+**Step 10: Post-drop smoke green** — same as step 8, human-verified.
 
-**Step 10: `aaa_organization_id()` helper dropped**
+**Step 11: `aaa_organization_id()` helper dropped**
 ```sql
-SELECT to_regprocedure('nookleus.aaa_organization_id()') IS NULL AS step_10_complete;
--- TRUE = step 10 complete
+SELECT to_regprocedure('nookleus.aaa_organization_id()') IS NULL AS step_11_complete;
+-- TRUE = step 11 complete
 ```
 
-**Step 11: Service-role sanity pass**
+**Step 12: Service-role sanity pass**
 ```sql
 -- Run AS service role (MCP queries run as service role by default)
 SELECT
   (SELECT count(*) FROM public.jobs) AS all_jobs_visible,
   (SELECT count(DISTINCT organization_id) FROM public.jobs) AS orgs_in_jobs,
   (SELECT count(*) FROM public.jobs WHERE organization_id = 'a0000000-0000-4000-8000-000000000002') AS test_company_jobs;
--- all_jobs_visible > 0, orgs_in_jobs >= 1, test_company_jobs = 0 (empty) = step 11 complete
+-- all_jobs_visible > 0, orgs_in_jobs >= 1, test_company_jobs = 0 (empty) = step 12 complete
 ```
 
-**Step 12: Handoff doc exists and is committed**
+**Step 13: Handoff doc exists and is committed**
 ```bash
 ls docs/superpowers/build-18b/session-c-handoff.md && \
   git log origin/main --oneline -- docs/superpowers/build-18b/session-c-handoff.md | head -1
-# File exists AND has a commit = step 12 complete
+# File exists AND has a commit = step 13 complete
 ```
 
 ### 12.4 Resume Protocol
@@ -590,14 +600,15 @@ Not required for 18b completion, but tracked:
 18b is complete when all of the following are true:
 
 - [ ] `custom_access_token_hook` function exists in `public` schema with correct grants (§12.3 step 1 verifier returns TRUE)
-- [ ] Hook is enabled in Supabase dashboard (§12.3 step 3 verifier returns expected UUID)
-- [ ] Eric's JWT, when decoded, contains `app_metadata.active_organization_id = 'a0000000-0000-4000-8000-000000000001'` (§12.3 step 4)
+- [ ] 7 contract RPC functions patched to include `organization_id` in contract_events INSERTs (§12.3 step 2 verifier returns TRUE)
+- [ ] Hook is enabled in Supabase dashboard (§12.3 step 4 verifier returns expected UUID)
+- [ ] Eric's JWT, when decoded, contains `app_metadata.active_organization_id = 'a0000000-0000-4000-8000-000000000001'` (§12.3 step 5)
 - [ ] `nookleus.active_organization_id()` returns AAA's UUID for Eric's session
 - [ ] App code no longer references `nookleus.aaa_organization_id()` or the AAA UUID constant
-- [ ] `pg_policies` shows zero legacy allow-all and zero transitional policies (§12.3 step 8 verifier)
-- [ ] All smoke tests (§8) pass at steps 7 and 9
-- [ ] `nookleus.aaa_organization_id()` function does not exist (§12.3 step 10)
-- [ ] Service-role query confirms Test Company has zero rows (§12.3 step 11)
-- [ ] Build55, 56, 57, 58 migrations are committed to main
+- [ ] `pg_policies` shows zero legacy allow-all and zero transitional policies (§12.3 step 9 verifier)
+- [ ] All smoke tests (§8) pass at steps 8 and 10
+- [ ] `nookleus.aaa_organization_id()` function does not exist (§12.3 step 11)
+- [ ] Service-role query confirms Test Company has zero rows (§12.3 step 12)
+- [ ] Build55, 56, 57, 58, 59 migrations are committed to main
 - [ ] Session C run log is committed
 - [ ] 18b handoff doc is written and committed

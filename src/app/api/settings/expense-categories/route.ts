@@ -12,7 +12,7 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
   const service = createServiceClient();
   const { data, error } = await service
     .from("expense_categories")
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "name and display_label are required" }, { status: 400 });
   }
 
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
   const service = createServiceClient();
   const { data: existing } = await service
     .from("expense_categories")
@@ -77,7 +77,7 @@ export async function PUT(request: Request) {
 
   const body = await request.json();
   const service = createServiceClient();
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
 
   const items = Array.isArray(body) ? body : [body];
   for (const item of items) {
@@ -104,7 +104,7 @@ export async function DELETE(request: Request) {
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
   const service = createServiceClient();
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
   const { data: cat } = await service
     .from("expense_categories")
     .select("is_default, organization_id")
