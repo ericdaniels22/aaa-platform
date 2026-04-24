@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 // POST /api/settings/contract-templates/[id]/duplicate
@@ -8,8 +8,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const supabase = createApiClient();
-  const orgId = getActiveOrganizationId();
+  const supabase = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(supabase);
 
   const { data: source, error: fetchErr } = await supabase
     .from("contract_templates")

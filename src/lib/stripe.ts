@@ -1,7 +1,6 @@
 import Stripe from "stripe";
 import { decrypt } from "@/lib/encryption";
 import { createServiceClient } from "@/lib/supabase-api";
-import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 export class StripeNotConnectedError extends Error {
   constructor() {
@@ -31,27 +30,30 @@ export interface StripeConnectionRow {
   updated_at: string;
 }
 
-export async function loadStripeConnection(orgId?: string): Promise<StripeConnectionRow | null> {
+// These helpers use a service-role client internally (bypasses RLS) and so
+// can't resolve the active org from a session JWT. As of 18b, every caller
+// must supply `orgId` explicitly — either from a row they already hold
+// (webhook handlers: `payment.organization_id`) or from
+// `getActiveOrganizationId(supabase)` at the call site (request handlers).
+export async function loadStripeConnection(orgId: string): Promise<StripeConnectionRow | null> {
   const supabase = createServiceClient();
-  const targetOrg = orgId ?? getActiveOrganizationId();
   const { data, error } = await supabase
     .from("stripe_connection")
     .select("*")
-    .eq("organization_id", targetOrg)
+    .eq("organization_id", orgId)
     .maybeSingle();
   if (error) throw error;
   return (data as StripeConnectionRow | null) ?? null;
 }
 
 // Cache is keyed by organization_id so multi-tenant call sites don't trample
-// each other. In 18a there's one org so the cache size is effectively 1.
+// each other. In 18b there's one live org so the cache size is effectively 1.
 const cachedClients = new Map<string, { accountId: string; client: Stripe }>();
 
-export async function getStripeClient(orgId?: string): Promise<{ client: Stripe; connection: StripeConnectionRow }> {
-  const targetOrg = orgId ?? getActiveOrganizationId();
-  const connection = await loadStripeConnection(targetOrg);
+export async function getStripeClient(orgId: string): Promise<{ client: Stripe; connection: StripeConnectionRow }> {
+  const connection = await loadStripeConnection(orgId);
   if (!connection) throw new StripeNotConnectedError();
-  const cached = cachedClients.get(targetOrg);
+  const cached = cachedClients.get(orgId);
   if (cached && cached.accountId === connection.stripe_account_id) {
     return { client: cached.client, connection };
   }
@@ -59,13 +61,13 @@ export async function getStripeClient(orgId?: string): Promise<{ client: Stripe;
   const client = new Stripe(secret, {
     apiVersion: "2026-03-25.dahlia",
     typescript: true,
-    appInfo: { name: "aaa-platform", version: "18a" },
+    appInfo: { name: "aaa-platform", version: "18b" },
   });
-  cachedClients.set(targetOrg, { accountId: connection.stripe_account_id, client });
+  cachedClients.set(orgId, { accountId: connection.stripe_account_id, client });
   return { client, connection };
 }
 
-export async function getPublicKey(orgId?: string): Promise<string> {
+export async function getPublicKey(orgId: string): Promise<string> {
   const connection = await loadStripeConnection(orgId);
   if (!connection) throw new StripeNotConnectedError();
   return connection.publishable_key;

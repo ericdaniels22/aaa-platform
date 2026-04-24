@@ -8,7 +8,7 @@ async function getCallerAndExpense(id: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, status: 401, error: "Not authenticated" };
 
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
   const { data: membership } = await supabase
     .from("user_organizations")
     .select("id, role")

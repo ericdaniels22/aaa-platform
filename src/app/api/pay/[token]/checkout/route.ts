@@ -57,8 +57,9 @@ export async function POST(
   )
     return NextResponse.json({ error: "link_expired" }, { status: 400 });
 
-  // 2. Stripe client + connection
-  const { client: stripe, connection } = await getStripeClient();
+  // 2. Stripe client + connection. Public pay route has no user session —
+  // scope the stripe connection to the payment_request's org.
+  const { client: stripe, connection } = await getStripeClient(pr.organization_id);
   if (body.method === "ach" && !connection.ach_enabled)
     return NextResponse.json({ error: "ach_not_enabled" }, { status: 400 });
   if (body.method === "card" && !connection.card_enabled)

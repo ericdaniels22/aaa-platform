@@ -148,7 +148,7 @@ export async function PATCH(
       patch.tax_amount = taxAmount;
       patch.total_amount = total;
       patch.tax_rate = effectiveRate;
-      const orgId = current.organization_id ?? getActiveOrganizationId();
+      const orgId = current.organization_id ?? (await getActiveOrganizationId(supabase));
       lineRowsToReplace = items.map((li, idx) => ({
         organization_id: orgId,
         invoice_id: id,
@@ -175,7 +175,7 @@ export async function PATCH(
   }
 
   if (lineRowsToReplace) {
-    const lineOrgId = current.organization_id ?? getActiveOrganizationId();
+    const lineOrgId = current.organization_id ?? (await getActiveOrganizationId(supabase));
     const { error: delErr } = await service
       .from("invoice_line_items")
       .delete()

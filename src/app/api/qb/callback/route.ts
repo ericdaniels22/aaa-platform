@@ -58,7 +58,7 @@ export async function GET(request: Request) {
     .from("user_organizations")
     .select("role")
     .eq("user_id", user.id)
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(supabase))
     .maybeSingle<{ role: string }>();
   if (membership?.role !== "admin") {
     return NextResponse.redirect(
@@ -102,7 +102,7 @@ export async function GET(request: Request) {
   // authenticated + authorized the user above).
   const service = createServiceClient();
   const { error: upsertErr } = await service.from("qb_connection").insert({
-    organization_id: getActiveOrganizationId(),
+    organization_id: await getActiveOrganizationId(supabase),
     realm_id: realmId,
     company_name: companyName,
     access_token_encrypted: encrypt(accessToken),

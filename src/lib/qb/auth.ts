@@ -2,9 +2,8 @@
 // which authenticates via CRON_SECRET). Returns the authorized user id or
 // an error response ready to be returned straight from the route handler.
 //
-// 18a: admin-role check now reads user_organizations.role scoped to the
-// active org. TODO(18b): replace getActiveOrganizationId() with the
-// session-sourced helper once the access-token hook ships.
+// Admin-role check reads user_organizations.role scoped to the active org,
+// resolved from the session JWT via getActiveOrganizationId.
 
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -24,7 +23,7 @@ export async function requireAdmin(
       response: NextResponse.json({ error: "not authenticated" }, { status: 401 }),
     };
   }
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
   const { data: membership } = await supabase
     .from("user_organizations")
     .select("role")

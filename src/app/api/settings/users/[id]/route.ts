@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 // PATCH /api/settings/users/[id] — update user profile. Role updates land
@@ -37,7 +38,8 @@ export async function PATCH(
   }
 
   if (body.role !== undefined) {
-    const orgId = getActiveOrganizationId();
+    const supabase = await createServerSupabaseClient();
+    const orgId = await getActiveOrganizationId(supabase);
     const { error } = await service
       .from("user_organizations")
       .update({ role: body.role })

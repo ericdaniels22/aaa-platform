@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 // GET /api/settings/company — fetch all company settings for the active org.
 export async function GET() {
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("company_settings")
     .select("key, value")
-    .eq("organization_id", getActiveOrganizationId());
+    .eq("organization_id", await getActiveOrganizationId(supabase));
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -25,8 +25,8 @@ export async function GET() {
 // PUT /api/settings/company — upsert company settings for the active org.
 export async function PUT(request: Request) {
   const body = await request.json();
-  const supabase = createApiClient();
-  const orgId = getActiveOrganizationId();
+  const supabase = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(supabase);
 
   const entries = Object.entries(body).filter(
     ([key]) => typeof key === "string" && key.length > 0

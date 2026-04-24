@@ -90,7 +90,7 @@ export default function ContactsPage() {
     const supabase = createClient();
 
     // Fetch contacts with job count
-    const orgId = getActiveOrganizationId();
+    const orgId = await getActiveOrganizationId(supabase);
     const { data: contactsData } = await supabase
       .from("contacts")
       .select("*")
@@ -194,7 +194,7 @@ export default function ContactsPage() {
         .from("contacts")
         .update(payload)
         .eq("id", editingContact.id)
-        .eq("organization_id", getActiveOrganizationId());
+        .eq("organization_id", await getActiveOrganizationId(supabase));
 
       if (error) {
         toast.error("Failed to update contact");
@@ -207,7 +207,7 @@ export default function ContactsPage() {
     } else {
       const { error } = await supabase
         .from("contacts")
-        .insert({ ...payload, organization_id: getActiveOrganizationId() });
+        .insert({ ...payload, organization_id: await getActiveOrganizationId(supabase) });
 
       if (error) {
         toast.error("Failed to create contact");
@@ -229,7 +229,7 @@ export default function ContactsPage() {
       .from("contacts")
       .delete()
       .eq("id", deleteTarget.id)
-      .eq("organization_id", getActiveOrganizationId());
+      .eq("organization_id", await getActiveOrganizationId(supabase));
 
     if (error) {
       toast.error(

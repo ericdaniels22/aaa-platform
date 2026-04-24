@@ -113,7 +113,7 @@ export default function PhotoUploadModal({
 
     setUploading(true);
     const supabase = createClient();
-    const orgId = getActiveOrganizationId();
+    const orgId = await getActiveOrganizationId(supabase);
     let successCount = 0;
 
     for (const filePreview of files) {

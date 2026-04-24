@@ -16,7 +16,6 @@ import { handlePaymentIntentSucceeded } from "@/lib/stripe/webhook/handlers/paym
 import { handlePaymentIntentFailed } from "@/lib/stripe/webhook/handlers/payment-intent-failed";
 import { handleChargeRefunded } from "@/lib/stripe/webhook/handlers/charge-refunded";
 import { handleChargeDisputeCreated, handleChargeDisputeClosed } from "@/lib/stripe/webhook/handlers/charge-dispute";
-import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 // Webhook handlers need the raw request body for signature verification.
 // Force nodejs runtime + disable response caching.
@@ -38,16 +37,15 @@ const HANDLERS: Record<string, Handler> = {
   "charge.dispute.closed": handleChargeDisputeClosed,
 };
 
-// Resolve the org id for a Stripe event. Prefers the metadata written on the
-// event's object (set by our Checkout Session creation code). Falls back to
-// the AAA hardcode for events issued before the 18a deploy — those
-// pre-18a events legitimately belong to AAA.
-// TODO(18b): drop the fallback once old event IDs have aged out.
-function resolveOrgFromStripeEvent(event: Stripe.Event): string {
+// Resolve the org id for a Stripe event. Reads the metadata written on the
+// event's object by our Checkout Session creation code. All events issued
+// after 18a carry this metadata; earlier events do not. Returns null if
+// the metadata is missing — the caller logs and drops the event rather
+// than silently routing it to a hardcoded tenant.
+function resolveOrgFromStripeEvent(event: Stripe.Event): string | null {
   const obj = event.data?.object as { metadata?: Record<string, string> } | undefined;
   const metaOrg = obj?.metadata?.organization_id;
-  if (metaOrg && typeof metaOrg === "string" && metaOrg.length > 0) return metaOrg;
-  return getActiveOrganizationId();
+  return metaOrg && typeof metaOrg === "string" && metaOrg.length > 0 ? metaOrg : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -73,6 +71,15 @@ export async function POST(req: NextRequest) {
   try {
     const supabase = createServiceClient();
     const orgId = resolveOrgFromStripeEvent(event);
+    if (!orgId) {
+      // Event pre-dates 18a or was issued by code that didn't set
+      // metadata.organization_id. We log and acknowledge so Stripe stops
+      // retrying, but do not route it to a tenant.
+      console.error(
+        `[stripe/webhook] dropping event with no org metadata: ${event.type} ${event.id}`,
+      );
+      return NextResponse.json({ ok: true, dropped: "no_org_metadata" });
+    }
 
     const claim = await claimEvent(supabase, event, orgId);
     if (claim.status === "duplicate") {

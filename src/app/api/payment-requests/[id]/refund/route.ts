@@ -37,7 +37,7 @@ export async function POST(
   // Find the most recent stripe payment row linked to this request.
   const { data: payment, error: payErr } = await serviceSupabase
     .from("payments")
-    .select("id, amount, status, stripe_charge_id, payment_request_id")
+    .select("id, organization_id, amount, status, stripe_charge_id, payment_request_id")
     .eq("payment_request_id", paymentRequestId)
     .eq("source", "stripe")
     .order("created_at", { ascending: false })
@@ -45,7 +45,12 @@ export async function POST(
     .maybeSingle<
       Pick<
         PaymentRow,
-        "id" | "amount" | "status" | "stripe_charge_id" | "payment_request_id"
+        | "id"
+        | "organization_id"
+        | "amount"
+        | "status"
+        | "stripe_charge_id"
+        | "payment_request_id"
       >
     >();
   if (payErr || !payment) {
@@ -133,8 +138,8 @@ export async function POST(
     );
   }
 
-  // Call Stripe
-  const { client: stripe } = await getStripeClient();
+  // Call Stripe. Scope the stripe connection to the payment's org.
+  const { client: stripe } = await getStripeClient(payment.organization_id);
   try {
     const stripeRefund = await stripe.refunds.create({
       charge: payment.stripe_charge_id,

@@ -98,7 +98,8 @@ export async function GET(req: NextRequest) {
     return back("token_exchange_failed");
   }
 
-  const orgId = getActiveOrganizationId();
+  const authClient = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(authClient);
   const supabase = createServiceClient();
   // One-row-per-org pattern: delete the existing row for this org, insert fresh.
   await supabase

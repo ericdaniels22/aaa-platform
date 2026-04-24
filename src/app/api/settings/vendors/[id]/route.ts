@@ -31,7 +31,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .from("vendors")
     .update(updates)
     .eq("id", id)
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(supabase))
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

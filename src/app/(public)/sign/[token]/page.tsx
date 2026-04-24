@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { createServiceClient } from "@/lib/supabase-api";
 import { verifySigningToken, InvalidSigningTokenError } from "@/lib/contracts/tokens";
 import { writeContractEvent } from "@/lib/contracts/audit";
-import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
+import { AAA_ORGANIZATION_ID } from "@/lib/supabase/get-active-org";
 import type { Contract, ContractSigner } from "@/lib/contracts/types";
 import SigningForm from "./signing-form";
 import { Lock } from "lucide-react";
@@ -17,13 +17,15 @@ interface CompanyBrand {
 
 // Public routes don't have a session — if a contract is available we scope
 // company_settings to its organization_id; otherwise we fall back to the
-// AAA hardcode (18a default tenant).
+// AAA hardcode. Legitimate constant use: public signing pages are issued
+// by AAA for AAA customers; pre-token-verify errors need some branding,
+// and AAA's branding is the only one that exists pre-18c.
 async function loadCompany(orgId?: string | null): Promise<CompanyBrand> {
   const supabase = createServiceClient();
   const { data } = await supabase
     .from("company_settings")
     .select("key, value")
-    .eq("organization_id", orgId ?? getActiveOrganizationId())
+    .eq("organization_id", orgId ?? AAA_ORGANIZATION_ID)
     .in("key", ["company_name", "phone", "email", "address", "logo_url"]);
   const m = new Map<string, string | null>(
     (data ?? []).map((r: { key: string; value: string | null }) => [r.key, r.value]),

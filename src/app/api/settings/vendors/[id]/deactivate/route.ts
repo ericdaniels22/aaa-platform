@@ -15,7 +15,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .from("vendors")
     .update({ is_active: false })
     .eq("id", id)
-    .eq("organization_id", getActiveOrganizationId());
+    .eq("organization_id", await getActiveOrganizationId(supabase));
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }

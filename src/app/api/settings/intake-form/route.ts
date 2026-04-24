@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 
 // GET /api/settings/intake-form — fetch latest form config for the active org.
 export async function GET() {
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("form_config")
     .select("*")
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(supabase))
     .order("version", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -25,8 +25,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid config" }, { status: 400 });
   }
 
-  const supabase = createApiClient();
-  const orgId = getActiveOrganizationId();
+  const supabase = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(supabase);
 
   // Get current max version for this org
   const { data: current } = await supabase

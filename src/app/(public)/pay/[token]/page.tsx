@@ -5,7 +5,7 @@ import {
   InvalidPaymentLinkTokenError,
 } from "@/lib/payment-link-tokens";
 import { writePaymentEvent } from "@/lib/payments/activity";
-import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
+import { AAA_ORGANIZATION_ID } from "@/lib/supabase/get-active-org";
 import type { PaymentRequestRow } from "@/lib/payments/types";
 import { Lock, CheckCircle2 } from "lucide-react";
 import MethodSelector from "./method-selector";
@@ -19,12 +19,15 @@ interface CompanyBrand {
   logoUrl: string | null;
 }
 
+// Public pay page has no user session. Falls back to AAA_ORGANIZATION_ID
+// when orgId can't be resolved from the payment-link token — same rationale
+// as the signing page (pre-18c: only AAA has public-facing pages).
 async function loadCompany(orgId?: string | null): Promise<CompanyBrand> {
   const supabase = createServiceClient();
   const { data } = await supabase
     .from("company_settings")
     .select("key, value")
-    .eq("organization_id", orgId ?? getActiveOrganizationId())
+    .eq("organization_id", orgId ?? AAA_ORGANIZATION_ID)
     .in("key", ["company_name", "phone", "email", "address", "logo_url"]);
   const m = new Map<string, string | null>(
     (data ?? []).map((r: { key: string; value: string | null }) => [

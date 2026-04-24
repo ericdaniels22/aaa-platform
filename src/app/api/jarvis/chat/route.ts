@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       .from("user_organizations")
       .select("role")
       .eq("user_id", user.id)
-      .eq("organization_id", getActiveOrganizationId())
+      .eq("organization_id", await getActiveOrganizationId(authSupabase))
       .maybeSingle<{ role: string }>();
 
     const userName = profile?.full_name || "User";

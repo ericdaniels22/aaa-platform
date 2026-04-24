@@ -8,7 +8,7 @@ async function requireAnyAuth() {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, response: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
-  return { ok: true as const, user };
+  return { ok: true as const, user, supabase };
 }
 
 // GET — any authenticated user (used by Log Expense modal autocomplete too)
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   const service = createServiceClient();
   let query = service.from("vendors")
     .select("*, default_category:expense_categories!default_category_id(id, display_label, bg_color, text_color)")
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(auth.supabase))
     .order("name", { ascending: true });
 
   if (q) query = query.ilike("name", `%${q}%`);
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
   const service = createServiceClient();
   const { data, error } = await service.from("vendors").insert({
-    organization_id: getActiveOrganizationId(),
+    organization_id: await getActiveOrganizationId(supabase),
     name: name.trim(),
     vendor_type,
     default_category_id: (default_category_id as string | null | undefined) ?? null,

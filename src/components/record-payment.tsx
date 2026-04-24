@@ -79,7 +79,7 @@ export default function RecordPaymentModal({
     const supabase = createClient();
 
     const { error } = await supabase.from("payments").insert({
-      organization_id: getActiveOrganizationId(),
+      organization_id: await getActiveOrganizationId(supabase),
       job_id: jobId,
       source,
       method,

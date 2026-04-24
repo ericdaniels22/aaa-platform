@@ -48,9 +48,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "amount_precision" }, { status: 400 });
   }
 
+  const orgId = await getActiveOrganizationId(auth);
+  if (!orgId) {
+    return NextResponse.json({ error: "no_active_organization" }, { status: 401 });
+  }
+
   let stripeCtx: Awaited<ReturnType<typeof getStripeClient>>;
   try {
-    stripeCtx = await getStripeClient();
+    stripeCtx = await getStripeClient(orgId);
   } catch (e) {
     if (e instanceof StripeNotConnectedError) {
       return NextResponse.json({ error: "stripe_not_connected" }, { status: 400 });
@@ -59,7 +64,6 @@ export async function POST(req: NextRequest) {
   }
   const { client: stripe, connection } = stripeCtx;
 
-  const orgId = getActiveOrganizationId();
   const supabase = createServiceClient();
 
   const { data: job, error: jobErr } = await supabase
@@ -271,7 +275,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabase
     .from("payment_requests")
     .select("*")
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(auth))
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

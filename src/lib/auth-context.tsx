@@ -6,10 +6,9 @@ import type { User } from "@supabase/supabase-js";
 
 // role lives on user_organizations (scoped to a specific membership) since
 // build48. UserProfile exposes it as a flat string for display — sourced
-// from the active-org membership. When workspace switching lands in 18c,
-// this resolver becomes dynamic.
-// TODO(18b): replace AAA_ORGANIZATION_ID with session-sourced org.
-const AAA_ORGANIZATION_ID = "a0000000-0000-4000-8000-000000000001";
+// from the user's active-org membership. The active org is read from the
+// JWT claim `app_metadata.active_organization_id` (injected by the
+// custom_access_token_hook as of 18b).
 
 interface UserProfile {
   id: string;
@@ -33,13 +32,18 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function readActiveOrgClaim(user: User): string | null {
+  const claim = (user.app_metadata as Record<string, unknown> | undefined)?.active_organization_id;
+  return typeof claim === "string" && claim.length > 0 ? claim : null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [permissions, setPermissions] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
-  const loadProfile = useCallback(async (userId: string) => {
+  const loadProfile = useCallback(async (userId: string, activeOrgId: string | null) => {
     const supabase = createClient();
 
     // Fetch profile (no role column after build48).
@@ -50,12 +54,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
 
     // Fetch role + membership id from user_organizations scoped to active org.
-    const { data: membership } = await supabase
-      .from("user_organizations")
-      .select("id, role")
-      .eq("user_id", userId)
-      .eq("organization_id", AAA_ORGANIZATION_ID)
-      .maybeSingle<{ id: string; role: string }>();
+    // activeOrgId comes from the session JWT claim. If null, skip the
+    // membership lookup — the user will show as having no role (falls back
+    // to "crew_member" for display) and no org-scoped permissions.
+    const { data: membership } = activeOrgId
+      ? await supabase
+          .from("user_organizations")
+          .select("id, role")
+          .eq("user_id", userId)
+          .eq("organization_id", activeOrgId)
+          .maybeSingle<{ id: string; role: string }>()
+      : { data: null };
 
     if (profileData) {
       setProfile({ ...(profileData as Omit<UserProfile, "role">), role: membership?.role ?? "crew_member" });
@@ -85,7 +94,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    if (user) await loadProfile(user.id);
+    if (user) {
+      const activeOrgId = readActiveOrgClaim(user);
+      await loadProfile(user.id, activeOrgId);
+    }
   }, [user, loadProfile]);
 
   useEffect(() => {
@@ -101,7 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUser(currentUser);
       if (currentUser) {
-        loadProfile(currentUser.id).finally(() => setLoading(false));
+        const activeOrgId = readActiveOrgClaim(currentUser);
+        loadProfile(currentUser.id, activeOrgId).finally(() => setLoading(false));
       } else {
         setLoading(false);
       }
@@ -113,7 +126,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const newUser = session?.user ?? null;
         setUser(newUser);
         if (newUser) {
-          loadProfile(newUser.id);
+          const activeOrgId = readActiveOrgClaim(newUser);
+          loadProfile(newUser.id, activeOrgId);
         } else {
           setProfile(null);
           setPermissions({});

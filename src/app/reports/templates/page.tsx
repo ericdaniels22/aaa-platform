@@ -90,7 +90,7 @@ export default function TemplatesPage() {
     const { data } = await supabase
       .from("photo_report_templates")
       .select("*")
-      .eq("organization_id", getActiveOrganizationId())
+      .eq("organization_id", await getActiveOrganizationId(supabase))
       .order("created_at", { ascending: false });
 
     if (data) setTemplates(data as PhotoReportTemplate[]);
@@ -109,7 +109,7 @@ export default function TemplatesPage() {
       .from("photo_report_templates")
       .delete()
       .eq("id", id)
-      .eq("organization_id", getActiveOrganizationId());
+      .eq("organization_id", await getActiveOrganizationId(supabase));
 
     if (error) {
       toast.error("Failed to delete template");
@@ -133,7 +133,7 @@ export default function TemplatesPage() {
   async function handleSeedDefaults() {
     setSeeding(true);
     const supabase = createClient();
-    const orgId = getActiveOrganizationId();
+    const orgId = await getActiveOrganizationId(supabase);
     const seeded = DEFAULT_TEMPLATES.map((t) => ({ ...t, organization_id: orgId }));
     const { error } = await supabase
       .from("photo_report_templates")

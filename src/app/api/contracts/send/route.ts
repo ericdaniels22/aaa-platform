@@ -72,7 +72,7 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceClient();
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(authClient);
 
   // --- Fetch settings ---
   const { data: settings, error: sErr } = await supabase

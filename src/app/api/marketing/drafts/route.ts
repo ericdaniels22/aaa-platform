@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("marketing_drafts")
     .select("*, image:marketing_assets!image_id(*)")
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(authSupabase))
     .order("created_at", { ascending: false });
 
   if (platform) {
@@ -41,8 +41,8 @@ export async function POST(request: NextRequest) {
   const isInternalCall =
     internalKey && internalKey === process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+  const authSupabase = await createServerSupabaseClient();
   if (!isInternalCall) {
-    const authSupabase = await createServerSupabaseClient();
     const { data: { user }, error: authError } = await authSupabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await supabase
     .from("marketing_drafts")
     .insert({
-      organization_id: getActiveOrganizationId(),
+      organization_id: await getActiveOrganizationId(authSupabase),
       platform,
       caption,
       hashtags: hashtags || null,
@@ -112,7 +112,7 @@ export async function PATCH(request: NextRequest) {
     .from("marketing_drafts")
     .update(allowed)
     .eq("id", id)
-    .eq("organization_id", getActiveOrganizationId())
+    .eq("organization_id", await getActiveOrganizationId(authSupabase))
     .select("*, image:marketing_assets!image_id(*)")
     .single();
 
@@ -140,7 +140,7 @@ export async function DELETE(request: NextRequest) {
     .from("marketing_drafts")
     .delete()
     .eq("id", id)
-    .eq("organization_id", getActiveOrganizationId());
+    .eq("organization_id", await getActiveOrganizationId(authSupabase));
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

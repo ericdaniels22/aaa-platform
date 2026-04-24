@@ -17,7 +17,7 @@ export async function POST() {
     .from("qb_connection")
     .update({ is_active: false })
     .eq("is_active", true)
-    .eq("organization_id", getActiveOrganizationId());
+    .eq("organization_id", await getActiveOrganizationId(supabase));
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

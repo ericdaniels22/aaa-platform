@@ -32,7 +32,7 @@ const ROLE_DEFAULTS: Record<string, string[]> = {
 // would return [] under post-build49 RLS.
 export async function GET() {
   const supabase = await createServerSupabaseClient();
-  const orgId = getActiveOrganizationId();
+  const orgId = await getActiveOrganizationId(supabase);
 
   const { data: memberships, error } = await supabase
     .from("user_organizations")
@@ -86,7 +86,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const orgId = getActiveOrganizationId();
+  const supabase = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(supabase);
   const chosenRole = role || "crew_member";
 
   // Create auth user with invite — handle_new_user trigger creates user_profiles row.

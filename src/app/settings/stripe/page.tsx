@@ -1,11 +1,15 @@
 import { loadStripeConnection } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import StripeSettingsClient from "./stripe-settings-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function StripeSettingsPage() {
-  const connection = await loadStripeConnection();
+  const auth = await createServerSupabaseClient();
+  const orgId = await getActiveOrganizationId(auth);
+  const connection = orgId ? await loadStripeConnection(orgId) : null;
 
   const webhookConfigured = Boolean(connection?.webhook_signing_secret_encrypted);
 
