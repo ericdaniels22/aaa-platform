@@ -177,46 +177,94 @@ SELECT nookleus.active_organization_id();
 
 **Sequence:** patch → commit on `main` → push → Vercel redeploy → re-run `/intake` + `/settings/intake-form` + remaining §8 smokes.
 
-**Status: in progress — patch committed, awaiting deploy + re-test.**
+**Patch:** commit `ae580cc fix(18b): decode JWT directly in getActiveOrganizationId`. Pushed to `origin/main`. Vercel auto-deploy triggered.
 
-## Step 5: Verify JWT carries claim
+**2026-04-25 — Eric verified post-deploy:** `/settings/intake-form` saves successfully; `/intake` renders the form configuration. Intake fix PASS.
 
-(pending)
+**Remaining §8 smokes:** Eric walked /jobs, /intake submit, /photos, /contacts, /settings/users, /jarvis, incognito → all PASS.
 
-## Step 6: Verify `nookleus.active_organization_id()` resolves
-
-(pending)
-
-## Step 7: Deploy code sweep (merge 18b-prep → main)
-
-(pending)
-
-## Step 8: Post-sweep smoke tests
-
-(pending)
+**Status: PASS.**
 
 ## Step 9: Drop 48 legacy + 10 transitional policies (build57)
 
-(pending)
+**2026-04-25 — Migration `build57_drop_allow_all_policies` applied:** success.
+
+**Pre-state:** 59 policies satisfied `(qual='true' OR null+true) AND name NOT LIKE 'tenant_isolation_%'`. 56 tenant_isolation policies, 10 transitional_allow_all_*.
+
+**Post-state verifier (§12.3 step 9, amended to exclude build60's `auth_admin_read_user_organizations`):**
+- `transitional_gone`: TRUE (10 → 0)
+- `legacy_allow_alls_gone`: TRUE (48 listed in build57 §1 → 0)
+- `tenant_isolation_count`: 56 (unchanged — RLS perimeter intact)
+
+**Verifier amendment (Rule C MINOR):** the original §12.3 step 9 verifier checked `legacy_allow_alls_gone = 0` without an exception for build60's `auth_admin_read_user_organizations`. Build60 was added mid-Session-C and is the supabase-recommended pattern for the hook (SELECT-only, restricted to internal trusted role `supabase_auth_admin`). Amended verifier excludes that one policy by name; enumerator confirms it is the only residual:
+
+```
+tablename            policyname                              roles                    cmd
+user_organizations   auth_admin_read_user_organizations      {supabase_auth_admin}    SELECT
+```
+
+**Status: PASS.**
 
 ## Step 10: Post-drop smoke tests
 
-(pending)
+**2026-04-25 — Eric walked the §8 checklist post-build57:**
+- `/jobs`: 5 AAA jobs render — PASS
+- `/intake` submit → new job appears in `/jobs` — PASS
+- `/photos`: PASS
+- `/contacts`: PASS
+- `/settings/users`: Eric appears as admin of AAA — PASS
+- `/jarvis`: opens without error — PASS
+- Incognito: tenant isolation enforced (jobs render only for authenticated user with matching org) — PASS
+
+**Cosmetic regression noted (not a §12.5 abort trigger):** in incognito on a cold load, the colored top strip on job cards falls back to gray. Root cause: `ConfigProvider` (`src/lib/config-context.tsx`) fires its `damage_types`/`job_statuses` fetches before the auth cookie hydrates on first incognito render; pre-build57 the `Allow all on damage_types` / `Allow all on job_statuses` legacy policies were a `public`-role backstop that hid this race. Post-build57 only `tenant_isolation_*` (`{authenticated}`) remains, so the anon-during-race request returns 0 rows. Status badges stay correctly colored because `getStatusColor()` has a hardcoded fallback table; the damage-type accent `accentColor = dtConfig?.text_color || "#666666"` does not.
+
+Functional smoke is GREEN. Tenant isolation is doing its job. Eric's call: ship and add to 18c followup. Documented in plan §13 with three fix candidates.
+
+**Status: PASS** (with cosmetic regression flagged for 18c).
 
 ## Step 11: Drop `nookleus.aaa_organization_id()` (build58)
 
-(pending)
+**2026-04-25 — Migration `build58_drop_aaa_organization_id_helper` applied:** success.
+
+**Verifier (§12.3 step 11):** `to_regprocedure('nookleus.aaa_organization_id()') IS NULL = TRUE`. Function dropped. Any missed caller would now surface a loud "function does not exist" error rather than silently returning the AAA constant.
+
+**Status: PASS.**
 
 ## Step 12: Service-role sanity
 
-(pending)
+**2026-04-25 — §12.3 step 12 verifier (run as service role via MCP):**
+- `all_jobs_visible`: 8 — service role bypasses RLS, sees every row.
+- `orgs_in_jobs`: 1 — only AAA has data (Test Company exists with zero rows, as planned for pre-18c).
+- `test_company_jobs`: 0 — Test Company has no jobs (expected; 18c will seed).
+
+Service role bypass confirmed working. No cross-tenant leakage created by 18b.
+
+**Status: PASS.**
 
 ## Step 13: Handoff doc + commit
 
-(pending)
+(in progress — writing `session-c-handoff.md` and committing migration files + run log + handoff to `main`.)
 
 ---
 
 ## Session outcome
 
-(pending)
+**18b RLS enforcement: SHIPPED to prod 2026-04-25.**
+
+Migrations applied: build55, build56, build57, build58, build59, build60, build61.
+- build55: `custom_access_token_hook` function + grants
+- build56: drop 3 redundant custom policies
+- build57: drop 48 legacy + 10 transitional policies (the enforcement flip)
+- build58: drop `nookleus.aaa_organization_id()` helper
+- build59: patch 7 contract RPCs to include `organization_id` in `contract_events` INSERTs
+- build60 (Rule C MATERIAL, mid-session): `auth_admin_read_user_organizations` policy so the hook can SELECT under RLS
+- build61 (Rule C MATERIAL, post-deploy): app-code patch to `getActiveOrganizationId()` to decode the JWT directly instead of reading `auth.users.raw_app_meta_data` via `getUser()`
+
+All §12.3 step verifiers PASS (with one amendment to the step 9 verifier to acknowledge build60 as expected residual). All §8 smoke tests PASS at both step 8 and step 10.
+
+Tenant isolation via `tenant_isolation_*` policies is now the sole gate. App reads `app_metadata.active_organization_id` from the JWT (client) and `auth.jwt() -> 'app_metadata' ->> 'active_organization_id'` (DB). Test Company has zero rows; service role bypass confirmed.
+
+**18c followups (plan §13):**
+- Public-route org resolution (must-fix before 18c)
+- ConfigProvider auth-race on cold sessions (cosmetic; surfaced Step 10 smoke)
+- Scratch project deletion, storage migration, sequence drops, etc.
