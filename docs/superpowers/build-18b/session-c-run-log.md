@@ -143,7 +143,41 @@ SELECT nookleus.active_organization_id();
 
 ## Step 7: Deploy code sweep (merge 18b-prep → main + Vercel deploy)
 
-(in progress — committing build60 + run log to 18b-prep, then merging to main)
+**2026-04-24 — Sequence executed:**
+1. `18b-prep` = `2aaf22f` (build60 + run log committed on top of Session B's `f5c6078`).
+2. Pushed `18b-prep` → origin.
+3. Checked out `main` (`38d1b10`), pulled (already up to date), merged `18b-prep` with `--no-ff`:
+   - Merge commit: `bef05b9 merge(18b): 18b-prep RLS enforcement — build55/56/57/58/59/60 + code sweep`
+   - 78 files changed, +1834 / -250 — code sweep + 6 migrations + rollback + docs.
+4. Pushed `main` → origin. Vercel auto-deploy triggered.
+
+**Verifier:** `git log origin/main -1 --oneline` → `bef05b9 merge(18b): ...`. Matches expected message containing "18b". PASS.
+
+**Status: PASS** (Vercel deploy pending Eric's visual confirmation on Vercel dashboard).
+
+## Step 8: Post-sweep smoke tests
+
+**2026-04-25 — First smoke pass (Eric, post-`bef05b9` deploy):**
+- `/intake` shows "No form configuration found".
+- `/settings/intake-form` toast: "Failed to save form config".
+- All other tenant-scoped reads/writes also broken (every code path that calls `getActiveOrganizationId`).
+
+### Rule C MATERIAL finding + resolution (Eric-approved)
+
+**Diagnosis:**
+- The hook (`public.custom_access_token_hook`) injects `app_metadata.active_organization_id` into the **JWT only**. It does NOT update `auth.users.raw_app_meta_data` (the DB column).
+- `src/lib/supabase/get-active-org.ts` was reading `(await supabase.auth.getUser()).app_metadata.active_organization_id`. `getUser()` returns the user record from the auth API, whose `app_metadata` field is sourced from the DB column — not from the JWT.
+- Net effect: helper always returned `null` for every authenticated request → GETs filtered on `organization_id = NULL` (no rows) → POSTs violated NOT NULL.
+- Step 5 had verified the JWT *does* carry the claim, and the DB-side `nookleus.active_organization_id()` works because it reads `auth.jwt()`. The client helper just had the parallel bug.
+- 61 files import this helper; one centralized fix repairs them all. Same class of incomplete-coverage bug as build54/build59 (Session A code sweep), but caught at smoke time instead of compile time.
+
+**Resolution:** patched `src/lib/supabase/get-active-org.ts` to decode the access-token JWT directly via `getSession().access_token`, mirror `nookleus.active_organization_id()`'s `app_metadata` → top-level fallback. Cross-runtime base64url decoder (`atob` in browser, `Buffer` on Node).
+
+**Forward-fix justification (§12.5):** fix is single-file, ~25-line patch, mechanical. Within the 15-minute "fix is obvious" window. No rollback needed.
+
+**Sequence:** patch → commit on `main` → push → Vercel redeploy → re-run `/intake` + `/settings/intake-form` + remaining §8 smokes.
+
+**Status: in progress — patch committed, awaiting deploy + re-test.**
 
 ## Step 5: Verify JWT carries claim
 
