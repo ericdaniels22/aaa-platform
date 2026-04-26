@@ -1,9 +1,13 @@
 # Build 18c — Workspace Switcher & Multi-Tenant Polish
 
-**Status:** Planning
+**Status:** SHIPPED 2026-04-26 (Session C complete; one §6 step deferred — see Session C handoff Finding #3)
 **Drafted:** 2026-04-25
 **Depends on:** Build 18b (complete, commit `70ebfd2` on main)
 **Precedes:** Phase 5 — Multi-Tenant SaaS conversion (Stripe Connect, billing, signup, etc.)
+**Session A handoff:** `docs/superpowers/build-18c/session-a-handoff.md`
+**Session B handoff:** `docs/superpowers/build-18c/session-b-handoff.md`
+**Session C handoff:** `docs/superpowers/build-18c/session-c-handoff.md`
+**Session C run log:** `docs/superpowers/build-18c/session-c-run-log.md`
 
 ---
 
