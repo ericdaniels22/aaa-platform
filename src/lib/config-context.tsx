@@ -72,8 +72,46 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
+  // Plan §5.4 fix (approach a): wait for the auth state to be known before
+  // fetching. Pre-build57, the auth race was hidden by `Allow all on
+  // damage_types` legacy policies (anon could read). Post-build57,
+  // damage_types/job_statuses RLS is {authenticated}-only, so an anon
+  // fetch (which is what we'd get from a cold-incognito mount before the
+  // session cookie hydrates) returns zero rows and ConfigProvider would
+  // never re-fetch.
+  //
+  // The fix: subscribe to onAuthStateChange. INITIAL_SESSION fires once on
+  // mount with the resolved session (or null). SIGNED_IN / TOKEN_REFRESHED
+  // also trigger a refresh — TOKEN_REFRESHED specifically catches the
+  // workspace-switcher case where the active org changes (per-org
+  // damage_types / job_statuses overrides may differ).
   useEffect(() => {
-    refresh();
+    const supabase = createClient();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (
+          event === "INITIAL_SESSION" ||
+          event === "SIGNED_IN" ||
+          event === "TOKEN_REFRESHED"
+        ) {
+          if (session) {
+            refresh();
+          } else {
+            // No session — keep arrays empty but stop the spinner so the
+            // login redirect (handled by AuthProvider / route guards) can
+            // render without a blocking config load.
+            setStatuses([]);
+            setDamageTypes([]);
+            setLoading(false);
+          }
+        } else if (event === "SIGNED_OUT") {
+          setStatuses([]);
+          setDamageTypes([]);
+          setLoading(false);
+        }
+      },
+    );
+    return () => subscription.unsubscribe();
   }, [refresh]);
 
   function getStatusColor(name: string): string {

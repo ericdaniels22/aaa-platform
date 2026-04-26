@@ -5,7 +5,6 @@ import {
   InvalidPaymentLinkTokenError,
 } from "@/lib/payment-link-tokens";
 import { writePaymentEvent } from "@/lib/payments/activity";
-import { AAA_ORGANIZATION_ID } from "@/lib/supabase/get-active-org";
 import type { PaymentRequestRow } from "@/lib/payments/types";
 import { Lock, CheckCircle2 } from "lucide-react";
 import MethodSelector from "./method-selector";
@@ -19,15 +18,25 @@ interface CompanyBrand {
   logoUrl: string | null;
 }
 
-// Public pay page has no user session. Falls back to AAA_ORGANIZATION_ID
-// when orgId can't be resolved from the payment-link token — same rationale
-// as the signing page (pre-18c: only AAA has public-facing pages).
-async function loadCompany(orgId?: string | null): Promise<CompanyBrand> {
+const EMPTY_BRAND: CompanyBrand = {
+  name: "",
+  phone: "",
+  email: "",
+  address: "",
+  logoUrl: null,
+};
+
+// Multi-tenant rule (18c): branding is scoped to the payment request's
+// organization_id. There is intentionally no AAA fallback. When orgId is
+// null (token didn't verify, or PR row not found) we render the error shell
+// with no branding rather than misattribute the link to AAA.
+async function loadCompany(orgId: string | null): Promise<CompanyBrand> {
+  if (!orgId) return EMPTY_BRAND;
   const supabase = createServiceClient();
   const { data } = await supabase
     .from("company_settings")
     .select("key, value")
-    .eq("organization_id", orgId ?? AAA_ORGANIZATION_ID)
+    .eq("organization_id", orgId)
     .in("key", ["company_name", "phone", "email", "address", "logo_url"]);
   const m = new Map<string, string | null>(
     (data ?? []).map((r: { key: string; value: string | null }) => [
@@ -75,25 +84,26 @@ export default async function PayPage({
   } catch (e) {
     const reason =
       e instanceof InvalidPaymentLinkTokenError ? e.message : "Invalid link";
-    const company = await loadCompany();
     return (
       <ErrorShell
         title="This payment link is invalid"
         subtitle={reason}
-        company={company}
+        company={EMPTY_BRAND}
       />
     );
   }
 
+  // Fetch the payment request first; branding is then scoped to its
+  // organization_id. Service-role bypasses RLS — the link_token in the JWT
+  // is the credential.
   const supabase = createServiceClient();
-  const [{ data: pr }, company] = await Promise.all([
-    supabase
-      .from("payment_requests")
-      .select("*")
-      .eq("id", payload.payment_request_id)
-      .maybeSingle<PaymentRequestRow>(),
-    loadCompany(),
-  ]);
+  const { data: pr } = await supabase
+    .from("payment_requests")
+    .select("*")
+    .eq("id", payload.payment_request_id)
+    .maybeSingle<PaymentRequestRow>();
+
+  const company = await loadCompany(pr?.organization_id ?? null);
 
   // 2. Request-level status checks
   if (!pr) {
@@ -153,7 +163,10 @@ export default async function PayPage({
     );
   }
 
-  // 3. Load job + stripe connection for the payment card UI
+  // 3. Load job + stripe connection for the payment card UI. Both
+  //    stripe_connection and payment_email_settings are per-org tables
+  //    (post-18a multi-tenant); scope by pr.organization_id rather than
+  //    selecting the first row (which would mis-resolve under multi-org).
   const [{ data: job }, { data: stripeConn }, { data: settingsRow }] =
     await Promise.all([
       supabase
@@ -166,12 +179,12 @@ export default async function PayPage({
         .select(
           "ach_enabled, card_enabled, pass_card_fee_to_customer, card_fee_percent, ach_preferred_threshold",
         )
-        .limit(1)
+        .eq("organization_id", pr.organization_id)
         .maybeSingle<StripeConnectionRow>(),
       supabase
         .from("payment_email_settings")
         .select("fee_disclosure_text")
-        .limit(1)
+        .eq("organization_id", pr.organization_id)
         .maybeSingle<FeeDisclosureRow>(),
     ]);
 

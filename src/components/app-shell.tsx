@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Sidebar from "@/components/nav";
+import UserMenu from "@/components/user-menu";
 import { useSidebarCollapse } from "@/lib/sidebar-collapse-context";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Sidebar />
+      <UserMenu />
       <main
         className={cn(
           "pt-14 lg:pt-0 min-h-screen transition-[margin] duration-200 ease-out",
