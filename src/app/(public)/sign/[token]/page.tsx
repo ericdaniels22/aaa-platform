@@ -2,7 +2,6 @@ import { headers } from "next/headers";
 import { createServiceClient } from "@/lib/supabase-api";
 import { verifySigningToken, InvalidSigningTokenError } from "@/lib/contracts/tokens";
 import { writeContractEvent } from "@/lib/contracts/audit";
-import { AAA_ORGANIZATION_ID } from "@/lib/supabase/get-active-org";
 import type { Contract, ContractSigner } from "@/lib/contracts/types";
 import SigningForm from "./signing-form";
 import { Lock } from "lucide-react";
@@ -15,17 +14,25 @@ interface CompanyBrand {
   logoUrl: string | null;
 }
 
-// Public routes don't have a session — if a contract is available we scope
-// company_settings to its organization_id; otherwise we fall back to the
-// AAA hardcode. Legitimate constant use: public signing pages are issued
-// by AAA for AAA customers; pre-token-verify errors need some branding,
-// and AAA's branding is the only one that exists pre-18c.
-async function loadCompany(orgId?: string | null): Promise<CompanyBrand> {
+const EMPTY_BRAND: CompanyBrand = {
+  name: "",
+  phone: "",
+  email: "",
+  address: "",
+  logoUrl: null,
+};
+
+// Multi-tenant rule (18c): branding is scoped to the contract's
+// organization_id. There is intentionally no AAA fallback. When orgId is
+// null (token didn't verify, or contract row not found) we render the error
+// shell with no branding rather than misattribute the link to AAA.
+async function loadCompany(orgId: string | null): Promise<CompanyBrand> {
+  if (!orgId) return EMPTY_BRAND;
   const supabase = createServiceClient();
   const { data } = await supabase
     .from("company_settings")
     .select("key, value")
-    .eq("organization_id", orgId ?? AAA_ORGANIZATION_ID)
+    .eq("organization_id", orgId)
     .in("key", ["company_name", "phone", "email", "address", "logo_url"]);
   const m = new Map<string, string | null>(
     (data ?? []).map((r: { key: string; value: string | null }) => [r.key, r.value]),
@@ -50,12 +57,16 @@ export default async function SignPage({
     payload = verifySigningToken(token);
   } catch (e) {
     const reason = e instanceof InvalidSigningTokenError ? e.message : "Invalid link";
-    const company = await loadCompany();
-    return <ErrorShell title="This link is invalid" subtitle={reason} company={company} />;
+    // Pre-token-verify failure: no row to derive an org from. Render with
+    // no branding rather than guess.
+    return <ErrorShell title="This link is invalid" subtitle={reason} company={EMPTY_BRAND} />;
   }
 
+  // Fetch contract + signer first so we can scope company branding to the
+  // contract's organization. Anonymous queries via the service-role client
+  // bypass RLS — the link_token in the JWT is the credential.
   const supabase = createServiceClient();
-  const [{ data: contract }, { data: signer }, company] = await Promise.all([
+  const [{ data: contract }, { data: signer }] = await Promise.all([
     supabase
       .from("contracts")
       .select("*")
@@ -66,8 +77,9 @@ export default async function SignPage({
       .select("*")
       .eq("id", payload.signer_id)
       .maybeSingle<ContractSigner>(),
-    loadCompany(),
   ]);
+
+  const company = await loadCompany(contract?.organization_id ?? null);
 
   if (!contract || !signer) {
     return <ErrorShell title="Document not found" subtitle="This signing link is no longer valid." company={company} />;

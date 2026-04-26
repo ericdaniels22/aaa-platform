@@ -4,7 +4,6 @@ import {
   verifyPaymentLinkToken,
   InvalidPaymentLinkTokenError,
 } from "@/lib/payment-link-tokens";
-import { AAA_ORGANIZATION_ID } from "@/lib/supabase/get-active-org";
 
 interface CompanyBrand {
   name: string;
@@ -13,13 +12,24 @@ interface CompanyBrand {
   logoUrl: string | null;
 }
 
-// Public post-payment page; same AAA-fallback rationale as sign/[token].
-async function loadCompany(): Promise<CompanyBrand> {
+const EMPTY_BRAND: CompanyBrand = {
+  name: "",
+  phone: "",
+  email: "",
+  logoUrl: null,
+};
+
+// Multi-tenant rule (18c): branding is scoped to the payment request's
+// organization_id. There is intentionally no AAA fallback. When orgId is
+// null (token didn't verify, or PR row not found) we render the success
+// page with no branding rather than misattribute it to AAA.
+async function loadCompany(orgId: string | null): Promise<CompanyBrand> {
+  if (!orgId) return EMPTY_BRAND;
   const supabase = createServiceClient();
   const { data } = await supabase
     .from("company_settings")
     .select("key, value")
-    .eq("organization_id", AAA_ORGANIZATION_ID)
+    .eq("organization_id", orgId)
     .in("key", ["company_name", "phone", "email", "logo_url"]);
   const m = new Map<string, string | null>(
     (data ?? []).map((r: { key: string; value: string | null }) => [
@@ -41,17 +51,26 @@ export default async function PaySuccessPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  // Token-verify only for safety (don't want this page to render without a
-  // real token in the URL). Do NOT touch payment_requests status here.
+
+  // Decode token to derive payment_request_id, then look up the request to
+  // get its organization_id. Token-verify failures don't render an error
+  // page here — the customer may have successfully paid, which can consume
+  // the link's window. We just fall back to no branding.
+  let orgId: string | null = null;
   try {
-    verifyPaymentLinkToken(token);
+    const payload = verifyPaymentLinkToken(token);
+    const supabase = createServiceClient();
+    const { data: pr } = await supabase
+      .from("payment_requests")
+      .select("organization_id")
+      .eq("id", payload.payment_request_id)
+      .maybeSingle<{ organization_id: string }>();
+    orgId = pr?.organization_id ?? null;
   } catch (e) {
     if (!(e instanceof InvalidPaymentLinkTokenError)) throw e;
-    // Even if the token is invalid/expired we still render the thank-you
-    // page — the customer may have successfully paid, which consumes the
-    // window but shouldn't show a scary error.
   }
-  const company = await loadCompany();
+
+  const company = await loadCompany(orgId);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
