@@ -1,4 +1,4 @@
-// Workspace switcher action. Called from src/components/user-menu.tsx.
+// Workspace switcher action. Called from src/components/workspace-switcher.tsx.
 //
 // Three-step flow:
 //   1. Call public.set_active_organization(p_org_id) — RPC flips

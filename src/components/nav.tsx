@@ -8,6 +8,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import NotificationBell from "@/components/notification-bell";
+import WorkspaceSwitcher from "@/components/workspace-switcher";
 import { navItems } from "@/lib/nav-items";
 import { useNavOrder } from "@/lib/nav-order-context";
 import { useSidebarCollapse } from "@/lib/sidebar-collapse-context";
@@ -184,6 +185,9 @@ export default function Sidebar() {
             );
           })}
         </nav>
+
+        {/* Workspace switcher (renders null for single-org users) */}
+        <WorkspaceSwitcher collapsed={collapsed} />
 
         {/* User footer */}
         <div className="shrink-0 px-3 py-3 border-t border-white/10">
