@@ -15,7 +15,9 @@
 
 # next.js
 /.next/
-/out/
+/out/*
+# Capacitor offline-fallback stub (build65a) — everything else in /out/ is build artifacts.
+!/out/index.html
 
 # production
 /build
