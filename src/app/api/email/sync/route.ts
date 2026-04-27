@@ -462,7 +462,12 @@ export async function POST(request: NextRequest) {
             );
 
             const category = categorizeEmail(
-              { from_address: p.fromAddr, subject: p.subject, headers: p.headers },
+              {
+                from_address: p.fromAddr,
+                subject: p.subject,
+                headers: p.headers,
+                body_text: p.bodyText,
+              },
               categoryRules
             );
 
