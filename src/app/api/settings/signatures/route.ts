@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 // GET /api/settings/signatures — get all signatures with account info
 export async function GET() {
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   const { data: accounts } = await supabase
     .from("email_accounts")
@@ -35,7 +35,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "account_id is required" }, { status: 400 });
   }
 
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const { error } = await supabase
     .from("email_signatures")
     .upsert(

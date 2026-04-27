@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 // GET /api/settings/contract-templates/[id]
 export async function GET(
@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("contract_templates")
     .select("*")
@@ -46,7 +46,7 @@ export async function PATCH(
   if (body.content !== undefined) update.content = body.content;
   if (typeof body.content_html === "string") update.content_html = body.content_html;
 
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   if (contentChanged) {
     // Atomic version bump alongside the content update.
@@ -81,7 +81,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const { error } = await supabase
     .from("contract_templates")
     .update({ is_active: false })

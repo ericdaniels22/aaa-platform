@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 // PATCH /api/email/bulk — bulk update emails
 // Body: { ids: string[], action: "mark_read" | "mark_unread" | "archive" | "trash" | "assign_job", jobId?: string }
@@ -19,7 +19,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "action is required" }, { status: 400 });
   }
 
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   let updates: Record<string, unknown> = {};
 
   switch (action) {

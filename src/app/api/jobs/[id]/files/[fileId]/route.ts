@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 // PATCH /api/jobs/[id]/files/[fileId] — rename
 export async function PATCH(
@@ -22,7 +22,7 @@ export async function PATCH(
     );
   }
 
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   const { data, error } = await supabase
     .from("job_files")
@@ -44,7 +44,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; fileId: string }> }
 ) {
   const { fileId } = await params;
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   // 1. Look up storage_path
   const { data: row, error: lookupError } = await supabase

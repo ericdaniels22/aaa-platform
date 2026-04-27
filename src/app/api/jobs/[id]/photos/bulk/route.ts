@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export async function DELETE(
   request: NextRequest,
@@ -12,7 +12,7 @@ export async function DELETE(
     return NextResponse.json({ error: "No photo IDs provided" }, { status: 400 });
   }
 
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   const { data: photos, error: fetchError } = await supabase
     .from("photos")

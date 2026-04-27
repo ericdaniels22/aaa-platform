@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { resolveMergeFields } from "@/lib/contracts/merge-fields";
 
 // POST /api/contracts/preview
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const { data: template, error: tErr } = await supabase
     .from("contract_templates")
     .select("id, name, content_html, version, is_active")

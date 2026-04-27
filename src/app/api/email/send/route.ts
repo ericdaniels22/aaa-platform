@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { decrypt } from "@/lib/encryption";
 import nodemailer from "nodemailer";
 
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   // Get account
   const { data: account, error: accError } = await supabase

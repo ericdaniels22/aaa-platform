@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 // GET /api/email/contacts?q=search — autocomplete contacts + recent email addresses
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q") || "";
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   const results: { email: string; name: string }[] = [];
   const seen = new Set<string>();

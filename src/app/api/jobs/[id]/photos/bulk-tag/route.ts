@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export async function POST(
   request: NextRequest,
@@ -16,7 +16,7 @@ export async function POST(
     return NextResponse.json({ error: "Missing photoIds, tagIds, or action" }, { status: 400 });
   }
 
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   const { data: photos } = await supabase
     .from("photos")

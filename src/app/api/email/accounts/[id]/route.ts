@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { encrypt } from "@/lib/encryption";
 
 // DELETE /api/email/accounts/[id]
@@ -8,7 +8,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   const { error } = await supabase
     .from("email_accounts")
@@ -28,7 +28,7 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const body = await request.json();
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   // If password is being updated, encrypt it
   const updates: Record<string, unknown> = {};

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { decrypt } from "@/lib/encryption";
 import { ImapFlow } from "imapflow";
 import nodemailer from "nodemailer";
@@ -10,7 +10,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   const { data: account, error } = await supabase
     .from("email_accounts")

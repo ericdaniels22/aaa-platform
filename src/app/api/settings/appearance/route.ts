@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 const APPEARANCE_KEYS = ["brand_primary", "brand_secondary", "brand_accent"];
 
 // GET /api/settings/appearance — fetch brand color settings
 export async function GET() {
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("company_settings")
     .select("key, value")
@@ -26,7 +26,7 @@ export async function GET() {
 // PUT /api/settings/appearance — save brand color settings
 export async function PUT(request: Request) {
   const body = await request.json();
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   for (const key of APPEARANCE_KEYS) {
     if (key in body) {

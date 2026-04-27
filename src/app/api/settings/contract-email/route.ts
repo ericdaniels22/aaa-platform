@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import type { ContractEmailProvider, ContractEmailSettings } from "@/lib/contracts/types";
 
 // The table is effectively a singleton — seeded with one row in the
 // build33 migration. If it somehow goes missing we surface a clear error
 // rather than inserting a new row silently.
 async function getSettings() {
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("contract_email_settings")
     .select("*")

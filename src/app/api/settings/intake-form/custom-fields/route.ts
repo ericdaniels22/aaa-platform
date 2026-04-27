@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 // GET /api/settings/intake-form/custom-fields?jobId=xxx
 export async function GET(request: NextRequest) {
   const jobId = request.nextUrl.searchParams.get("jobId");
   if (!jobId) return NextResponse.json({ error: "jobId required" }, { status: 400 });
 
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("job_custom_fields")
     .select("*")

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 // GET /api/email/thread/[threadId] — get all emails in a thread
 export async function GET(
@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: Promise<{ threadId: string }> }
 ) {
   const { threadId } = await params;
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   const { data, error } = await supabase
     .from("emails")

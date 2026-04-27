@@ -28,8 +28,7 @@ const ROLE_DEFAULTS: Record<string, string[]> = {
 // user_profiles joined. Role is sourced from user_organizations (per-org).
 // Uses the cookie-aware SSR client so RLS sees the caller's auth.uid() and
 // the user_orgs_member_read policy (build51) grants visibility into other
-// members of the same org. The plain createApiClient() runs anonymously and
-// would return [] under post-build49 RLS.
+// members of the same org.
 export async function GET() {
   const supabase = await createServerSupabaseClient();
   const orgId = await getActiveOrganizationId(supabase);

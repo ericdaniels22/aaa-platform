@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 // POST /api/email/attachments/upload — upload a file for composing
 // Returns { id, filename, content_type, file_size, storage_path }
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
 
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const timestamp = Date.now();
   const storagePath = `drafts/${timestamp}-${file.name}`;
 

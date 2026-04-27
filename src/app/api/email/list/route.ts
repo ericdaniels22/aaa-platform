@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 // GET /api/email/list?folder=inbox&accountId=...&search=...&page=1&limit=50
 export async function GET(request: NextRequest) {
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const starred = searchParams.get("starred");
   const category = searchParams.get("category");
 
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const offset = (page - 1) * limit;
 
   let query = supabase

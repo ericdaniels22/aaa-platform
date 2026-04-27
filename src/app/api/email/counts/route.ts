@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 // GET /api/email/counts?accountId=... — get unread counts per folder
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const accountId = searchParams.get("accountId"); // null = all accounts
 
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   const folders = ["inbox", "sent", "drafts", "trash", "spam", "archive"];
   const counts: Record<string, { total: number; unread: number }> = {};

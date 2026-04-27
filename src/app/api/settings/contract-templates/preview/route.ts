@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { resolveMergeFields } from "@/lib/contracts/merge-fields";
 
 // POST /api/settings/contract-templates/preview
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const result = await resolveMergeFields(supabase, body.contentHtml, body.jobId);
   return NextResponse.json(result);
 }

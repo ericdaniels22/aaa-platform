@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 // GET /api/settings/contract-templates/jobs
 // Minimal job list used to populate the Preview modal's job picker.
 // Returns the 25 most recent jobs with their job_number + customer name
 // so the author can eyeball which job the preview is rendering against.
 export async function GET() {
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("jobs")
     .select("id, job_number, property_address, created_at, contact:contacts!contact_id(first_name, last_name)")

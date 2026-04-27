@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 // GET /api/email/[id] — get a single email
 export async function GET(
@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   const { data, error } = await supabase
     .from("emails")
@@ -29,7 +29,7 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const body = await request.json();
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   const updates: Record<string, unknown> = {};
   if (typeof body.is_read === "boolean") updates.is_read = body.is_read;

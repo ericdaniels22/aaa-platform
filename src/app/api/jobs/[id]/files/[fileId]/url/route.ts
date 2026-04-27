@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-api";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 // GET /api/jobs/[id]/files/[fileId]/url — short-lived signed URL
 // Returns { url: string, expiresAt: string }
@@ -13,7 +13,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string; fileId: string }> }
 ) {
   const { fileId } = await params;
-  const supabase = createApiClient();
+  const supabase = await createServerSupabaseClient();
 
   const { data: row, error: lookupError } = await supabase
     .from("job_files")
