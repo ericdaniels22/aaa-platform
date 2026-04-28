@@ -42,6 +42,7 @@ import {
   Send,
   Clock,
   Loader2,
+  Copy,
 } from "lucide-react";
 import {
   statusColors,
@@ -459,7 +460,7 @@ export default function JobDetail({ jobId }: { jobId: string }) {
               </button>
             </div>
             <div className="space-y-3 text-sm">
-              <InfoRow icon={MapPin} label="Address" value={job.property_address} />
+              <AddressRow address={job.property_address} />
               {job.property_type && (
                 <InfoRow
                   icon={Home}
@@ -924,6 +925,38 @@ function InfoRow({
         <p className="text-xs text-muted-foreground">{label}</p>
         <p className="text-foreground">{value}</p>
       </div>
+    </div>
+  );
+}
+
+function AddressRow({ address }: { address: string }) {
+  async function handleCopy() {
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      toast.success("Address copied");
+    } catch {
+      toast.error("Couldn't copy address");
+    }
+  }
+  return (
+    <div className="flex items-start gap-3">
+      <MapPin size={16} className="text-primary/60 flex-shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-muted-foreground">Address</p>
+        <p className="text-foreground break-words">{address}</p>
+      </div>
+      {address && (
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label="Copy address"
+          title="Copy address"
+          className="p-1.5 -mt-0.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0"
+        >
+          <Copy size={14} />
+        </button>
+      )}
     </div>
   );
 }
