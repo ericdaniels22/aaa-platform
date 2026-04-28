@@ -130,8 +130,9 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* Navigation */}
-        <nav className="scrollbar-subtle flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 py-4 space-y-1">
+        {/* Navigation. No top padding so the first item sits flush with the
+            logo area's bottom border. */}
+        <nav className="scrollbar-subtle flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-4 space-y-1">
           {sortedNavItems.map((item) => {
             const isActive =
               item.href === "/"
