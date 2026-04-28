@@ -41,6 +41,7 @@ export interface Job {
   has_pending_contract?: boolean;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
   // Joined fields
   contact?: Contact;
   job_adjusters?: JobAdjuster[];
