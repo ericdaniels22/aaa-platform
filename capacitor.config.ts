@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.aaacontracting.platform',
-  appName: 'AAA Disaster Recovery',
+  appName: 'Nookleus',
   webDir: 'out',
   backgroundColor: '#0a0a0aff',
   server: {
