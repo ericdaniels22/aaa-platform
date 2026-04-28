@@ -1,15 +1,23 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import { Job } from "@/lib/types";
 import JobCard from "@/components/job-card";
-import { Briefcase, FileText, CalendarDays, Flame } from "lucide-react";
+import { Briefcase, FileText, CalendarDays, Flame, RotateCcw, Trash2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useConfig } from "@/lib/config-context";
+import { useAuth } from "@/lib/auth-context";
+import { canDeleteJobs } from "@/lib/jobs/auth";
+import { toast } from "sonner";
+
+const RETENTION_DAYS = 30;
 
 export default function JobsPage() {
   const { statuses } = useConfig();
+  const { profile } = useAuth();
+  const showTrash = canDeleteJobs(profile?.role);
 
   const filterOptions = [
     { value: "all", label: "All" },
@@ -17,16 +25,30 @@ export default function JobsPage() {
     ...statuses
       .filter((s) => !["new", "cancelled"].includes(s.name))
       .map((s) => ({ value: s.name, label: s.display_label })),
+    ...(showTrash ? [{ value: "trash", label: "Trash" }] : []),
   ];
   const [jobs, setJobs] = useState<Job[]>([]);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
 
   const fetchJobs = useCallback(async () => {
+    if (filter === "trash") {
+      const res = await fetch("/api/jobs/trash");
+      if (res.ok) {
+        const data = await res.json();
+        setJobs((data.jobs ?? []) as Job[]);
+      } else {
+        setJobs([]);
+      }
+      setLoading(false);
+      return;
+    }
+
     const supabase = createClient();
     let query = supabase
       .from("jobs")
       .select("*, contact:contacts!contact_id(*)")
+      .is("deleted_at", null)
       .order("created_at", { ascending: false });
 
     if (filter === "emergency") {
@@ -44,7 +66,7 @@ export default function JobsPage() {
     fetchJobs();
   }, [fetchJobs]);
 
-  // Compute stats from all jobs (not filtered)
+  // Compute stats from all active (non-trashed) jobs.
   const [stats, setStats] = useState({
     active: 0,
     emergency: 0,
@@ -57,7 +79,8 @@ export default function JobsPage() {
       const supabase = createClient();
       const { data: allJobs } = await supabase
         .from("jobs")
-        .select("status, urgency, created_at");
+        .select("status, urgency, created_at")
+        .is("deleted_at", null);
 
       if (!allJobs) return;
 
@@ -85,12 +108,16 @@ export default function JobsPage() {
     fetchStats();
   }, []);
 
-  // Sort: emergencies first, then by date
-  const sortedJobs = [...jobs].sort((a, b) => {
-    if (a.urgency === "emergency" && b.urgency !== "emergency") return -1;
-    if (b.urgency === "emergency" && a.urgency !== "emergency") return 1;
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
+  // Sort: emergencies first, then by date — except in trash, where the
+  // API has already sorted by deletion time (most recent first).
+  const sortedJobs =
+    filter === "trash"
+      ? jobs
+      : [...jobs].sort((a, b) => {
+          if (a.urgency === "emergency" && b.urgency !== "emergency") return -1;
+          if (b.urgency === "emergency" && a.urgency !== "emergency") return 1;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
 
   return (
     <div className="max-w-6xl animate-fade-slide-up">
@@ -157,10 +184,20 @@ export default function JobsPage() {
         <div className="text-center py-12 text-muted-foreground/60">Loading jobs...</div>
       ) : sortedJobs.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-muted-foreground text-lg">No jobs found</p>
-          <p className="text-muted-foreground/60 text-sm mt-1">
-            Create a new intake to get started.
+          <p className="text-muted-foreground text-lg">
+            {filter === "trash" ? "Trash is empty" : "No jobs found"}
           </p>
+          {filter !== "trash" && (
+            <p className="text-muted-foreground/60 text-sm mt-1">
+              Create a new intake to get started.
+            </p>
+          )}
+        </div>
+      ) : filter === "trash" ? (
+        <div className="space-y-3">
+          {sortedJobs.map((job) => (
+            <TrashRow key={job.id} job={job} onChange={fetchJobs} />
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -169,6 +206,100 @@ export default function JobsPage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function TrashRow({ job, onChange }: { job: Job; onChange: () => void }) {
+  const [busy, setBusy] = useState<"restore" | "purge" | null>(null);
+
+  // Capture "now" once when the row mounts — the useState initializer can
+  // call Date.now() since it runs before render (lint rule blocks impure
+  // calls from the render body itself). Days remaining is a pure
+  // derivation from that captured timestamp.
+  const [mountedAt] = useState(() => Date.now());
+  const daysRemaining = job.deleted_at
+    ? Math.max(
+        0,
+        RETENTION_DAYS -
+          Math.floor((mountedAt - new Date(job.deleted_at).getTime()) / 86_400_000),
+      )
+    : null;
+
+  async function handleRestore() {
+    setBusy("restore");
+    const res = await fetch(`/api/jobs/${job.id}/restore`, { method: "POST" });
+    setBusy(null);
+    if (!res.ok) {
+      toast.error("Couldn't restore job");
+      return;
+    }
+    toast.success("Job restored");
+    onChange();
+  }
+
+  async function handlePurge() {
+    if (
+      !confirm(
+        "Permanently delete this job and all its photos and files? This cannot be undone.",
+      )
+    ) {
+      return;
+    }
+    setBusy("purge");
+    const res = await fetch(`/api/jobs/${job.id}`, { method: "DELETE" });
+    setBusy(null);
+    if (!res.ok) {
+      toast.error("Couldn't delete job");
+      return;
+    }
+    toast.success("Job permanently deleted");
+    onChange();
+  }
+
+  const customer = job.contact
+    ? `${job.contact.first_name} ${job.contact.last_name}`
+    : "Unknown";
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-mono text-muted-foreground/60">{job.job_number}</p>
+        <Link
+          href={`/jobs/${job.id}`}
+          className="text-base font-semibold text-foreground hover:underline"
+        >
+          {customer}
+        </Link>
+        <p className="text-sm text-muted-foreground truncate">{job.property_address}</p>
+        <p className="text-xs text-muted-foreground/70 mt-1">
+          {daysRemaining !== null
+            ? daysRemaining === 0
+              ? "Auto-purges today"
+              : `${daysRemaining} day${daysRemaining === 1 ? "" : "s"} until permanent deletion`
+            : null}
+        </p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          onClick={handleRestore}
+          disabled={busy !== null}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
+        >
+          {busy === "restore" ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+          Restore
+        </button>
+        <button
+          type="button"
+          onClick={handlePurge}
+          disabled={busy !== null}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-destructive/10 border border-destructive/30 px-3 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/20 disabled:opacity-50"
+        >
+          {busy === "purge" ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+          Delete forever
+        </button>
+      </div>
     </div>
   );
 }

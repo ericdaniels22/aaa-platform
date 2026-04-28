@@ -15,9 +15,13 @@ export default function DashboardPage() {
     async function load() {
       const supabase = createClient();
 
-      // Fetch all jobs + report count for stats
+      // Fetch all active jobs + report count for stats. Trashed jobs
+      // (deleted_at IS NOT NULL) are excluded from the dashboard.
       const [{ data: allJobs }, { count: reportCount }] = await Promise.all([
-        supabase.from("jobs").select("status, urgency, created_at"),
+        supabase
+          .from("jobs")
+          .select("status, urgency, created_at")
+          .is("deleted_at", null),
         supabase.from("photo_reports").select("*", { count: "exact", head: true }),
       ]);
 
@@ -38,10 +42,11 @@ export default function DashboardPage() {
         });
       }
 
-      // Fetch 4 most recent jobs
+      // Fetch 4 most recent active jobs (trashed jobs are hidden).
       const { data: recent } = await supabase
         .from("jobs")
         .select("*, contact:contacts!contact_id(*)")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(4);
 

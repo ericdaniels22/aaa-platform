@@ -43,7 +43,10 @@ import {
   Clock,
   Loader2,
   Copy,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
+import { canDeleteJobs } from "@/lib/jobs/auth";
 import {
   statusColors,
   statusLabels,
@@ -68,7 +71,8 @@ const propertyTypeLabels: Record<string, string> = {
 };
 
 export default function JobDetail({ jobId }: { jobId: string }) {
-  const { hasPermission } = useAuth();
+  const { hasPermission, profile } = useAuth();
+  const showJobDeleteAffordances = canDeleteJobs(profile?.role);
   const [job, setJob] = useState<Job | null>(null);
   const [activities, setActivities] = useState<JobActivity[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -245,6 +249,29 @@ export default function JobDetail({ jobId }: { jobId: string }) {
     }
   }
 
+  async function moveJobToTrash() {
+    if (!confirm("Move this job to the trash? You'll have 30 days to restore it before it's permanently deleted.")) {
+      return;
+    }
+    const res = await fetch(`/api/jobs/${jobId}/delete`, { method: "POST" });
+    if (!res.ok) {
+      toast.error("Couldn't move job to trash.");
+      return;
+    }
+    toast.success("Job moved to trash.");
+    router.push("/jobs");
+  }
+
+  async function restoreJob() {
+    const res = await fetch(`/api/jobs/${jobId}/restore`, { method: "POST" });
+    if (!res.ok) {
+      toast.error("Couldn't restore job.");
+      return;
+    }
+    toast.success("Job restored.");
+    fetchData();
+  }
+
   async function saveCrewLabor(raw: string) {
     const value = raw === "" ? null : Number(raw);
     if (value !== null && (Number.isNaN(value) || value < 0)) {
@@ -293,6 +320,26 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         <ArrowLeft size={16} />
         Back to Jobs
       </Link>
+
+      {/* Trash banner */}
+      {job.deleted_at && (
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3">
+          <div className="text-sm text-foreground">
+            <span className="font-semibold text-destructive">In trash · </span>
+            Moved on {format(new Date(job.deleted_at), "MMM d, yyyy")}. Permanently deleted after 30 days.
+          </div>
+          {showJobDeleteAffordances && (
+            <button
+              type="button"
+              onClick={restoreJob}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent shrink-0"
+            >
+              <RotateCcw size={14} />
+              Restore
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
@@ -367,6 +414,17 @@ export default function JobDetail({ jobId }: { jobId: string }) {
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
           </select>
+          {showJobDeleteAffordances && !job.deleted_at && (
+            <button
+              type="button"
+              onClick={moveJobToTrash}
+              aria-label="Move job to trash"
+              title="Move to trash"
+              className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
         </div>
       </div>
 
