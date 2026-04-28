@@ -46,10 +46,14 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile top bar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 gradient-sidebar border-b border-white/10 px-4 py-3 flex items-center justify-between">
+      {/* Mobile top bar. Top padding includes the iOS safe-area inset so the
+          bar's content sits below the notch / status bar on Capacitor. The
+          rendered logo is sized to keep the bar's content area at h-14, which
+          is what consumers (AppShell, email inbox) assume when computing
+          their own offsets. */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 gradient-sidebar border-b border-white/10 px-4 pb-2.5 pt-[calc(env(safe-area-inset-top)+0.625rem)] flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Image src="/logo.png" alt="AAA Logo" width={120} height={44} />
+          <Image src="/logo.png" alt="AAA Logo" width={120} height={44} className="h-9 w-auto" />
         </div>
         <div className="flex items-center gap-1">
           <NotificationBell />
