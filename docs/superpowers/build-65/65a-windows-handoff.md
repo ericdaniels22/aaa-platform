@@ -1,7 +1,7 @@
 # Build 65a — Windows Handoff
 
 **Status:** PARTIAL — Windows steps 1-7 complete, Mac steps 8-10 pending
-**Branch:** `claude/trusting-yalow-7a1741` (worktree off main); not merged
+**Branch:** `65a-scaffold` (pushed to `origin/65a-scaffold`); not merged to main
 **Plan:** [docs/superpowers/plans/2026-04-26-build-65-mobile-platform.md](../plans/2026-04-26-build-65-mobile-platform.md) §5.1, §11.1
 **Surface area:** Capacitor scaffolding only; iOS Xcode project generated; zero src/ changes
 
@@ -113,7 +113,7 @@ These five plan items are gated on Mac + iPhone access. The exact verification l
 
 ```bash
 # 1. Borrow Mac. Pull this branch.
-git fetch && git checkout claude/trusting-yalow-7a1741
+git fetch && git checkout 65a-scaffold
 npm install                          # restores node_modules incl. @capacitor/* (Mac side)
 
 # 2. Open the iOS project in Xcode
@@ -148,7 +148,7 @@ npx cap open ios                      # launches Xcode with App.xcworkspace
 - [ ] Deep link from URL opens the right route — **expected to PARTIAL FAIL**: Universal Links need Apple Developer enrollment + Associated Domains entitlement + AASA file at `https://aaaplatform.vercel.app/.well-known/apple-app-site-association`. The custom-scheme variant (`capacitor://localhost/jobs/<id>`) works internally but iOS Mail/Messages won't recognize it. Mark deep-link verification as deferred to 65e (post-enrollment) and proceed.
 - [ ] No regression on the desktop web app (verify `aaaplatform.vercel.app` still loads in Safari/Chrome on the Mac)
 
-If everything else passes, **then** merge `claude/trusting-yalow-7a1741` → `main` and tag `mobile-v0.1.0`. If the Mac session reveals material issues (per Rule C), stop for Eric.
+If everything else passes, **then** merge `65a-scaffold` → `main` (PR or fast-forward) and tag `mobile-v0.1.0`. If the Mac session reveals material issues (per Rule C), stop for Eric.
 
 ## 5. Files added / changed
 
