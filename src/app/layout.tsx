@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
@@ -18,6 +18,16 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "AAA Disaster Recovery — Platform",
   description: "Business management platform for AAA Disaster Recovery",
+};
+
+// viewport-fit=cover lets the layout viewport extend edge-to-edge on iOS so
+// `position: fixed; top: 0` anchors to the screen top (covering the notch /
+// status-bar strip) and `env(safe-area-inset-*)` resolves to real values that
+// the mobile header and main padding already use.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
