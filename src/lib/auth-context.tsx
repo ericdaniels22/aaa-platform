@@ -8,7 +8,9 @@ import type { User } from "@supabase/supabase-js";
 // build48. UserProfile exposes it as a flat string for display — sourced
 // from the user's active-org membership. The active org is read from the
 // JWT claim `app_metadata.active_organization_id` (injected by the
-// custom_access_token_hook as of 18b).
+// custom_access_token_hook as of 18b). The claim must be decoded from the
+// access_token directly: @supabase/ssr's session.user.app_metadata mirrors
+// auth.users.raw_app_meta_data and does NOT include hook-injected claims.
 
 interface UserProfile {
   id: string;
@@ -32,9 +34,19 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-function readActiveOrgClaim(user: User): string | null {
-  const claim = (user.app_metadata as Record<string, unknown> | undefined)?.active_organization_id;
-  return typeof claim === "string" && claim.length > 0 ? claim : null;
+function readActiveOrgClaim(accessToken: string | undefined): string | null {
+  if (!accessToken) return null;
+  try {
+    const parts = accessToken.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(
+      atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
+    ) as { app_metadata?: Record<string, unknown> };
+    const claim = payload.app_metadata?.active_organization_id;
+    return typeof claim === "string" && claim.length > 0 ? claim : null;
+  } catch {
+    return null;
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -95,7 +107,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     if (user) {
-      const activeOrgId = readActiveOrgClaim(user);
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const activeOrgId = readActiveOrgClaim(session?.access_token);
       await loadProfile(user.id, activeOrgId);
     }
   }, [user, loadProfile]);
@@ -106,14 +120,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Get initial session — use getSession() first (reads cookies), fall back to getUser()
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       let currentUser = session?.user ?? null;
+      let accessToken = session?.access_token;
       if (!currentUser) {
         // Fallback: try getUser() which verifies with Supabase server
         const { data } = await supabase.auth.getUser();
         currentUser = data.user;
+        // No access_token from getUser(); activeOrgId will be null in this
+        // branch and the user will fall back to "crew_member" until a
+        // refresh produces a session.
+        accessToken = undefined;
       }
       setUser(currentUser);
       if (currentUser) {
-        const activeOrgId = readActiveOrgClaim(currentUser);
+        const activeOrgId = readActiveOrgClaim(accessToken);
         loadProfile(currentUser.id, activeOrgId).finally(() => setLoading(false));
       } else {
         setLoading(false);
@@ -126,7 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const newUser = session?.user ?? null;
         setUser(newUser);
         if (newUser) {
-          const activeOrgId = readActiveOrgClaim(newUser);
+          const activeOrgId = readActiveOrgClaim(session?.access_token);
           loadProfile(newUser.id, activeOrgId);
         } else {
           setProfile(null);
