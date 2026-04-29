@@ -1,0 +1,12 @@
+{
+  "userIgnoreFilters": [
+    ".next",
+    ".vercel",
+    "dist",
+    "build",
+    "out/",
+    "coverage",
+    ".git",
+    "supabase/.branches"
+  ]
+}
