@@ -35,8 +35,13 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# claude code
-.claude/
+# Claude Code: ignore the directory by default, but track shared definitions.
+# Uses .claude/* (not .claude/) so child negations apply — git can't
+# re-include files when the parent directory itself is excluded.
+.claude/*
+!.claude/skills/
+!.claude/commands/
+!.claude/agents/
 
 # vercel
 .vercel
