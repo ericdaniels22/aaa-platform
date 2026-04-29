@@ -15,9 +15,9 @@ Names, terms, and shorthand that recur across Nookleus work. New terms get added
 
 ## Platform features
 
-- **Jarvis** — Nookleus's in-platform AI assistant. **Shipped** at `/jarvis` and `/api/jarvis`, with the knowledge base at `/settings/knowledge`. Backed by migrations 21, 25a, 27, 28. Embeds the Claude API with full job context.
-- **Knowledge base** — Jarvis's RAG-style knowledge store at `/settings/knowledge`.
-- **Marketing module** — `/marketing` route + migration 23. An ad-hoc addition that is **not in any build guide doc**.
+- **Jarvis** — Nookleus's in-platform AI assistant ecosystem. **Shipped** at `/jarvis` and `/api/jarvis`, with the knowledge base at `/settings/knowledge`. Four agents (Jarvis Core, R&D, Field Ops, Marketing) — see [[jarvis]]. Backed by **migrations 21, 23, 25a, 26b**. Embeds the Claude API with full job context.
+- **Knowledge base** — Jarvis's pgvector RAG store at `/settings/knowledge`. Voyage AI embeddings (`voyage-3.5-lite`, 1024-d). See [[knowledge-search]] and [[knowledge-ingestion]].
+- **Marketing sub-agent (Jarvis)** — Jarvis specialist for Google Ads, SEO, social media, GBP, website copy, review responses, LLM optimization. Backed by migration **26b** (`marketing_assets`, `marketing_drafts`) and [[build-26b]]. Surfaced in two places: the Marketing mode toggle inside `/jarvis`, and the dedicated `/marketing` page (Social Media + Chat tabs). **Not in any build guide doc.**
 
 ## Multi-tenant infrastructure
 
@@ -32,9 +32,20 @@ Names, terms, and shorthand that recur across Nookleus work. New terms get added
 - **Build 65d** — mobile audit (queued).
 - **Build 65e** — App Store submission (queued).
 
+## Numbering schemes
+
+- **Build IDs vs migration numbers diverge after Build 14.** The two numberings are not the same thing:
+  - **Build ID** is the project's roadmap label (`16a`, `16b`, `17c`, `18a`, etc.). Letters denote sub-builds within a parent number.
+  - **Migration number** is the global sequential counter on `supabase/migration-buildN-*.sql` files.
+  - Through Build 14 they line up (Build 14a → migration build14a). After that they diverge — Build 16a is migration build35, Build 17c is migration build41, [[build-18a]] spans build42 through build54, [[build-21]] is migration build21 (which happens to coincide), etc.
+  - Future Claude: when you see "Build 16a" in conversation and then a `migration-build35.sql` file in the diff, that's the same thing. Don't try to reconcile the numbers — read the migration content.
+- **Build 66 overload.** The label "Build 66" is shared by two unrelated threads:
+  - **[[build-66]]** — soft-delete jobs + 30-day trash, PR #37, migration `build66-soft-delete-jobs`. Shipped.
+  - **[[build-66a]] / [[build-66b]] / [[build-66c]] / [[build-66d]]** — Knowledge Vault meta-spec sub-builds. The plan file at `docs/superpowers/plans/2026-04-29-build-66-knowledge-vault.md` calls the meta-spec "Build 66" while the migration counter independently advanced to 66 for soft-delete. They are not the same project.
+
 ## Lessons and gotchas
 
-- **build52 lesson** — GoTrue panics on NULL token columns in `auth.users`. Use empty strings instead, never NULL.
+- **build52 lesson** — GoTrue panics on NULL token columns in `auth.users`. Use empty strings instead, never NULL. See [[2026-04-22-build52-null-tokens-lesson]].
 
 ## Process and tooling
 

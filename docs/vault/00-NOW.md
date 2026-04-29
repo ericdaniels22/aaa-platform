@@ -12,31 +12,34 @@ This file is the always-paste briefing for fresh Claude / Claude Code sessions. 
 
 - **Product:** Nookleus (rebrand of `aaa-platform`)
 - **Repo:** `github.com/ericdaniels22/aaa-platform`
-- **Live URL:** TODO(66b-audit): resolve from vercel.json or project settings
+- **Live URL:** TODO(66b-audit): Eric to confirm — likely `aaaplatform.vercel.app` or the post-rename equivalent. Will migrate to `nookleus.app` post-65e. (`vercel.json` has cron config only, no domain; `capacitor.config.ts` `server.url` references `https://aaaplatform.vercel.app` as the live-bundle target for [[build-65a]].)
 - **Prod Supabase project:** `rzzprgidqbnqcdupmpfe`
 
 ## Current build
 
-Build 65a complete — Capacitor iOS shell on TestFlight, Nookleus rename merged to main (PR #38, commit 57c1c67). Next Mac session uploads a refreshed TestFlight build with the new display name. Build 65b (camera UI) queued after first wave of crew bug feedback.
+[[build-65a]] complete — Capacitor iOS shell on TestFlight, Nookleus rename merged to main (PR #38, commit 57c1c67). Next Mac session uploads a refreshed TestFlight build with the new display name. Build 65b (camera UI) queued after first wave of crew bug feedback.
 
-In-progress: **Build 66a — vault scaffolding** (this file).
+In-progress: **[[build-66b]] — vault audit-first backfill** (this work).
 
 ## Last 3 shipped builds
 
-- **Build 65a — Capacitor iOS scaffold** (2026-04-28). iOS shell shipped to TestFlight as Nookleus.
-- **Build 64 — `handle_new_user` trigger restoration**. Re-added the trigger that 18b dropped. TODO(66b-audit): confirm ship date — no commit found via `git log --grep="build 64|handle_new_user"`.
-- **Build 18c — Workspace switcher** (2026-04-26). Multi-tenant workspace UI.
+- **[[build-66]] — soft-delete jobs + 30-day trash** (PR #37, commit `9b91f14`). Independent feature; coincidentally landed under "build66" while the Vault meta-spec also chose Build 66.
+- **[[build-65a]] — Capacitor iOS scaffold + Nookleus rename** (2026-04-28 Mac smoke; rename PR #38 commit `57c1c67`). iOS shell shipped to TestFlight as Nookleus. Tag `mobile-v0.1.0`.
+- **[[build-66a]] — vault scaffolding** (2026-04-29, commit `298a072`). Empty `docs/vault/` tree + always-paste pair + Templater stubs.
 
 ## Major shipped systems
 
-- **Phase 1 platform** (Builds 1–14) — core jobs, customers, scheduling, photos
-- **Build 15** — contracts
-- **Build 16** — accounting + QuickBooks integration
-- **Build 17** — Stripe payments
-- **Phase 2 — Jarvis AI assistant** at `/jarvis` and `/api/jarvis` (migrations 21, 25a, 27, 28); knowledge base at `/settings/knowledge`. Embeds the Claude API with full job context.
-- **Marketing module** at `/marketing` (migration 23). Not in any build guide doc.
-- **Multi-tenant infrastructure** — 18a (schema + backfill), 18b (RLS enforcement), 18c (workspace switcher). Migrations 42–63.
-- **Capacitor iOS shell** — Build 65a. Shipped to TestFlight as Nookleus.
+- **Phase 1 platform** (Builds 1–10) — core jobs, customers, scheduling, photos. See [[build-1-10]], [[build-11]] (photo annotator).
+- **Email** — inbox + attachments ([[build-12]], [[build-13]]); categories + body-pattern rules ([[build-27]], [[build-28]]).
+- **Settings hub** (Build 14a–i) — company, appearance, statuses, auth, signatures, intake form, notifications, reports, export. See [[build-14a]]…[[build-14h-14i]].
+- **Contracts** (Build 15a–c) — templates, remote signing, in-person/multi-signer/reminders. See [[build-15a]], [[build-15b]], [[build-15c]].
+- **Accounting + QuickBooks** (Build 16a–d) — expenses, dashboard, QB connection, invoice/payment sync. See [[build-16a]], [[build-16b]], [[build-16c]], [[build-16d]].
+- **Stripe payments** (Build 17a–c) — Connect + payment requests, public `/pay` page + emails, webhook + receipts/refunds + QB bridge. See [[build-17a]], [[build-17b]], [[build-17c]].
+- **Jarvis AI assistant ecosystem** at `/jarvis` and `/api/jarvis`; knowledge base at `/settings/knowledge`. Four agents (Jarvis Core, R&D, Field Ops, Marketing) — see [[jarvis]]. Backed by **migrations 21, 23, 25a, 26b**. Marketing also has its own page at `/marketing` (Social Media + Chat tabs) — see [[build-26b]]. The Marketing **module** is the Jarvis Marketing sub-agent surfaced via a dedicated page.
+- **Job UI iterations** — nav order ([[build-29]]), files section ([[build-30]]), insurance + photos redesign ([[build-31]]), soft-delete jobs + 30-day trash ([[build-66]]).
+- **Multi-tenant infrastructure** — schema + backfill ([[build-18a]], migrations 42–54), RLS enforcement ([[build-18b]], migrations 55–60), workspace switcher ([[build-18c]], migrations 62/62b/63). `handle_new_user` trigger restoration follow-up: [[build-64]].
+- **Capacitor iOS shell** — [[build-65a]]. Shipped to TestFlight as Nookleus. Live-bundle WebView per [[2026-04-26-capacitor-live-bundle]]; flips to bundled-static at 65e.
+- **Knowledge vault** — scaffolding [[build-66a]], audit-first backfill [[build-66b]] (this work), skills [[build-66c]] queued, [[build-66d]] TBD.
 
 ## Active branches
 
@@ -61,8 +64,11 @@ In-progress: **Build 66a — vault scaffolding** (this file).
 
 ## Recently learned
 
-- **build52 lesson** — GoTrue panics on NULL token columns in `auth.users`. Use empty strings instead, never NULL. See [[00-glossary]].
+- **build52 lesson** — GoTrue panics on NULL token columns in `auth.users`. Use empty strings instead, never NULL. See [[2026-04-22-build52-null-tokens-lesson]].
+- **Build 66 numbering collision** — "Build 66" labels two unrelated threads: (1) [[build-66]], the soft-delete jobs feature (PR #37, migration build66, shipped); and (2) [[build-66a]] / [[build-66b]] / [[build-66c]] / [[build-66d]], the Knowledge Vault meta-spec. Different scopes, same prefix because the migration counter and the meta-spec independently chose 66.
+- **Jarvis migrations are 21, 23, 25a, 26b** — earlier briefings said "21, 25a, 27, 28" but 27 and 28 are email features (categories, body-patterns), not Jarvis. The actual Jarvis-ecosystem migrations are 21 (Jarvis Core), 23 (R&D), 25a (Knowledge + Field Ops), 26b (Marketing). Source: file-name reading + content checks during 66b audit.
+- **Build IDs vs migration numbers diverge after Build 14.** See [[00-glossary]].
 
 ## Last verified against repo
 
-- 2026-04-29 — initial seed during Build 66a (vault scaffolding). Build 66b will run an audit-first backfill that may correct items above; refresh this date whenever the file is reconciled with the repo.
+- **2026-04-29** — full audit-first backfill during [[build-66b]]. Repo grounded against migrations, routes, code, commits, plan files, handoff documents. The four guide docx files (v1.3, v1.4, v1.6, v1.7) cover specs through Build 17 only; everything later is read directly from the codebase.

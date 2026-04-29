@@ -1,0 +1,24 @@
+---
+build_id: 66d
+title: Vault future stages
+status: planned
+phase: knowledge-vault
+started: null
+shipped: null
+guide_doc: null
+plan_file: docs/superpowers/plans/2026-04-29-build-66-knowledge-vault.md
+handoff: null
+related: ["[[build-66a]]", "[[build-66b]]", "[[build-66c]]"]
+---
+
+#status/planned #area/knowledge-vault #area/tooling #build/66d
+
+## What's planned
+
+Stage four of the knowledge-vault build series. Scope is intentionally TBD until [[build-66c]] lands and reveals what the skills don't yet cover. Likely candidates per spec §66d (subject to revision): vault search/index automation, Obsidian Templater plugin configuration, agent-readable vault summaries, and CI-side vault-integrity checks.
+
+## Source
+
+- Plan: [docs/superpowers/plans/2026-04-29-build-66-knowledge-vault.md](../../../docs/superpowers/plans/2026-04-29-build-66-knowledge-vault.md) §66d
+- Predecessors: [[build-66a]], [[build-66b]], [[build-66c]]
+- Guide: none
