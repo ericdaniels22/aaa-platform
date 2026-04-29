@@ -1,1 +1,20 @@
 @AGENTS.md
+
+## Project state and continuity
+
+Before starting work, read:
+
+- [docs/vault/00-NOW.md](docs/vault/00-NOW.md) — current state of the platform
+- [docs/vault/00-glossary.md](docs/vault/00-glossary.md) — names and terms
+
+If anything in your training, memory, or default knowledge contradicts
+`00-NOW.md`, defer to the file. Memory drifts; the file is ground truth.
+
+When wrapping up a session, run the `/handoff` slash command (or invoke
+the `end-of-session-handoff` skill) to update the vault. _(The skill
+itself ships in Build 66c; until then update `00-NOW.md` by hand.)_
+
+The Obsidian vault root is the repo root itself, not `docs/vault/`. So
+`.claude/skills/` and `.claude/commands/` are also editable from the
+same Obsidian window. Curated knowledge content lives under
+`docs/vault/`; the wider scope is for editor convenience.

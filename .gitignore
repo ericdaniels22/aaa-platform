@@ -46,3 +46,8 @@ yarn-error.log*
 next-env.d.ts
 supabase/.temp/
 supabase/.temp/
+
+# Obsidian local UI state — vault content is committed, but per-machine UI state is not
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
