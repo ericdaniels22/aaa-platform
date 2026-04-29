@@ -17,15 +17,15 @@ This file is the always-paste briefing for fresh Claude / Claude Code sessions. 
 
 ## Current build
 
-[[build-65a]] complete — Capacitor iOS shell on TestFlight, Nookleus rename merged to main (PR #38, commit 57c1c67). Next Mac session uploads a refreshed TestFlight build with the new display name. Build 65b (camera UI) queued after first wave of crew bug feedback.
+The Knowledge Vault meta-spec landed three sub-builds in close succession: [[build-66a]] vault scaffolding (commit `298a072`), [[build-66b]] audit-first backfill (commit `ee093a3`), and [[build-66c]] Claude Code skills for session continuity (commit `349a7f0`). `/handoff` and `/orient` self-tested clean. Next: [[build-66d]] per-machine Obsidian setup — Eric's manual work, ~5 min per machine across the Windows desktop, Windows laptop, and TheLaunchPad-the-Mac.
 
-In-progress: **[[build-66b]] — vault audit-first backfill** (this work).
+[[build-65a]] (Capacitor iOS shell + Nookleus rename, PR #38 commit `57c1c67`) remains on TestFlight, awaiting a Mac session for the refreshed upload with the new display name. [[build-65b]] (camera UI) queued after the first wave of crew bug feedback.
 
 ## Last 3 shipped builds
 
-- **[[build-66]] — soft-delete jobs + 30-day trash** (PR #37, commit `9b91f14`). Independent feature; coincidentally landed under "build66" while the Vault meta-spec also chose Build 66.
 - **[[build-65a]] — Capacitor iOS scaffold + Nookleus rename** (2026-04-28 Mac smoke; rename PR #38 commit `57c1c67`). iOS shell shipped to TestFlight as Nookleus. Tag `mobile-v0.1.0`.
 - **[[build-66a]] — vault scaffolding** (2026-04-29, commit `298a072`). Empty `docs/vault/` tree + always-paste pair + Templater stubs.
+- **[[build-66c]] — Claude Code skills for session continuity** (2026-04-29, commit `349a7f0`). `/handoff` + `/orient` shipped, both self-tested. `.gitignore` migrated to `.claude/*` with negations for `skills/`/`commands/`/`agents/`.
 
 ## Major shipped systems
 
@@ -43,7 +43,7 @@ In-progress: **[[build-66b]] — vault audit-first backfill** (this work).
 
 ## Active branches
 
-- `main` at `9e986b2` — `fix(auth): decode JWT directly for active_organization_id claim (#39)` _(this file is being committed on top of `9e986b2`; refresh after the Build 66a merge lands)_
+- `main` at `349a7f0` — `tooling: claude code skills for session continuity (build 66c)`. The 66c handoff (this commit set's commit 2) lands directly on top.
 - Other branches on `origin` not merged into main (`git branch -r --no-merged origin/main`):
   - `65a-nookleus-rename` — content landed via PR #38; branch retained, deletable
   - `65a-scaffold` — content landed via PR #25; branch retained, deletable
@@ -60,7 +60,7 @@ In-progress: **[[build-66b]] — vault audit-first backfill** (this work).
 - Crew bug list triage cadence — currently informal ("every few days").
 - Build 65b camera UI kickoff after first crew feedback wave.
 - Apple Developer Program enrollment status.
-- Build 66b (vault backfill from existing artifacts) is queued — will produce the authoritative version of this file.
+- [[build-66d]] per-machine Obsidian setup — Eric's manual work, ~5 min per machine across Windows desktop (TheLaunchPad), Windows laptop, and the Mac.
 
 ## Recently learned
 
@@ -68,6 +68,7 @@ In-progress: **[[build-66b]] — vault audit-first backfill** (this work).
 - **Build 66 numbering collision** — "Build 66" labels two unrelated threads: (1) [[build-66]], the soft-delete jobs feature (PR #37, migration build66, shipped); and (2) [[build-66a]] / [[build-66b]] / [[build-66c]] / [[build-66d]], the Knowledge Vault meta-spec. Different scopes, same prefix because the migration counter and the meta-spec independently chose 66.
 - **Jarvis migrations are 21, 23, 25a, 26b** — earlier briefings said "21, 25a, 27, 28" but 27 and 28 are email features (categories, body-patterns), not Jarvis. The actual Jarvis-ecosystem migrations are 21 (Jarvis Core), 23 (R&D), 25a (Knowledge + Field Ops), 26b (Marketing). Source: file-name reading + content checks during 66b audit.
 - **Build IDs vs migration numbers diverge after Build 14.** See [[00-glossary]].
+- **`.gitignore` directory exclude blocks child negation.** `.claude/` (directory pattern) cannot be re-included via `!.claude/skills/` — git can't re-include files inside an excluded parent. Use `.claude/*` (wildcard children) so each entry is evaluated against the negation list. Git docs (`gitignore(5)`): "It is not possible to re-include a file if a parent directory of that file is excluded." Same fix pattern as `.yarn/*` (lines 7–11) and `/out/*` (lines 18–20). Surfaced during [[build-66c]] when the new `.claude/skills/` files weren't trackable despite the negation lines.
 
 ## Last verified against repo
 
