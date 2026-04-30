@@ -1,21 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Palette } from "@/components/form-builder/palette";
 import { Canvas, type ViewMode } from "@/components/form-builder/canvas";
 import { Inspector } from "@/components/form-builder/inspector";
 import { VersionPill } from "@/components/form-builder/version-pill";
 import { useFormConfig } from "@/components/form-builder/use-form-config";
 import { FIELD_PRESETS } from "@/lib/intake-form-presets";
-import type { FormField, FormSection } from "@/lib/types";
+import type { FormField } from "@/lib/types";
 
 export default function IntakeFormBuilderPage() {
   const { config, setConfig, loading, status, saveNow } = useFormConfig();
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
-  const [showAddSection, setShowAddSection] = useState(false);
-  const [newSectionTitle, setNewSectionTitle] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("edit");
   const isTesting = viewMode === "test";
 
@@ -49,21 +45,6 @@ export default function IntakeFormBuilderPage() {
           : s
       ),
     });
-  }
-
-  function addSection() {
-    if (!newSectionTitle.trim()) return;
-    const id = "custom_" + Date.now();
-    const newSection: FormSection = {
-      id,
-      title: newSectionTitle.trim(),
-      is_default: false,
-      visible: true,
-      fields: [],
-    };
-    setConfig({ sections: [...config.sections, newSection] });
-    setNewSectionTitle("");
-    setShowAddSection(false);
   }
 
   function insertTypeIntoLastSection(type: FormField["type"]) {
@@ -116,45 +97,9 @@ export default function IntakeFormBuilderPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {!isTesting && (
-            <button
-              onClick={() => setShowAddSection(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-border bg-card text-foreground hover:bg-accent transition-colors"
-            >
-              <Plus size={14} />
-              Add section
-            </button>
-          )}
           <VersionPill status={status} onRetry={saveNow} onRestoreSuccess={refresh} />
         </div>
       </header>
-
-      {showAddSection && !isTesting && (
-        <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-end gap-2">
-          <div className="flex-1 max-w-md">
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Section title</label>
-            <Input
-              value={newSectionTitle}
-              onChange={(e) => setNewSectionTitle(e.target.value)}
-              placeholder="e.g. Equipment Needed"
-              autoFocus
-              onKeyDown={(e) => e.key === "Enter" && addSection()}
-            />
-          </div>
-          <button
-            onClick={addSection}
-            className="px-3 py-2 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 transition-all"
-          >
-            Add
-          </button>
-          <button
-            onClick={() => setShowAddSection(false)}
-            className="px-3 py-2 rounded-lg text-sm font-medium border border-border text-muted-foreground"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
 
       <div className="flex-1 flex min-h-0">
         {!isTesting && (

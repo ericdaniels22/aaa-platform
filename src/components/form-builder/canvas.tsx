@@ -6,8 +6,9 @@ import {
   KeyboardSensor, useSensor, useSensors, closestCenter,
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
-import { Monitor, Smartphone } from "lucide-react";
+import { Monitor, Smartphone, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 import { CanvasSection } from "./canvas-section";
 import { TestMode } from "./test-mode";
 import { FIELD_PRESETS } from "@/lib/intake-form-presets";
@@ -33,6 +34,23 @@ export function Canvas({
 }) {
   const [widthMode, setWidthMode] = useState<WidthMode>("desktop");
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [showAddSection, setShowAddSection] = useState(false);
+  const [newSectionTitle, setNewSectionTitle] = useState("");
+
+  function addSection() {
+    if (!newSectionTitle.trim()) return;
+    const id = "custom_" + Date.now();
+    const newSection: FormSection = {
+      id,
+      title: newSectionTitle.trim(),
+      is_default: false,
+      visible: true,
+      fields: [],
+    };
+    setConfig({ sections: [...config.sections, newSection] });
+    setNewSectionTitle("");
+    setShowAddSection(false);
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -292,6 +310,50 @@ export function Canvas({
                     onAddBlankField={() => addBlankField(section.id)}
                   />
                 ))}
+                {showAddSection ? (
+                  <div className="rounded-xl border border-dashed border-border bg-card p-3 flex items-end gap-2">
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Section title</label>
+                      <Input
+                        value={newSectionTitle}
+                        onChange={(e) => setNewSectionTitle(e.target.value)}
+                        placeholder="e.g. Equipment Needed"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") addSection();
+                          if (e.key === "Escape") {
+                            setNewSectionTitle("");
+                            setShowAddSection(false);
+                          }
+                        }}
+                        className="h-9"
+                      />
+                    </div>
+                    <button
+                      onClick={addSection}
+                      className="px-3 h-9 rounded-lg text-sm font-medium bg-[image:var(--gradient-primary)] text-white shadow-sm hover:brightness-110 transition-all"
+                    >
+                      Add
+                    </button>
+                    <button
+                      onClick={() => {
+                        setNewSectionTitle("");
+                        setShowAddSection(false);
+                      }}
+                      className="px-3 h-9 rounded-lg text-sm font-medium border border-border text-muted-foreground"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowAddSection(true)}
+                    className="flex items-center justify-center gap-1.5 w-full px-4 py-3 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors border border-dashed border-border"
+                  >
+                    <Plus size={14} />
+                    Add section
+                  </button>
+                )}
               </div>
             </SortableContext>
             <DragOverlay>
