@@ -165,7 +165,7 @@ export default function InvoiceDetailClient({
     if (!invoice) return;
     if (
       !window.confirm(
-        "Mark this invoice as sent? This will create the invoice in QuickBooks. Use this option if you delivered the invoice outside AAA Platform.",
+        "Mark this invoice as sent? This will create the invoice in QuickBooks. Use this option if you delivered the invoice outside Nookleus.",
       )
     )
       return;
