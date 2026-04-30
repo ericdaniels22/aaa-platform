@@ -98,7 +98,7 @@ export function VersionPill({
         return (
           <>
             <Check size={12} className="text-emerald-500" />
-            <span>Saved · v{status.version}</span>
+            <span>Saved</span>
           </>
         );
     }
