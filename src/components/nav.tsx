@@ -85,6 +85,19 @@ export default function Sidebar() {
             collapsed ? "w-52 lg:w-16" : "w-52",
           )}
         >
+        {/* Nookleus mark — platform identity. The workspace logo below is tenant identity. */}
+        {!collapsed && (
+          <div className="shrink-0 px-3 pt-3 pb-1">
+            <Image
+              src="/nookleus-lockup-240w.png"
+              alt="Nookleus"
+              width={120}
+              height={82}
+              priority
+              className="h-6 w-auto opacity-90"
+            />
+          </div>
+        )}
         {/* Logo area */}
         {collapsed ? (
           <div className="shrink-0 px-2 py-2 border-b border-white/10 flex flex-col items-center gap-1.5 overflow-hidden">
@@ -250,7 +263,7 @@ export default function Sidebar() {
               </div>
             )
           ) : (
-            <p className="text-white/30 text-xs">AAA Platform v1.0</p>
+            <p className="text-white/30 text-xs">Nookleus</p>
           )}
         </div>
         </aside>
