@@ -143,14 +143,21 @@ function FieldPreview({ field }: { field: FormField }) {
     case "pill":
       return (
         <div className="flex flex-wrap gap-1.5">
-          {(field.options ?? []).slice(0, 4).map((opt) => (
-            <span
-              key={opt.value}
-              className="text-[10px] px-2 py-1 rounded-full bg-muted text-muted-foreground"
-            >
-              {opt.label}
-            </span>
-          ))}
+          {(field.options ?? []).slice(0, 4).map((opt) => {
+            const colored = !!(opt.bg_color || opt.text_color);
+            return (
+              <span
+                key={opt.value}
+                style={colored ? { backgroundColor: opt.bg_color, color: opt.text_color } : undefined}
+                className={cn(
+                  "text-[10px] px-2 py-1 rounded-full",
+                  !colored && "bg-muted text-muted-foreground"
+                )}
+              >
+                {opt.label}
+              </span>
+            );
+          })}
           {(field.options?.length ?? 0) === 0 && (
             <span className="text-[10px] text-muted-foreground italic">No options yet</span>
           )}

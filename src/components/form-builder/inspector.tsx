@@ -17,6 +17,17 @@ const FIELD_TYPES: { value: FormField["type"]; label: string }[] = [
   { value: "checkbox", label: "Checkbox" },
 ];
 
+const PILL_COLOR_PRESETS: { key: string; name: string; bg_color?: string; text_color?: string }[] = [
+  { key: "default", name: "Default" },
+  { key: "red", name: "Red", bg_color: "#ef4444", text_color: "#ffffff" },
+  { key: "orange", name: "Orange", bg_color: "#f97316", text_color: "#ffffff" },
+  { key: "amber", name: "Amber", bg_color: "#f59e0b", text_color: "#ffffff" },
+  { key: "green", name: "Green", bg_color: "#10b981", text_color: "#ffffff" },
+  { key: "blue", name: "Blue", bg_color: "#3b82f6", text_color: "#ffffff" },
+  { key: "purple", name: "Purple", bg_color: "#8b5cf6", text_color: "#ffffff" },
+  { key: "slate", name: "Slate", bg_color: "#64748b", text_color: "#ffffff" },
+];
+
 export function Inspector({
   field,
   onUpdate,
@@ -48,6 +59,12 @@ export function Inspector({
   function removeOption(index: number) {
     const opts = [...(field.options || [])];
     opts.splice(index, 1);
+    onUpdate({ options: opts });
+  }
+
+  function setOptionColor(index: number, preset: typeof PILL_COLOR_PRESETS[number]) {
+    const opts = [...(field.options || [])];
+    opts[index] = { ...opts[index], bg_color: preset.bg_color, text_color: preset.text_color };
     onUpdate({ options: opts });
   }
 
@@ -133,19 +150,42 @@ export function Inspector({
         {hasOptions && !field.options_source && (
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1.5">Options</label>
-            <div className="space-y-1">
+            <div className="space-y-2">
               {(field.options || []).map((opt, i) => (
-                <div key={i} className="flex items-center gap-2 px-2 py-1 rounded bg-muted/40">
-                  <span className="text-sm text-foreground flex-1">{opt.label}</span>
-                  <span className="text-[10px] text-muted-foreground font-mono">{opt.value}</span>
-                  {!isDefault && (
-                    <button
-                      onClick={() => removeOption(i)}
-                      className="p-0.5 rounded text-muted-foreground hover:text-destructive"
-                      aria-label="Remove option"
-                    >
-                      <X size={12} />
-                    </button>
+                <div key={i} className="rounded bg-muted/40 px-2 py-1.5 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-foreground flex-1">{opt.label}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">{opt.value}</span>
+                    {!isDefault && (
+                      <button
+                        onClick={() => removeOption(i)}
+                        className="p-0.5 rounded text-muted-foreground hover:text-destructive"
+                        aria-label="Remove option"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                  {field.type === "pill" && (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {PILL_COLOR_PRESETS.map((preset) => {
+                        const selected = (preset.bg_color ?? null) === (opt.bg_color ?? null);
+                        return (
+                          <button
+                            key={preset.key}
+                            onClick={() => setOptionColor(i, preset)}
+                            className={`w-5 h-5 rounded-full border transition-all ${selected ? "ring-2 ring-offset-1 ring-offset-card ring-foreground" : "border-border"}`}
+                            style={{ backgroundColor: preset.bg_color ?? "transparent" }}
+                            title={preset.name}
+                            aria-label={`Set ${preset.name}`}
+                          >
+                            {!preset.bg_color && (
+                              <span className="block w-full h-full rounded-full bg-card" aria-hidden />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               ))}

@@ -281,7 +281,12 @@ export interface DamageType {
 export interface FormFieldOption {
   value: string;
   label: string;
+  /** Legacy: Tailwind class string used by the damage_types option-source path. New per-option colors set via the builder use bg_color + text_color (CSS color values applied as inline style). */
   color?: string;
+  /** CSS color for the selected pill background (e.g. "#3b82f6"). */
+  bg_color?: string;
+  /** CSS color for the selected pill text (e.g. "#ffffff"). */
+  text_color?: string;
 }
 
 export interface FormField {
