@@ -15,7 +15,7 @@ import type { CameraPreviewFlashMode } from "@capacitor-community/camera-preview
 import { writeCapture } from "@/lib/mobile/capture-storage";
 import type { CaptureMode, CaptureSidecar } from "@/lib/mobile/capture-types";
 import { useCaptureMode } from "@/lib/mobile/use-capture-mode";
-import { MOCK_PHOTO_TAGS } from "@/lib/mobile/mock-photo-tags";
+import { usePhotoTags } from "@/lib/mobile/use-photo-tags";
 import { cn } from "@/lib/utils";
 
 interface CameraViewProps {
@@ -51,6 +51,7 @@ export default function CameraView({
   onAbort,
 }: CameraViewProps) {
   const [mode, setMode] = useCaptureMode();
+  const { tags, loading: tagsLoading, error: tagsError } = usePhotoTags();
   const [position, setPosition] = useState<"rear" | "front">("rear");
   const [flash, setFlash] = useState<FlashMode>("off");
   const [count, setCount] = useState(0);
@@ -319,29 +320,45 @@ export default function CameraView({
             className="mb-3 w-full rounded-md border border-white/30 bg-white/10 px-3 py-2 text-sm text-white placeholder-white/60 outline-none focus:border-white"
           />
           <div className="mb-4 flex flex-wrap gap-2">
-            {MOCK_PHOTO_TAGS.map((tag) => {
-              const active = tagDraft.includes(tag.id);
-              return (
-                <button
-                  type="button"
-                  key={tag.id}
-                  onClick={() => toggleTagDraft(tag.id)}
-                  className={cn(
-                    "rounded-full border px-3 py-1 text-xs font-medium transition",
-                    active
-                      ? "border-white bg-white text-black"
-                      : "border-white/30 bg-transparent text-white",
-                  )}
-                  style={
-                    active
-                      ? { backgroundColor: tag.color, borderColor: tag.color, color: "white" }
-                      : undefined
-                  }
-                >
-                  {tag.name}
-                </button>
-              );
-            })}
+            {tagsLoading && (
+              <span className="text-xs text-white/60">Loading tags&hellip;</span>
+            )}
+            {tagsError && !tagsLoading && (
+              <span className="text-xs text-red-300">
+                Couldn&apos;t load tags ({tagsError}). Caption still saves.
+              </span>
+            )}
+            {!tagsLoading &&
+              !tagsError &&
+              tags.length === 0 && (
+                <span className="text-xs text-white/60">
+                  No tags configured for this workspace yet.
+                </span>
+              )}
+            {!tagsLoading &&
+              tags.map((tag) => {
+                const active = tagDraft.includes(tag.id);
+                return (
+                  <button
+                    type="button"
+                    key={tag.id}
+                    onClick={() => toggleTagDraft(tag.id)}
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-xs font-medium transition",
+                      active
+                        ? "border-white bg-white text-black"
+                        : "border-white/30 bg-transparent text-white",
+                    )}
+                    style={
+                      active
+                        ? { backgroundColor: tag.color, borderColor: tag.color, color: "white" }
+                        : undefined
+                    }
+                  >
+                    {tag.name}
+                  </button>
+                );
+              })}
           </div>
           <div className="flex justify-end gap-2">
             <button

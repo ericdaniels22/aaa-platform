@@ -8,7 +8,8 @@ import {
   updateSidecar,
 } from "@/lib/mobile/capture-storage";
 import type { PendingCapture } from "@/lib/mobile/capture-types";
-import { MOCK_PHOTO_TAGS } from "@/lib/mobile/mock-photo-tags";
+import { usePhotoTags } from "@/lib/mobile/use-photo-tags";
+import type { PhotoTag } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface ReviewScreenProps {
@@ -34,6 +35,8 @@ export default function ReviewScreen({
   const [batchPanel, setBatchPanel] = useState<"caption" | "tags" | null>(null);
   const [batchCaption, setBatchCaption] = useState("");
   const [batchTags, setBatchTags] = useState<string[]>([]);
+  const { tags: photoTags, loading: tagsLoading, error: tagsError } =
+    usePhotoTags();
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -260,35 +263,51 @@ export default function ReviewScreen({
           onSubmit={applyBatchTags}
         >
           <div className="flex flex-wrap gap-2">
-            {MOCK_PHOTO_TAGS.map((tag) => {
-              const active = batchTags.includes(tag.id);
-              return (
-                <button
-                  type="button"
-                  key={tag.id}
-                  onClick={() =>
-                    setBatchTags((prev) =>
-                      prev.includes(tag.id)
-                        ? prev.filter((id) => id !== tag.id)
-                        : [...prev, tag.id],
-                    )
-                  }
-                  className={cn(
-                    "rounded-full border px-3 py-1 text-xs font-medium transition",
-                    active
-                      ? "border-white bg-white text-black"
-                      : "border-white/30 bg-transparent text-white",
-                  )}
-                  style={
-                    active
-                      ? { backgroundColor: tag.color, borderColor: tag.color, color: "white" }
-                      : undefined
-                  }
-                >
-                  {tag.name}
-                </button>
-              );
-            })}
+            {tagsLoading && (
+              <span className="text-xs text-white/60">Loading tags&hellip;</span>
+            )}
+            {tagsError && !tagsLoading && (
+              <span className="text-xs text-red-300">
+                Couldn&apos;t load tags ({tagsError}).
+              </span>
+            )}
+            {!tagsLoading &&
+              !tagsError &&
+              photoTags.length === 0 && (
+                <span className="text-xs text-white/60">
+                  No tags configured for this workspace yet.
+                </span>
+              )}
+            {!tagsLoading &&
+              photoTags.map((tag) => {
+                const active = batchTags.includes(tag.id);
+                return (
+                  <button
+                    type="button"
+                    key={tag.id}
+                    onClick={() =>
+                      setBatchTags((prev) =>
+                        prev.includes(tag.id)
+                          ? prev.filter((id) => id !== tag.id)
+                          : [...prev, tag.id],
+                      )
+                    }
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-xs font-medium transition",
+                      active
+                        ? "border-white bg-white text-black"
+                        : "border-white/30 bg-transparent text-white",
+                    )}
+                    style={
+                      active
+                        ? { backgroundColor: tag.color, borderColor: tag.color, color: "white" }
+                        : undefined
+                    }
+                  >
+                    {tag.name}
+                  </button>
+                );
+              })}
           </div>
         </BatchPanel>
       )}
@@ -296,6 +315,7 @@ export default function ReviewScreen({
       {expanded && !selectMode && (
         <ExpandedPhoto
           capture={expanded}
+          tags={photoTags}
           onClose={() => setExpanded(null)}
           onDelete={() => handleDelete(expanded.sidecar.client_capture_id)}
         />
@@ -459,10 +479,12 @@ function BatchPanel({
 
 function ExpandedPhoto({
   capture,
+  tags,
   onClose,
   onDelete,
 }: {
   capture: PendingCapture;
+  tags: PhotoTag[];
   onClose: () => void;
   onDelete: () => void;
 }) {
@@ -499,7 +521,7 @@ function ExpandedPhoto({
           {capture.sidecar.tag_ids.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {capture.sidecar.tag_ids.map((tagId) => {
-                const tag = MOCK_PHOTO_TAGS.find((t) => t.id === tagId);
+                const tag = tags.find((t) => t.id === tagId);
                 if (!tag) return null;
                 return (
                   <span

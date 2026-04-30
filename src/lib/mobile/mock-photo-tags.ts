@@ -1,7 +1,8 @@
-// Path B note: Session A is scaffolding without scratch Supabase access.
-// Real photo_tags fetch wires up in the next Mac/iPhone session against
-// scratch credentials. This mock keeps the review screen renderable so the
-// UX shape is reviewable on Windows.
+// Retained as type fixture; no longer imported in production paths.
+// Session A.5 wired the real org-scoped fetch via usePhotoTags
+// (src/lib/mobile/use-photo-tags.ts) against the scratch Supabase
+// project. Keeping this file makes the expected shape obvious for
+// future Storybook stories or test fixtures.
 
 import type { PhotoTag } from "@/lib/types";
 
