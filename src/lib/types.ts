@@ -313,6 +313,19 @@ export interface FormConfig {
   sections: FormSection[];
 }
 
+export interface FieldPreset {
+  /** Unique key for the preset, e.g. "phone", "us_address" */
+  key: string;
+  /** Display label shown in the palette */
+  name: string;
+  /** Lucide icon name (kebab-case is fine; component import handled at usage site) */
+  icon: string;
+  /** One-line description shown on hover/expand */
+  description: string;
+  /** Builds the FormField that will be inserted when this preset is dragged in. Caller assigns the id. */
+  makeField: () => Omit<FormField, "id">;
+}
+
 export interface JobCustomField {
   id: string;
   job_id: string;
