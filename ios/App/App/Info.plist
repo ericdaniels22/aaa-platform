@@ -47,5 +47,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Nookleus uses the camera to capture job-site photos that attach directly to the active job.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Nookleus may capture short voice notes alongside job-site photos. The microphone is not used unless you tap to record.</string>
 </dict>
 </plist>
