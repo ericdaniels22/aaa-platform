@@ -172,41 +172,117 @@ values for those three fields aren't.
 6. On 200, delete both the `.jpg` and the `.json` from Filesystem
    (plan §5.3 locked decision 3 — auto-delete after sync).
 
-## Deferred from this session (next-Mac-session work)
+## Session A.5 update — scratch Supabase satisfied
 
-These need to happen before the §5.2.A real-device verification step:
+Session A.5 (same branch, same date) satisfied the four scratch-related
+deferred items from the original Path B handoff:
 
-- [ ] Stand up scratch Supabase project + replay all
-      `supabase/migration-build*.sql`. Seed at least one job + one
-      `photo_tags` row.
-- [ ] `.env.scratch.local` (or build flag) wiring so a Session A build
-      can target scratch — never prod.
-- [ ] Replace `MOCK_PHOTO_TAGS` reads in `review-screen.tsx` and
-      `camera-view.tsx` with a real fetch from `photo_tags` scoped to
-      `getActiveOrganizationId(supabase)`.
-- [ ] EXIF read for width / height / orientation before write.
-- [ ] `npx cap sync ios` on Mac to copy the new web bundle into the iOS
-      project.
+- [x] **Scratch Supabase project stood up + 53 migrations replayed.**
+      Project `jpzugbioqdjhhmuwqqeg` / `aaa-platform-scratch-65b-2026-04-29`.
+      See [`supabase/scratch-replay-notes.md`](../../../supabase/scratch-replay-notes.md)
+      for the order, the build42 deviation (skipped Eric's prod user
+      seed; replaced with the test user's membership in
+      [`supabase/seed-scratch.sql`](../../../supabase/seed-scratch.sql)),
+      and reproducibility steps.
+- [x] **`.env.scratch.local` lives at repo root.** Gitignored
+      (`.gitignore` line 36 `.env*`). Scratch URL + anon key +
+      service_role key. Never committed; transferred out-of-band per
+      "Mac session pre-flight" below.
+- [x] **`MOCK_PHOTO_TAGS` replaced with org-scoped fetch.** New hook at
+      [`src/lib/mobile/use-photo-tags.ts`](../../../src/lib/mobile/use-photo-tags.ts)
+      handles loading + error states via the existing browser supabase
+      client; RLS on `photo_tags` does the org-scoping per build49.
+      Both `camera-view.tsx` and `review-screen.tsx` consume the hook.
+      `mock-photo-tags.ts` is retained as a type fixture (one-line
+      retention comment at the top); no longer imported anywhere in
+      production paths.
+- [x] **dotenv-cli wired** (`devDependency`, `^11.0.0`). All scratch-mode
+      dev runs use:
+      `npx dotenv -e .env.scratch.local -- npm run dev`
+      `.env.local` is never touched.
+
+Test user for scratch: `eric+scratch@aaacontracting.com`. Password lives
+in Eric's password manager — not in the repo, not in the handoff. The
+user_id is in `seed-scratch.sql` for reproducibility but is not a credential
+on its own.
+
+### Mac session pre-flight
+
+Before the next-Mac-session work below can run, the Mac needs:
+
+1. **`git pull` on `build-65b-session-a`.** Latest commits include the
+   scratch replay + seed + dotenv-cli wiring + handoff updates.
+2. **`.env.scratch.local` arrives via iMessage as an attachment.** It
+   lands in `~/Downloads/` by default. **Move it to repo root before
+   running anything:**
+   ```bash
+   mv ~/Downloads/.env.scratch.local <repo-path>/
+   ```
+   Verify it's still gitignored:
+   ```bash
+   git check-ignore -v .env.scratch.local
+   ```
+3. **`npm install`.** Picks up `dotenv-cli` and the two Capacitor
+   plugins added in Session A (`@capacitor-community/camera-preview`,
+   `@capacitor/filesystem`).
+4. **Run dev with the dotenv-cli wrapper:**
+   `npx dotenv -e .env.scratch.local -- npm run dev`
+   Verify the client bundle has `jpzugbioqdjhhmuwqqeg.supabase.co`
+   inlined, NOT `rzzprgidqbnqcdupmpfe.supabase.co`. Sign in as
+   `eric+scratch@aaacontracting.com` to validate the scratch auth path
+   end-to-end.
+5. **Tooling note for next-Mac-Claude.** The Claude Preview MCP's
+   `preview_start` does **not** honor `runtimeExecutable`/`runtimeArgs`
+   in `.claude/launch.json`. It always runs `npm run dev` regardless,
+   which loads `.env.local` (or worse — falls back to the parent
+   worktree's prod `.env.local` per Next.js workspace-root inference).
+   **Use the direct Bash invocation above, not preview_start.**
+6. **Then** `npx cap sync ios` to copy the new web bundle into the iOS
+   project. `npx cap open ios`, sign with Eric's developer account,
+   install on iPhone via USB.
+
+### Still deferred to the Mac/iPhone session
+
+- [ ] EXIF read for width / height / orientation before sidecar write
+      (Session A scaffold writes `0/0/1` placeholders).
+- [ ] `npx cap sync ios` on Mac.
 - [ ] Mac: `npx cap open ios`, sign with Eric's developer account,
       install on iPhone via USB.
-- [ ] §5.2.A verification: 20 rapid + 5 tag-after, review screen,
-      delete 3, Done, 22 .jpg + 22 .json under `pending-uploads/...`,
-      battery drain check after 100-shot rapid, permission-denied
-      recovery flow.
+- [ ] §5.2.A real-device verification: 20 rapid + 5 tag-after, review
+      screen, delete 3, Done, 22 .jpg + 22 .json under
+      `pending-uploads/...`, battery drain check after 100-shot rapid,
+      permission-denied recovery flow.
 - [ ] Battery / heat sanity check on a 100-rapid session.
+- [ ] End-to-end scratch login + capture flow on the iPhone using the
+      `eric+scratch@aaacontracting.com` credentials.
 
 ## Path B verification done in this session
 
-- `npx tsc --noEmit` exits 0.
+- `npx tsc --noEmit` exits 0 (re-verified post-Session-A.5 after the
+  `usePhotoTags` swap).
 - `next dev` (Turbopack) compiles with no errors and no warnings beyond
   pre-existing image-LCP warnings on the login page.
 - The new route compiles and is correctly auth-gated by `src/proxy.ts`
   (a request to `/jobs/<id>/capture` without cookies redirects to
-  `/login`). The fallback card itself can only be rendered post-login,
-  which is gated on Supabase access — deferred per Path B.
+  `/login`).
 - The CaptureFab is rendered into `job-detail.tsx` but returns null on
   desktop (verified by code review of `useCapacitor` + the FAB's
   `if (!ready || !isNative) return null` short-circuit).
+
+### Session A.5 smoke test (Windows, against scratch)
+
+Started `next dev` with the dotenv-cli wrapper on port 3001:
+`npx dotenv -e .env.scratch.local -- npm run dev -- --port 3001`. The
+HTTP /login route returned 200, and the JS bundle on the client side
+had `jpzugbioqdjhhmuwqqeg.supabase.co` (scratch) inlined for the
+supabase client URL — confirmed by grepping the served chunks. Other
+`*.supabase.co` strings in the bundle are doc-example placeholders from
+`@supabase/supabase-js` (`example.supabase.co`, `xyzcompany.supabase.co`,
+`id.supabase.co`, `realtime.supabase.co`).
+
+Auth-gated routes (the desktop fallback card, the capture page itself)
+are not hit on Windows because the test user's password isn't on this
+machine — that smoke is part of the Mac session pre-flight above.
 
 ## Locked decisions surfaced this session
 
