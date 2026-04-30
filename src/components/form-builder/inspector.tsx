@@ -28,6 +28,44 @@ const PILL_COLOR_PRESETS: { key: string; name: string; bg_color?: string; text_c
   { key: "slate", name: "Slate", bg_color: "#64748b", text_color: "#ffffff" },
 ];
 
+const MAPS_TO_GROUPS: { label: string; options: { value: string; label: string }[] }[] = [
+  {
+    label: "Contact",
+    options: [
+      { value: "contact.first_name", label: "First name" },
+      { value: "contact.last_name", label: "Last name" },
+      { value: "contact.phone", label: "Phone" },
+      { value: "contact.email", label: "Email" },
+      { value: "contact.role", label: "Role" },
+      { value: "contact.notes", label: "Notes" },
+    ],
+  },
+  {
+    label: "Job",
+    options: [
+      { value: "job.damage_type", label: "Damage type" },
+      { value: "job.damage_source", label: "Damage source" },
+      { value: "job.affected_areas", label: "Affected areas" },
+      { value: "job.property_address", label: "Property address" },
+      { value: "job.property_type", label: "Property type" },
+      { value: "job.property_sqft", label: "Property sqft" },
+      { value: "job.property_stories", label: "Property stories" },
+      { value: "job.access_notes", label: "Access notes" },
+      { value: "job.urgency", label: "Urgency" },
+      { value: "job.insurance_company", label: "Insurance company" },
+      { value: "job.claim_number", label: "Claim number" },
+    ],
+  },
+  {
+    label: "Adjuster",
+    options: [
+      { value: "adjuster.full_name", label: "Adjuster name" },
+      { value: "adjuster.phone", label: "Adjuster phone" },
+      { value: "adjuster.title", label: "Adjuster title" },
+    ],
+  },
+];
+
 export function Inspector({
   field,
   onUpdate,
@@ -98,6 +136,16 @@ export function Inspector({
           />
         </div>
 
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            checked={field.required || false}
+            onChange={(e) => onUpdate({ required: e.target.checked })}
+            className="w-4 h-4 rounded accent-[var(--brand-primary)]"
+          />
+          <span className="text-foreground">Required</span>
+        </label>
+
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1">Type</label>
           <select
@@ -116,36 +164,6 @@ export function Inspector({
             </p>
           )}
         </div>
-
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">Placeholder</label>
-          <Input
-            value={field.placeholder || ""}
-            onChange={(e) => onUpdate({ placeholder: e.target.value || undefined })}
-            placeholder="Optional"
-            className="h-9"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">Help Text</label>
-          <Input
-            value={field.help_text || ""}
-            onChange={(e) => onUpdate({ help_text: e.target.value || undefined })}
-            placeholder="Optional"
-            className="h-9"
-          />
-        </div>
-
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            checked={field.required || false}
-            onChange={(e) => onUpdate({ required: e.target.checked })}
-            className="w-4 h-4 rounded accent-[var(--brand-primary)]"
-          />
-          <span className="text-foreground">Required</span>
-        </label>
 
         {hasOptions && !field.options_source && (
           <div>
@@ -215,6 +233,47 @@ export function Inspector({
             Options loaded dynamically from <span className="font-mono">{field.options_source}</span>
           </p>
         )}
+
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Placeholder</label>
+          <Input
+            value={field.placeholder || ""}
+            onChange={(e) => onUpdate({ placeholder: e.target.value || undefined })}
+            placeholder="Optional"
+            className="h-9"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Help Text</label>
+          <Input
+            value={field.help_text || ""}
+            onChange={(e) => onUpdate({ help_text: e.target.value || undefined })}
+            placeholder="Optional"
+            className="h-9"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Maps to</label>
+          <select
+            value={field.maps_to || ""}
+            onChange={(e) => onUpdate({ maps_to: e.target.value || undefined })}
+            className="w-full h-9 rounded-lg border border-border bg-card px-2 text-sm text-foreground"
+          >
+            <option value="">— Custom field —</option>
+            {MAPS_TO_GROUPS.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.options.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Routes this field&apos;s value to a system column on submit. &quot;Custom field&quot; stores it in the job&apos;s extra-fields table.
+          </p>
+        </div>
       </div>
     </aside>
   );
