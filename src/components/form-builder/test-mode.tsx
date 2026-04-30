@@ -19,7 +19,7 @@ export function TestMode({ onExit }: { onExit: () => void }) {
         </span>
       </div>
       <div className="rounded-xl border border-border bg-card p-4">
-        <IntakeForm />
+        <IntakeForm testMode />
       </div>
     </div>
   );
