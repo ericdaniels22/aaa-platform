@@ -15,9 +15,11 @@ This file is the always-paste briefing for fresh Claude / Claude Code sessions. 
 
 ## Current build
 
-Build 66 (Knowledge Vault & Session Continuity) is **complete**. All four sub-builds shipped: [[build-66a]] vault scaffolding (`298a072`), [[build-66b]] audit-first backfill (`ee093a3`), [[build-66c]] Claude Code skills for session continuity (`349a7f0`), [[build-66d]] per-machine Obsidian setup on TheLaunchPad (`f4fad00` + this session's completion commit). `/handoff` and `/orient` both self-tested clean. The Windows-laptop and Mac Obsidian setups are deferred — TheLaunchPad-only is sufficient for the single-machine workflow Eric is running.
+[[build-65b]] Sessions A + A.5 ran end-to-end on Windows today (see [[2026-04-29-build-65b]]). Path B camera/review scaffold landed in commit `7738e8a`; the scratch Supabase standup, 53-migration replay, `seed-scratch.sql`, and `MOCK_PHOTO_TAGS` → real org-scoped fetch landed across `f244727`, `874a542`, `6362edd`. Branch `build-65b-session-a` is on origin, four commits ahead of main, awaiting the Mac session for §5.2.A real-device verification (iMessage transfer of `.env.scratch.local`, then `npx cap sync ios`, sign + install on iPhone, run the 20-rapid-plus-5-tag-after scenario).
 
-[[build-65a]] (Capacitor iOS shell + Nookleus rename, PR #38 commit `57c1c67`) remains on TestFlight, awaiting a Mac session for the refreshed upload with the new display name. [[build-65b]] (camera UI) queued after the first wave of crew bug feedback.
+Build 66 (Knowledge Vault & Session Continuity) is **complete**. All four sub-builds shipped: [[build-66a]] vault scaffolding (`298a072`), [[build-66b]] audit-first backfill (`ee093a3`), [[build-66c]] Claude Code skills for session continuity (`349a7f0`), [[build-66d]] per-machine Obsidian setup on TheLaunchPad (`f4fad00` + completion commit `3d5c222`). `/handoff` and `/orient` both self-tested clean. The Windows-laptop and Mac Obsidian setups are deferred — TheLaunchPad-only is sufficient for the single-machine workflow Eric is running.
+
+[[build-65a]] (Capacitor iOS shell + Nookleus rename, PR #38 commit `57c1c67`) remains on TestFlight, awaiting a Mac session for the refreshed upload with the new display name.
 
 ## Last 3 shipped builds
 
@@ -41,7 +43,8 @@ Build 66 (Knowledge Vault & Session Continuity) is **complete**. All four sub-bu
 
 ## Active branches
 
-- `main` at `f4fad00` — `vault: 2026-04-29 17:20:26 TheLaunchPad` (Obsidian config landed). The 66d completion commit from this session lands directly on top.
+- `main` at `3d5c222` — `vault: build 66d completion + 66 close-out`. Earlier vault commits this day (`4c68de8` 66c self-test, `f4fad00` Obsidian config) landed before this one.
+- `build-65b-session-a` at `6362edd` on origin — 65b Sessions A + A.5 (four commits authored). Awaiting Mac session for §5.2.A real-device verification.
 - Other branches on `origin` not merged into main (`git branch -r --no-merged origin/main`):
   - `65a-nookleus-rename` — content landed via PR #38; branch retained, deletable
   - `65a-scaffold` — content landed via PR #25; branch retained, deletable
@@ -54,11 +57,12 @@ Build 66 (Knowledge Vault & Session Continuity) is **complete**. All four sub-bu
 
 ## Open threads
 
-- Next Mac session: upload refreshed TestFlight build with merged Nookleus rename so Eric's iPhone Home Screen shows "Nookleus."
+- Mac session pre-flight for [[build-65b]] §5.2.A real-device verification. Eight-step chain in [[2026-04-29-build-65b]] "What's next": iMessage `.env.scratch.local` → move from `~/Downloads/` to repo root → `git pull` on `build-65b-session-a` → `npm install` → `npx dotenv -e .env.scratch.local -- npm run dev` → sign in as `eric+scratch@aaacontracting.com` (password in Eric's password manager only) → `npx cap sync ios` → sign + install on iPhone → run §5.2.A scenario.
+- Refreshed TestFlight upload from Mac so the iPhone Home Screen shows "Nookleus" — pre-dates this session, still open.
 - Crew bug list triage cadence — currently informal ("every few days").
-- Build 65b camera UI kickoff after first crew feedback wave.
-- Apple Developer Program enrollment status.
 - Optional: extend Obsidian vault setup to the Windows laptop and the Mac. TheLaunchPad-only is currently sufficient; the multi-machine sync, merge-conflict, and round-trip tests in the 66d spec are skipped until a second machine actually runs Obsidian.
+- EXIF read for width/height/orientation before sidecar write (65b polish; current scaffold writes `0/0/1` placeholders).
+- Encryption-at-rest for on-device photos. Per plan §5.3 locked decision 2 this is 65c's job, not 65b's.
 
 ## Recently learned
 
@@ -67,6 +71,7 @@ Build 66 (Knowledge Vault & Session Continuity) is **complete**. All four sub-bu
 - **Jarvis migrations are 21, 23, 25a, 26b** — earlier briefings said "21, 25a, 27, 28" but 27 and 28 are email features (categories, body-patterns), not Jarvis. The actual Jarvis-ecosystem migrations are 21 (Jarvis Core), 23 (R&D), 25a (Knowledge + Field Ops), 26b (Marketing). Source: file-name reading + content checks during 66b audit.
 - **Build IDs vs migration numbers diverge after Build 14.** See [[00-glossary]].
 - **`.gitignore` directory exclude blocks child negation.** `.claude/` (directory pattern) cannot be re-included via `!.claude/skills/` — git can't re-include files inside an excluded parent. Use `.claude/*` (wildcard children) so each entry is evaluated against the negation list. Git docs (`gitignore(5)`): "It is not possible to re-include a file if a parent directory of that file is excluded." Same fix pattern as `.yarn/*` (lines 7–11) and `/out/*` (lines 18–20). Surfaced during [[build-66c]] when the new `.claude/skills/` files weren't trackable despite the negation lines.
+- **`preview_start` ignores `launch.json` `runtimeExecutable`/`runtimeArgs`.** The Claude Preview MCP's `preview_start` always runs `npm run dev` regardless of the launch.json config name, which on TheLaunchPad loads the parent worktree's prod `.env.local` under Next.js's workspace-root inference (it detects `C:\Users\14252\package-lock.json` as the workspace root and pulls env files from there). The first scratch smoke test during [[2026-04-29-build-65b]] connected to **prod** Supabase before this was caught — the failed login was a 400 (no actual prod data modified) but the next attempt with a real password would have. Workaround: invoke the dev server directly via Bash with `npx dotenv -e .env.scratch.local -- npm run dev -- --port 3001`. Documented in `supabase/scratch-replay-notes.md`.
 
 ## Last verified against repo
 
