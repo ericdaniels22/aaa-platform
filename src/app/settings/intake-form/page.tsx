@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Palette } from "@/components/form-builder/palette";
-import { Canvas } from "@/components/form-builder/canvas";
+import { Canvas, type ViewMode } from "@/components/form-builder/canvas";
 import { Inspector } from "@/components/form-builder/inspector";
 import { VersionPill } from "@/components/form-builder/version-pill";
 import { useFormConfig } from "@/components/form-builder/use-form-config";
@@ -16,6 +16,8 @@ export default function IntakeFormBuilderPage() {
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [showAddSection, setShowAddSection] = useState(false);
   const [newSectionTitle, setNewSectionTitle] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("edit");
+  const isTesting = viewMode === "test";
 
   function refresh() {
     window.location.reload();
@@ -114,18 +116,20 @@ export default function IntakeFormBuilderPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowAddSection(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-border bg-card text-foreground hover:bg-accent transition-colors"
-          >
-            <Plus size={14} />
-            Add section
-          </button>
+          {!isTesting && (
+            <button
+              onClick={() => setShowAddSection(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-border bg-card text-foreground hover:bg-accent transition-colors"
+            >
+              <Plus size={14} />
+              Add section
+            </button>
+          )}
           <VersionPill status={status} onRetry={saveNow} onRestoreSuccess={refresh} />
         </div>
       </header>
 
-      {showAddSection && (
+      {showAddSection && !isTesting && (
         <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-end gap-2">
           <div className="flex-1 max-w-md">
             <label className="block text-xs font-medium text-muted-foreground mb-1">Section title</label>
@@ -153,17 +157,21 @@ export default function IntakeFormBuilderPage() {
       )}
 
       <div className="flex-1 flex min-h-0">
-        <Palette
-          onInsertType={insertTypeIntoLastSection}
-          onInsertPreset={insertPresetIntoLastSection}
-        />
+        {!isTesting && (
+          <Palette
+            onInsertType={insertTypeIntoLastSection}
+            onInsertPreset={insertPresetIntoLastSection}
+          />
+        )}
         <Canvas
           config={config}
           setConfig={setConfig}
           selectedFieldId={selectedFieldId}
           onSelectField={setSelectedFieldId}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
         />
-        {selected && (
+        {selected && !isTesting && (
           <Inspector
             field={selected}
             onUpdate={updateSelectedField}

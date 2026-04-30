@@ -13,7 +13,7 @@ import { TestMode } from "./test-mode";
 import { FIELD_PRESETS } from "@/lib/intake-form-presets";
 import type { FormConfig, FormField, FormSection } from "@/lib/types";
 
-type ViewMode = "edit" | "test";
+export type ViewMode = "edit" | "test";
 type WidthMode = "desktop" | "mobile";
 
 export function Canvas({
@@ -21,13 +21,16 @@ export function Canvas({
   setConfig,
   selectedFieldId,
   onSelectField,
+  viewMode,
+  setViewMode,
 }: {
   config: FormConfig;
   setConfig: (c: FormConfig) => void;
   selectedFieldId: string | null;
   onSelectField: (fieldId: string | null) => void;
+  viewMode: ViewMode;
+  setViewMode: (m: ViewMode) => void;
 }) {
-  const [viewMode, setViewMode] = useState<ViewMode>("edit");
   const [widthMode, setWidthMode] = useState<WidthMode>("desktop");
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
