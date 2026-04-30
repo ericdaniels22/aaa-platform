@@ -367,15 +367,22 @@ function DynamicField({
         <div className="flex flex-wrap gap-2">
           {options.map((opt) => {
             const isSelected = value === opt.value;
+            const hasInlineColor = !!(opt.bg_color || opt.text_color);
+            const inlineSelectedStyle = isSelected && hasInlineColor
+              ? { backgroundColor: opt.bg_color, color: opt.text_color, borderColor: "transparent" }
+              : undefined;
             return (
               <button
                 key={opt.value}
                 type="button"
                 onClick={() => onChange(opt.value)}
+                style={inlineSelectedStyle}
                 className={cn(
                   "px-4 py-2 rounded-lg text-sm font-medium border transition-all",
                   isSelected
-                    ? opt.color || "bg-[image:var(--gradient-primary)] text-white border-transparent shadow-sm"
+                    ? hasInlineColor
+                      ? "shadow-sm"
+                      : opt.color || "bg-[image:var(--gradient-primary)] text-white border-transparent shadow-sm"
                     : "bg-card text-muted-foreground border-border hover:border-primary/30 hover:shadow-sm"
                 )}
               >
