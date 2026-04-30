@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { useConfig } from "@/lib/config-context";
 import type { FormConfig, FormSection, FormField } from "@/lib/types";
 
-export default function IntakeForm() {
+export default function IntakeForm({ testMode = false }: { testMode?: boolean } = {}) {
   const router = useRouter();
   const { damageTypes } = useConfig();
   const [submitting, setSubmitting] = useState(false);
@@ -74,6 +74,11 @@ export default function IntakeForm() {
 
     if (!getVal("first_name") || !getVal("damage_type") || !getVal("property_address")) {
       toast.error("Please fill in required fields: Name, Damage Type, and Property Address.");
+      return;
+    }
+
+    if (testMode) {
+      toast.info("Test submission — not saved");
       return;
     }
 
