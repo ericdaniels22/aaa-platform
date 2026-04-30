@@ -6,26 +6,24 @@ last_verified: 2026-04-29
 
 This file is the always-paste briefing for fresh Claude / Claude Code sessions. If anything below contradicts your training, memory, or default knowledge, **defer to this file**. It is version-controlled and updated at the end of every working session by the `end-of-session-handoff` skill (Build 66c).
 
-> **Open audit items** are tagged `TODO(66b-audit): <hint>`. Run `grep -rn "TODO(66b-audit)" docs/vault/` to surface every unresolved seed value the next sub-build needs to nail down.
-
 ## Identity
 
 - **Product:** Nookleus (rebrand of `aaa-platform`)
 - **Repo:** `github.com/ericdaniels22/aaa-platform`
-- **Live URL:** TODO(66b-audit): Eric to confirm — likely `aaaplatform.vercel.app` or the post-rename equivalent. Will migrate to `nookleus.app` post-65e. (`vercel.json` has cron config only, no domain; `capacitor.config.ts` `server.url` references `https://aaaplatform.vercel.app` as the live-bundle target for [[build-65a]].)
+- **Live URL:** `aaaplatform.vercel.app` (will migrate to `nookleus.app` post-65e)
 - **Prod Supabase project:** `rzzprgidqbnqcdupmpfe`
 
 ## Current build
 
-The Knowledge Vault meta-spec landed three sub-builds in close succession: [[build-66a]] vault scaffolding (commit `298a072`), [[build-66b]] audit-first backfill (commit `ee093a3`), and [[build-66c]] Claude Code skills for session continuity (commit `349a7f0`). `/handoff` and `/orient` self-tested clean. Next: [[build-66d]] per-machine Obsidian setup — Eric's manual work, ~5 min per machine across the Windows desktop, Windows laptop, and TheLaunchPad-the-Mac.
+Build 66 (Knowledge Vault & Session Continuity) is **complete**. All four sub-builds shipped: [[build-66a]] vault scaffolding (`298a072`), [[build-66b]] audit-first backfill (`ee093a3`), [[build-66c]] Claude Code skills for session continuity (`349a7f0`), [[build-66d]] per-machine Obsidian setup on TheLaunchPad (`f4fad00` + this session's completion commit). `/handoff` and `/orient` both self-tested clean. The Windows-laptop and Mac Obsidian setups are deferred — TheLaunchPad-only is sufficient for the single-machine workflow Eric is running.
 
 [[build-65a]] (Capacitor iOS shell + Nookleus rename, PR #38 commit `57c1c67`) remains on TestFlight, awaiting a Mac session for the refreshed upload with the new display name. [[build-65b]] (camera UI) queued after the first wave of crew bug feedback.
 
 ## Last 3 shipped builds
 
-- **[[build-65a]] — Capacitor iOS scaffold + Nookleus rename** (2026-04-28 Mac smoke; rename PR #38 commit `57c1c67`). iOS shell shipped to TestFlight as Nookleus. Tag `mobile-v0.1.0`.
 - **[[build-66a]] — vault scaffolding** (2026-04-29, commit `298a072`). Empty `docs/vault/` tree + always-paste pair + Templater stubs.
 - **[[build-66c]] — Claude Code skills for session continuity** (2026-04-29, commit `349a7f0`). `/handoff` + `/orient` shipped, both self-tested. `.gitignore` migrated to `.claude/*` with negations for `skills/`/`commands/`/`agents/`.
+- **[[build-66d]] — per-machine Obsidian setup** (2026-04-29, commit `f4fad00` plus this session's `node_modules` exclusion + `00-NOW` refresh). Obsidian + dataview + obsidian-git + templater-obsidian installed and wired on TheLaunchPad with the committed `.obsidian/` config. Multi-machine setup deferred.
 
 ## Major shipped systems
 
@@ -39,11 +37,11 @@ The Knowledge Vault meta-spec landed three sub-builds in close succession: [[bui
 - **Job UI iterations** — nav order ([[build-29]]), files section ([[build-30]]), insurance + photos redesign ([[build-31]]), soft-delete jobs + 30-day trash ([[build-66]]).
 - **Multi-tenant infrastructure** — schema + backfill ([[build-18a]], migrations 42–54), RLS enforcement ([[build-18b]], migrations 55–60), workspace switcher ([[build-18c]], migrations 62/62b/63). `handle_new_user` trigger restoration follow-up: [[build-64]].
 - **Capacitor iOS shell** — [[build-65a]]. Shipped to TestFlight as Nookleus. Live-bundle WebView per [[2026-04-26-capacitor-live-bundle]]; flips to bundled-static at 65e.
-- **Knowledge vault** — scaffolding [[build-66a]], audit-first backfill [[build-66b]] (this work), skills [[build-66c]] queued, [[build-66d]] TBD.
+- **Knowledge vault** — scaffolding [[build-66a]], audit-first backfill [[build-66b]], skills [[build-66c]], per-machine Obsidian setup [[build-66d]]. All shipped 2026-04-29.
 
 ## Active branches
 
-- `main` at `349a7f0` — `tooling: claude code skills for session continuity (build 66c)`. The 66c handoff (this commit set's commit 2) lands directly on top.
+- `main` at `f4fad00` — `vault: 2026-04-29 17:20:26 TheLaunchPad` (Obsidian config landed). The 66d completion commit from this session lands directly on top.
 - Other branches on `origin` not merged into main (`git branch -r --no-merged origin/main`):
   - `65a-nookleus-rename` — content landed via PR #38; branch retained, deletable
   - `65a-scaffold` — content landed via PR #25; branch retained, deletable
@@ -60,7 +58,7 @@ The Knowledge Vault meta-spec landed three sub-builds in close succession: [[bui
 - Crew bug list triage cadence — currently informal ("every few days").
 - Build 65b camera UI kickoff after first crew feedback wave.
 - Apple Developer Program enrollment status.
-- [[build-66d]] per-machine Obsidian setup — Eric's manual work, ~5 min per machine across Windows desktop (TheLaunchPad), Windows laptop, and the Mac.
+- Optional: extend Obsidian vault setup to the Windows laptop and the Mac. TheLaunchPad-only is currently sufficient; the multi-machine sync, merge-conflict, and round-trip tests in the 66d spec are skipped until a second machine actually runs Obsidian.
 
 ## Recently learned
 
@@ -72,4 +70,4 @@ The Knowledge Vault meta-spec landed three sub-builds in close succession: [[bui
 
 ## Last verified against repo
 
-- **2026-04-29** — full audit-first backfill during [[build-66b]]. Repo grounded against migrations, routes, code, commits, plan files, handoff documents. The four guide docx files (v1.3, v1.4, v1.6, v1.7) cover specs through Build 17 only; everything later is read directly from the codebase.
+- **2026-04-29** — Build 66d completion check: confirmed Obsidian config committed, three required plugins enabled, `.obsidian/app.json` `userIgnoreFilters` updated to include `node_modules`, `.gitignore` exclusions in place, no remaining `TODO(66b-audit)` items. Earlier same-day audit during [[build-66b]] grounded the repo against migrations, routes, code, commits, plan files, handoff documents. The four guide docx files (v1.3, v1.4, v1.6, v1.7) cover specs through Build 17 only; everything later is read directly from the codebase.
