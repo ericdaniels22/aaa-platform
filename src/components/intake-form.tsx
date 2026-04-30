@@ -72,13 +72,13 @@ export default function IntakeForm({ testMode = false }: { testMode?: boolean } 
       }
     }
 
-    if (!getVal("first_name") || !getVal("damage_type") || !getVal("property_address")) {
-      toast.error("Please fill in required fields: Name, Damage Type, and Property Address.");
+    if (testMode) {
+      toast.info("Test submission — not saved");
       return;
     }
 
-    if (testMode) {
-      toast.info("Test submission — not saved");
+    if (!getVal("first_name") || !getVal("damage_type") || !getVal("property_address")) {
+      toast.error("Please fill in required fields: Name, Damage Type, and Property Address.");
       return;
     }
 
