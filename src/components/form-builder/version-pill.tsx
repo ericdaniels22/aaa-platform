@@ -104,18 +104,28 @@ export function VersionPill({
     }
   }
 
+  function togglePill() {
+    if (!open) loadVersions();
+    setOpen(!open);
+  }
+
   return (
     <div ref={ref} className="relative">
-      <button
-        onClick={() => {
-          if (!open) loadVersions();
-          setOpen(!open);
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={togglePill}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            togglePill();
+          }
         }}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-border bg-card hover:bg-muted/50 transition-colors"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-border bg-card hover:bg-muted/50 transition-colors cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/40"
       >
         <StatusBadge />
         <History size={12} className="text-muted-foreground ml-1" />
-      </button>
+      </div>
 
       {open && (
         <div className="absolute right-0 mt-2 w-72 rounded-lg border border-border bg-popover shadow-lg z-50">
