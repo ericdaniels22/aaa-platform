@@ -312,14 +312,16 @@ function CustomTab({
       toast.error("Description too long (max 2000)");
       return;
     }
-    const qty = Number(quantity);
+    const qtyTrimmed = quantity.trim();
+    const priceTrimmed = unitPrice.trim();
+    const qty = qtyTrimmed === "" ? NaN : Number(qtyTrimmed);
+    const price = priceTrimmed === "" ? NaN : Number(priceTrimmed);
     if (!Number.isFinite(qty)) {
-      toast.error("Quantity must be a number");
+      toast.error(qtyTrimmed === "" ? "Quantity is required" : "Quantity must be a number");
       return;
     }
-    const price = Number(unitPrice);
     if (!Number.isFinite(price)) {
-      toast.error("Unit price must be a number");
+      toast.error(priceTrimmed === "" ? "Unit price is required" : "Unit price must be a number");
       return;
     }
 
@@ -356,11 +358,18 @@ function CustomTab({
     }
   }
 
-  const isValid =
-    description.trim().length > 0 &&
-    description.length <= 2000 &&
-    Number.isFinite(Number(quantity)) &&
-    Number.isFinite(Number(unitPrice));
+  const isValid = (() => {
+    const qtyTrimmed = quantity.trim();
+    const priceTrimmed = unitPrice.trim();
+    const qty = qtyTrimmed === "" ? NaN : Number(qtyTrimmed);
+    const price = priceTrimmed === "" ? NaN : Number(priceTrimmed);
+    return (
+      description.trim().length > 0 &&
+      description.length <= 2000 &&
+      Number.isFinite(qty) &&
+      Number.isFinite(price)
+    );
+  })();
 
   return (
     <div className="flex flex-col gap-4">
