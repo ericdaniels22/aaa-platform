@@ -465,39 +465,35 @@ export function EstimateBuilder({
     const activeType = active.data.current?.type as string | undefined;
 
     if (activeType === "section") {
-      const snapshot = state.estimate; // capture before mutation
+      const secs = state.estimate.sections;
+      const oldIdx = secs.findIndex((s) => s.id === active.id);
+      const newIdx = secs.findIndex((s) => s.id === over.id);
+      if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return;
 
-      let reorderedSections: typeof state.estimate.sections = [];
-      setState((prev) => {
-        const secs = prev.estimate.sections;
-        const oldIdx = secs.findIndex((s) => s.id === active.id);
-        const newIdx = secs.findIndex((s) => s.id === over.id);
-        if (oldIdx === -1 || newIdx === -1) return prev;
-        reorderedSections = arrayMove(secs, oldIdx, newIdx);
-        return {
-          ...prev,
-          estimate: { ...prev.estimate, sections: reorderedSections },
-        };
+      const reorderedSections = arrayMove(secs, oldIdx, newIdx);
+      const snapshot = state.estimate; // capture before setState
+
+      setState((prev) => ({
+        ...prev,
+        estimate: { ...prev.estimate, sections: reorderedSections },
+      }));
+
+      // Build the flat list including subsections with updated sort_order
+      const sectionPayload = reorderedSections.flatMap((sec, idx) => [
+        { id: sec.id, sort_order: idx, parent_section_id: null as string | null },
+        ...sec.subsections.map((sub, subIdx) => ({
+          id: sub.id,
+          sort_order: subIdx,
+          parent_section_id: sec.id,
+        })),
+      ]);
+
+      void saveSectionsReorder(sectionPayload).then((ok) => {
+        if (!ok) {
+          toast.error("Failed to save section order");
+          setState((prev) => ({ ...prev, estimate: snapshot }));
+        }
       });
-
-      if (reorderedSections.length > 0) {
-        // Build the flat list including subsections with updated sort_order
-        const sectionPayload = reorderedSections.flatMap((sec, idx) => [
-          { id: sec.id, sort_order: idx, parent_section_id: null as string | null },
-          ...sec.subsections.map((sub, subIdx) => ({
-            id: sub.id,
-            sort_order: subIdx,
-            parent_section_id: sec.id,
-          })),
-        ]);
-
-        void saveSectionsReorder(sectionPayload).then((ok) => {
-          if (!ok) {
-            toast.error("Failed to save section order");
-            setState((prev) => ({ ...prev, estimate: snapshot }));
-          }
-        });
-      }
       return;
     }
 
@@ -507,39 +503,40 @@ export function EstimateBuilder({
       const overParent = over.data.current?.parentSectionId as string | undefined;
       if (activeParent !== overParent) return; // snap back
 
-      const snapshot = state.estimate;
-      let reorderedSections: typeof state.estimate.sections = [];
+      // Compute outside setState — synchronous event handler, state is current.
+      const parentSection = state.estimate.sections.find((s) => s.id === activeParent);
+      if (!parentSection) return;
+      const subs = parentSection.subsections;
+      const oldIdx = subs.findIndex((sub) => sub.id === active.id);
+      const newIdx = subs.findIndex((sub) => sub.id === over.id);
+      if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return;
 
-      setState((prev) => {
-        const updated = prev.estimate.sections.map((s) => {
-          if (s.id !== activeParent) return s;
-          const subs = s.subsections;
-          const oldIdx = subs.findIndex((sub) => sub.id === active.id);
-          const newIdx = subs.findIndex((sub) => sub.id === over.id);
-          if (oldIdx === -1 || newIdx === -1) return s;
-          return { ...s, subsections: arrayMove(subs, oldIdx, newIdx) };
-        });
-        reorderedSections = updated;
-        return { ...prev, estimate: { ...prev.estimate, sections: updated } };
+      const reorderedSections = state.estimate.sections.map((s) => {
+        if (s.id !== activeParent) return s;
+        return { ...s, subsections: arrayMove(subs, oldIdx, newIdx) };
       });
+      const snapshot = state.estimate; // capture before setState
 
-      if (reorderedSections.length > 0) {
-        const sectionPayload = reorderedSections.flatMap((sec, idx) => [
-          { id: sec.id, sort_order: idx, parent_section_id: null as string | null },
-          ...sec.subsections.map((sub, subIdx) => ({
-            id: sub.id,
-            sort_order: subIdx,
-            parent_section_id: sec.id,
-          })),
-        ]);
+      setState((prev) => ({
+        ...prev,
+        estimate: { ...prev.estimate, sections: reorderedSections },
+      }));
 
-        void saveSectionsReorder(sectionPayload).then((ok) => {
-          if (!ok) {
-            toast.error("Failed to save subsection order");
-            setState((prev) => ({ ...prev, estimate: snapshot }));
-          }
-        });
-      }
+      const sectionPayload = reorderedSections.flatMap((sec, idx) => [
+        { id: sec.id, sort_order: idx, parent_section_id: null as string | null },
+        ...sec.subsections.map((sub, subIdx) => ({
+          id: sub.id,
+          sort_order: subIdx,
+          parent_section_id: sec.id,
+        })),
+      ]);
+
+      void saveSectionsReorder(sectionPayload).then((ok) => {
+        if (!ok) {
+          toast.error("Failed to save subsection order");
+          setState((prev) => ({ ...prev, estimate: snapshot }));
+        }
+      });
       return;
     }
 
@@ -549,54 +546,57 @@ export function EstimateBuilder({
       const overParentSectionId = over.data.current?.parentSectionId as string | undefined;
       if (activeParentSectionId !== overParentSectionId) return; // snap back
 
-      const snapshot = state.estimate;
+      // Compute outside setState — synchronous event handler, state is current.
       let reorderedItems: import("@/lib/types").EstimateLineItem[] = [];
+      const reorderedSections = state.estimate.sections.map((s) => {
+        // Check direct items
+        if (s.id === activeParentSectionId) {
+          const items = s.items;
+          const oldIdx = items.findIndex((i) => i.id === active.id);
+          const newIdx = items.findIndex((i) => i.id === over.id);
+          if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return s;
+          reorderedItems = arrayMove(items, oldIdx, newIdx);
+          return { ...s, items: reorderedItems };
+        }
+        // Check subsection items
+        return {
+          ...s,
+          subsections: s.subsections.map((sub) => {
+            if (sub.id !== activeParentSectionId) return sub;
+            const items = sub.items;
+            const oldIdx = items.findIndex((i) => i.id === active.id);
+            const newIdx = items.findIndex((i) => i.id === over.id);
+            if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return sub;
+            reorderedItems = arrayMove(items, oldIdx, newIdx);
+            return { ...sub, items: reorderedItems };
+          }),
+        };
+      });
+
+      if (reorderedItems.length === 0) return; // no valid reorder found
+
+      const snapshot = state.estimate; // capture before setState
 
       setState((prev) => ({
         ...prev,
         estimate: {
           ...prev.estimate,
-          sections: prev.estimate.sections.map((s) => {
-            // Check direct items
-            if (s.id === activeParentSectionId) {
-              const items = s.items;
-              const oldIdx = items.findIndex((i) => i.id === active.id);
-              const newIdx = items.findIndex((i) => i.id === over.id);
-              if (oldIdx === -1 || newIdx === -1) return s;
-              reorderedItems = arrayMove(items, oldIdx, newIdx);
-              return { ...s, items: reorderedItems };
-            }
-            // Check subsection items
-            return {
-              ...s,
-              subsections: s.subsections.map((sub) => {
-                if (sub.id !== activeParentSectionId) return sub;
-                const items = sub.items;
-                const oldIdx = items.findIndex((i) => i.id === active.id);
-                const newIdx = items.findIndex((i) => i.id === over.id);
-                if (oldIdx === -1 || newIdx === -1) return sub;
-                reorderedItems = arrayMove(items, oldIdx, newIdx);
-                return { ...sub, items: reorderedItems };
-              }),
-            };
-          }),
+          sections: reorderedSections,
         },
       }));
 
-      if (reorderedItems.length > 0) {
-        const itemPayload = reorderedItems.map((item, idx) => ({
-          id: item.id,
-          section_id: item.section_id,
-          sort_order: idx,
-        }));
+      const itemPayload = reorderedItems.map((item, idx) => ({
+        id: item.id,
+        section_id: item.section_id,
+        sort_order: idx,
+      }));
 
-        void saveLineItemsReorder(itemPayload).then((ok) => {
-          if (!ok) {
-            toast.error("Failed to save line item order");
-            setState((prev) => ({ ...prev, estimate: snapshot }));
-          }
-        });
-      }
+      void saveLineItemsReorder(itemPayload).then((ok) => {
+        if (!ok) {
+          toast.error("Failed to save line item order");
+          setState((prev) => ({ ...prev, estimate: snapshot }));
+        }
+      });
     }
   }
 
