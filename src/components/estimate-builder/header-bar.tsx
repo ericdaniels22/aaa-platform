@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FileText, Send, FileDown, Ban } from "lucide-react";
+import Link from "next/link";
+import { FileText, Send, FileDown, Ban, ArrowLeft } from "lucide-react";
 import { SaveIndicator } from "./save-indicator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -210,8 +211,17 @@ export function HeaderBar({
   return (
     <>
       <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3">
-        {/* ── Left: estimate number + status badge ──────────────────────── */}
+        {/* ── Left: back link + estimate number + status badge ──────────── */}
         <div className="flex items-center gap-2 shrink-0">
+          <Link
+            href={`/jobs/${estimate.job_id}`}
+            className="inline-flex items-center gap-1 px-2 py-1 -ml-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            title="Back to job"
+            aria-label="Back to job"
+          >
+            <ArrowLeft size={14} />
+            <span className="hidden sm:inline">Back</span>
+          </Link>
           <FileText size={16} className="text-muted-foreground" />
           <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-foreground">
             {estimate.estimate_number}
