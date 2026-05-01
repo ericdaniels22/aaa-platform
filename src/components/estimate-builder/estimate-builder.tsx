@@ -1,15 +1,33 @@
 "use client";
 
 import { useState } from "react";
-import { AlertOctagon } from "lucide-react";
+import { AlertOctagon, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/format";
 import type { Contact, Job } from "@/lib/types";
-import type { EstimateWithContents } from "@/lib/types";
+import type { EstimateWithContents, EstimateLineItem } from "@/lib/types";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
+  arrayMove,
+} from "@dnd-kit/sortable";
 import { HeaderBar } from "./header-bar";
 import { MetadataBar } from "./metadata-bar";
 import { CustomerBlock } from "./customer-block";
 import { StatementEditor } from "./statement-editor";
+import { SectionCard } from "./section-card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -42,26 +60,6 @@ function SlotLabel({ children }: { children: React.ReactNode }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Placeholder slot wrapper — dashed border box used for all 7 scaffold slots
-// ─────────────────────────────────────────────────────────────────────────────
-
-function Slot({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={`rounded-lg border border-dashed border-border bg-card p-4 ${className}`}
-    >
-      {children}
-    </section>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // EstimateBuilder — central state container (client component)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -80,6 +78,10 @@ export function EstimateBuilder({
 
   // Separate transient flag — not part of BuilderState because it's purely UI.
   const [isVoiding, setIsVoiding] = useState(false);
+
+  // ── Slot 5: Add-section inline input state ─────────────────────────────
+  const [showAddSection, setShowAddSection] = useState(false);
+  const [newSectionTitle, setNewSectionTitle] = useState("");
 
   // ── Callbacks ──────────────────────────────────────────────────────────────
 
@@ -152,15 +154,321 @@ export function EstimateBuilder({
 
   const isVoided = state.estimate.status === "voided";
 
-  // Count sections and items for the sections-list placeholder.
-  const sections = state.estimate.sections;
-  const totalItems = sections.reduce(
-    (acc, sec) =>
-      acc +
-      sec.items.length +
-      sec.subsections.reduce((a, sub) => a + sub.items.length, 0),
-    0,
+  // ── Slot 5: dnd-kit sensors ────────────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  // ── Slot 5: section CRUD ───────────────────────────────────────────────
+
+  async function onAddSection(title: string) {
+    // Plan deviation: title passed directly (spec had `() => void`, which omitted it).
+    try {
+      const res = await fetch(`/api/estimates/${state.estimate.id}/sections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, parent_section_id: null }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error || "Failed to add section");
+        return;
+      }
+      const { section } = (await res.json()) as {
+        section: EstimateWithContents["sections"][number];
+      };
+      const newSection = { ...section, items: [], subsections: [] };
+      setState((prev) => ({
+        ...prev,
+        estimate: {
+          ...prev.estimate,
+          sections: [...prev.estimate.sections, newSection],
+        },
+      }));
+      setShowAddSection(false);
+      setNewSectionTitle("");
+    } catch {
+      toast.error("Network error — could not add section");
+    }
+  }
+
+  async function onSectionRename(id: string, title: string) {
+    // Optimistic local update
+    setState((prev) => ({
+      ...prev,
+      estimate: {
+        ...prev.estimate,
+        sections: prev.estimate.sections.map((s) =>
+          s.id === id ? { ...s, title } : s
+        ),
+      },
+    }));
+    try {
+      const res = await fetch(
+        `/api/estimates/${state.estimate.id}/sections/${id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title }),
+        }
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error || "Failed to rename section");
+      }
+    } catch {
+      toast.error("Network error — could not rename section");
+    }
+  }
+
+  async function onSectionDelete(id: string) {
+    setState((prev) => ({
+      ...prev,
+      estimate: {
+        ...prev.estimate,
+        sections: prev.estimate.sections.filter((s) => s.id !== id),
+      },
+    }));
+    try {
+      const res = await fetch(
+        `/api/estimates/${state.estimate.id}/sections/${id}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error || "Failed to delete section");
+      }
+    } catch {
+      toast.error("Network error — could not delete section");
+    }
+  }
+
+  // ── Slot 5: subsection CRUD ────────────────────────────────────────────
+
+  async function onSubsectionAdd(parentId: string, title: string) {
+    // Plan deviation: title passed directly (spec had `(parentId: string) => void`).
+    try {
+      const res = await fetch(`/api/estimates/${state.estimate.id}/sections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, parent_section_id: parentId }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error || "Failed to add subsection");
+        return;
+      }
+      const { section } = (await res.json()) as {
+        section: import("@/lib/types").EstimateSection;
+      };
+      const newSub = { ...section, items: [] };
+      setState((prev) => ({
+        ...prev,
+        estimate: {
+          ...prev.estimate,
+          sections: prev.estimate.sections.map((s) =>
+            s.id === parentId
+              ? { ...s, subsections: [...s.subsections, newSub] }
+              : s
+          ),
+        },
+      }));
+    } catch {
+      toast.error("Network error — could not add subsection");
+    }
+  }
+
+  async function onSubsectionRename(id: string, title: string) {
+    // Optimistic update
+    setState((prev) => ({
+      ...prev,
+      estimate: {
+        ...prev.estimate,
+        sections: prev.estimate.sections.map((s) => ({
+          ...s,
+          subsections: s.subsections.map((sub) =>
+            sub.id === id ? { ...sub, title } : sub
+          ),
+        })),
+      },
+    }));
+    try {
+      const res = await fetch(
+        `/api/estimates/${state.estimate.id}/sections/${id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title }),
+        }
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error || "Failed to rename subsection");
+      }
+    } catch {
+      toast.error("Network error — could not rename subsection");
+    }
+  }
+
+  async function onSubsectionDelete(id: string) {
+    setState((prev) => ({
+      ...prev,
+      estimate: {
+        ...prev.estimate,
+        sections: prev.estimate.sections.map((s) => ({
+          ...s,
+          subsections: s.subsections.filter((sub) => sub.id !== id),
+        })),
+      },
+    }));
+    try {
+      const res = await fetch(
+        `/api/estimates/${state.estimate.id}/sections/${id}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error || "Failed to delete subsection");
+      }
+    } catch {
+      toast.error("Network error — could not delete subsection");
+    }
+  }
+
+  // ── Slot 5: line-item delete ───────────────────────────────────────────
+
+  async function onLineItemDelete(id: string) {
+    // Remove from local state (works for items in sections OR subsections)
+    setState((prev) => ({
+      ...prev,
+      estimate: {
+        ...prev.estimate,
+        sections: prev.estimate.sections.map((s) => ({
+          ...s,
+          items: s.items.filter((i) => i.id !== id),
+          subsections: s.subsections.map((sub) => ({
+            ...sub,
+            items: sub.items.filter((i) => i.id !== id),
+          })),
+        })),
+      },
+    }));
+    try {
+      const res = await fetch(
+        `/api/estimates/${state.estimate.id}/line-items/${id}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error || "Failed to delete line item");
+      }
+    } catch {
+      toast.error("Network error — could not delete line item");
+    }
+  }
+
+  // ── Slot 5: stubs for Task 25 / Task 26 ──────────────────────────────
+
+  // TODO Task 25: replace with real LineItemRow in-place edit
+  function onLineItemEdit(item: EstimateLineItem) {
+    toast.info(`Line item editing comes in Task 25 (item: ${item.id.slice(0, 8)}…)`);
+  }
+
+  // TODO Task 26: replace with AddItemDialog
+  function onAddLineItem(sectionId: string) {
+    toast.info(`Add Item dialog comes in Task 26 (section: ${sectionId.slice(0, 8)}…)`);
+  }
+
+  // ── Slot 5: drag-end handler ───────────────────────────────────────────
+  // NOTE: Drag-reorder updates local state only — Task 28 will add the
+  // PUT /sections bulk-reorder API call when auto-save lands.
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const activeType = active.data.current?.type as string | undefined;
+
+    if (activeType === "section") {
+      setState((prev) => {
+        const secs = prev.estimate.sections;
+        const oldIdx = secs.findIndex((s) => s.id === active.id);
+        const newIdx = secs.findIndex((s) => s.id === over.id);
+        if (oldIdx === -1 || newIdx === -1) return prev;
+        return {
+          ...prev,
+          estimate: {
+            ...prev.estimate,
+            sections: arrayMove(secs, oldIdx, newIdx),
+          },
+        };
+      });
+      return;
+    }
+
+    if (activeType === "subsection") {
+      // Cross-section drags: snap back — only allow within the same parent section.
+      const activeParent = active.data.current?.parentSectionId as string | undefined;
+      const overParent = over.data.current?.parentSectionId as string | undefined;
+      if (activeParent !== overParent) return; // snap back
+
+      setState((prev) => ({
+        ...prev,
+        estimate: {
+          ...prev.estimate,
+          sections: prev.estimate.sections.map((s) => {
+            if (s.id !== activeParent) return s;
+            const subs = s.subsections;
+            const oldIdx = subs.findIndex((sub) => sub.id === active.id);
+            const newIdx = subs.findIndex((sub) => sub.id === over.id);
+            if (oldIdx === -1 || newIdx === -1) return s;
+            return { ...s, subsections: arrayMove(subs, oldIdx, newIdx) };
+          }),
+        },
+      }));
+      return;
+    }
+
+    if (activeType === "line-item") {
+      // Cross-section/cross-subsection drags: snap back.
+      const activeSectionId = active.data.current?.sectionId as string | undefined;
+      const overSectionId = over.data.current?.sectionId as string | undefined;
+      if (activeSectionId !== overSectionId) return; // snap back
+
+      setState((prev) => ({
+        ...prev,
+        estimate: {
+          ...prev.estimate,
+          sections: prev.estimate.sections.map((s) => {
+            // Check direct items
+            if (s.id === activeSectionId) {
+              const items = s.items;
+              const oldIdx = items.findIndex((i) => i.id === active.id);
+              const newIdx = items.findIndex((i) => i.id === over.id);
+              if (oldIdx === -1 || newIdx === -1) return s;
+              return { ...s, items: arrayMove(items, oldIdx, newIdx) };
+            }
+            // Check subsection items
+            return {
+              ...s,
+              subsections: s.subsections.map((sub) => {
+                if (sub.id !== activeSectionId) return sub;
+                const items = sub.items;
+                const oldIdx = items.findIndex((i) => i.id === active.id);
+                const newIdx = items.findIndex((i) => i.id === over.id);
+                if (oldIdx === -1 || newIdx === -1) return sub;
+                return { ...sub, items: arrayMove(items, oldIdx, newIdx) };
+              }),
+            };
+          }),
+        },
+      }));
+    }
+  }
+
+  // ── Derived ───────────────────────────────────────────────────────────
+  const sections = state.estimate.sections;
 
   return (
     <div className="relative min-h-screen bg-background">
@@ -211,45 +519,109 @@ export function EstimateBuilder({
           readOnly={isVoided}
         />
 
-        {/* ── SLOT 5: Sections list ────────────────────────────────────────── */}
-        <Slot>
-          <SlotLabel>Task 24 · Sections List (SectionCard per section)</SlotLabel>
+        {/* ── SLOT 5: Sections list (Task 24) ──────────────────────────────── */}
+        {/* DndContext wraps the entire sections list. Each SectionCard contains
+            its own inner SortableContexts for subsections and direct items,
+            providing the drag-constraint boundaries described in spec §5.1. */}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
           {sections.length === 0 ? (
-            <div className="text-sm text-muted-foreground italic">
-              No sections yet.
+            /* Empty state — spec §10 */
+            <div className="rounded-xl border-2 border-dashed border-border bg-card p-12 flex flex-col items-center gap-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                Add a section to get started
+              </p>
+              <Button
+                onClick={() => setShowAddSection(true)}
+                size="sm"
+                className="gap-1.5"
+              >
+                <Plus size={14} />
+                New Section
+              </Button>
             </div>
           ) : (
-            <ul className="space-y-2">
-              {sections.map((sec) => (
-                <li key={sec.id} className="text-sm">
-                  <div className="font-medium text-foreground">{sec.title}</div>
-                  <div className="text-muted-foreground text-xs">
-                    {sec.items.length} direct item
-                    {sec.items.length !== 1 ? "s" : ""}
-                    {sec.subsections.length > 0 && (
-                      <>
-                        {" · "}
-                        {sec.subsections.length} subsection
-                        {sec.subsections.length !== 1 ? "s" : ""}
-                        {" ("}
-                        {sec.subsections.reduce(
-                          (a, sub) => a + sub.items.length,
-                          0,
-                        )}{" "}
-                        items
-                        {")"}
-                      </>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <SortableContext
+              items={sections.map((s) => s.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <ul className="space-y-3">
+                {sections.map((sec) => (
+                  <SectionCard
+                    key={sec.id}
+                    section={sec}
+                    onRename={onSectionRename}
+                    onDelete={onSectionDelete}
+                    onAddSubsection={onSubsectionAdd}
+                    onAddLineItem={onAddLineItem}
+                    onLineItemEdit={onLineItemEdit}
+                    onLineItemDelete={onLineItemDelete}
+                    onSubsectionRename={onSubsectionRename}
+                    onSubsectionDelete={onSubsectionDelete}
+                    onSubsectionLineItemDelete={onLineItemDelete}
+                  />
+                ))}
+              </ul>
+            </SortableContext>
           )}
-          <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
-            {sections.length} section{sections.length !== 1 ? "s" : ""} ·{" "}
-            {totalItems} total item{totalItems !== 1 ? "s" : ""}
+
+          {/* Add Section inline input — shown below the list */}
+          <div className="mt-3 pt-3 border-t border-border">
+            {showAddSection ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  autoFocus
+                  value={newSectionTitle}
+                  maxLength={200}
+                  placeholder="Section name"
+                  onChange={(e) => setNewSectionTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newSectionTitle.trim()) {
+                      void onAddSection(newSectionTitle.trim());
+                    }
+                    if (e.key === "Escape") {
+                      setShowAddSection(false);
+                      setNewSectionTitle("");
+                    }
+                  }}
+                  className="h-8 text-sm flex-1"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (newSectionTitle.trim()) {
+                      void onAddSection(newSectionTitle.trim());
+                    }
+                  }}
+                  disabled={!newSectionTitle.trim()}
+                >
+                  Add
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setShowAddSection(false);
+                    setNewSectionTitle("");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowAddSection(true)}
+                className="flex items-center gap-1.5 px-3 py-2 w-full rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors border border-dashed border-border"
+              >
+                <Plus size={13} />
+                Add Section
+              </button>
+            )}
           </div>
-        </Slot>
+        </DndContext>
 
         {/* ── SLOT 6: Closing statement ────────────────────────────────────── */}
         <StatementEditor
