@@ -24,29 +24,8 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/format";
-import type { Estimate, EstimateStatus } from "@/lib/types";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Status badge color map (all 6 statuses)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const STATUS_BADGE_CLASSES: Record<EstimateStatus, string> = {
-  draft: "bg-muted text-muted-foreground",
-  sent: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-  approved: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
-  rejected: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
-  converted: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
-  voided: "bg-destructive text-destructive-foreground",
-};
-
-const STATUS_LABELS: Record<EstimateStatus, string> = {
-  draft: "Draft",
-  sent: "Sent",
-  approved: "Approved",
-  rejected: "Rejected",
-  converted: "Converted",
-  voided: "Voided",
-};
+import { STATUS_BADGE_CLASSES, formatStatusLabel } from "@/lib/estimate-status";
+import type { Estimate } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Inline void confirm dialog
@@ -269,7 +248,7 @@ export function EstimatesInvoicesSection({ jobId }: EstimatesInvoicesSectionProp
                     <span
                       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE_CLASSES[est.status]}`}
                     >
-                      {STATUS_LABELS[est.status]}
+                      {formatStatusLabel(est.status)}
                     </span>
                   </TableCell>
 
