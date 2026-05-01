@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { FileText, Send, FileDown, Ban } from "lucide-react";
+import { SaveIndicator } from "./save-indicator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,7 +39,8 @@ interface HeaderBarProps {
   onVoid: (reason: string) => void;
   onSend: () => void;
   onPdfExport: () => void;
-  isSaving: boolean;
+  saveStatus: "idle" | "saving" | "saved" | "error";
+  lastSavedAt: Date | null;
   isVoiding: boolean;
 }
 
@@ -140,7 +142,8 @@ export function HeaderBar({
   onVoid,
   onSend,
   onPdfExport,
-  isSaving,
+  saveStatus,
+  lastSavedAt,
   isVoiding,
 }: HeaderBarProps) {
   const isVoided = estimate.status === "voided";
@@ -249,10 +252,7 @@ export function HeaderBar({
 
         {/* ── Right: action buttons + save indicator ────────────────────── */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Saving indicator — full SaveIndicator lands in Task 27 */}
-          {isSaving && (
-            <span className="text-xs text-muted-foreground">Saving…</span>
-          )}
+          <SaveIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
 
           {/* Void button */}
           <Button

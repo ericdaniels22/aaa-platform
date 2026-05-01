@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { AlertOctagon, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { formatCurrency } from "@/lib/format";
-import type { Contact, Job } from "@/lib/types";
+import type { AdjustmentType, Contact, Job } from "@/lib/types";
 import type { EstimateWithContents, EstimateLineItem } from "@/lib/types";
+import { computeEstimateTotals, sumLineItemsFromSections } from "@/lib/estimates-calc";
 import {
   DndContext,
   closestCenter,
@@ -22,6 +22,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { HeaderBar } from "./header-bar";
+import { TotalsPanel } from "./totals-panel";
 import { MetadataBar } from "./metadata-bar";
 import { CustomerBlock } from "./customer-block";
 import { StatementEditor } from "./statement-editor";
@@ -46,18 +47,6 @@ export interface EstimateBuilderProps {
   defaultValidDays: number;
   defaultOpeningStatement: string;
   defaultClosingStatement: string;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Slot label — small label shown inside each placeholder slot
-// ─────────────────────────────────────────────────────────────────────────────
-
-function SlotLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 font-medium">
-      {children}
-    </div>
-  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -157,6 +146,33 @@ export function EstimateBuilder({
   }
 
   const isVoided = state.estimate.status === "voided";
+
+  // ── Task 27: markup / discount / tax callbacks ─────────────────────────
+
+  function onMarkupChange(type: AdjustmentType, value: number) {
+    setState((prev) => {
+      const next_estimate = { ...prev.estimate, markup_type: type, markup_value: value };
+      const totals = computeEstimateTotals(next_estimate);
+      return { ...prev, estimate: { ...next_estimate, ...totals } };
+    });
+  }
+
+  function onDiscountChange(type: AdjustmentType, value: number) {
+    setState((prev) => {
+      const next_estimate = { ...prev.estimate, discount_type: type, discount_value: value };
+      const totals = computeEstimateTotals(next_estimate);
+      return { ...prev, estimate: { ...next_estimate, ...totals } };
+    });
+  }
+
+  function onTaxRateChange(rate: number) {
+    const clamped = Math.max(0, Math.min(100, rate));
+    setState((prev) => {
+      const next_estimate = { ...prev.estimate, tax_rate: clamped };
+      const totals = computeEstimateTotals(next_estimate);
+      return { ...prev, estimate: { ...next_estimate, ...totals } };
+    });
+  }
 
   // ── Slot 5: dnd-kit sensors ────────────────────────────────────────────
   const sensors = useSensors(
@@ -355,20 +371,20 @@ export function EstimateBuilder({
   async function onLineItemDelete(id: string) {
     const snapshot = state.estimate; // capture before mutation
     // Remove from local state (works for items in sections OR subsections)
-    setState((prev) => ({
-      ...prev,
-      estimate: {
-        ...prev.estimate,
-        sections: prev.estimate.sections.map((s) => ({
-          ...s,
-          items: s.items.filter((i) => i.id !== id),
-          subsections: s.subsections.map((sub) => ({
-            ...sub,
-            items: sub.items.filter((i) => i.id !== id),
-          })),
+    setState((prev) => {
+      const sections_after = prev.estimate.sections.map((s) => ({
+        ...s,
+        items: s.items.filter((i) => i.id !== id),
+        subsections: s.subsections.map((sub) => ({
+          ...sub,
+          items: sub.items.filter((i) => i.id !== id),
         })),
-      },
-    }));
+      }));
+      const subtotal = sumLineItemsFromSections(sections_after);
+      const next_estimate = { ...prev.estimate, sections: sections_after, subtotal };
+      const totals = computeEstimateTotals(next_estimate);
+      return { ...prev, estimate: { ...next_estimate, ...totals } };
+    });
     try {
       const res = await fetch(
         `/api/estimates/${state.estimate.id}/line-items/${id}`,
@@ -390,24 +406,24 @@ export function EstimateBuilder({
   // ── Slot 5: line-item inline edit (Task 25) ───────────────────────────
 
   function onLineItemChange(itemId: string, partial: Partial<EstimateLineItem>) {
-    setState((prev) => ({
-      ...prev,
-      estimate: {
-        ...prev.estimate,
-        sections: prev.estimate.sections.map((sec) => ({
-          ...sec,
-          items: sec.items.map((item) =>
+    setState((prev) => {
+      const sections_after = prev.estimate.sections.map((sec) => ({
+        ...sec,
+        items: sec.items.map((item) =>
+          item.id === itemId ? { ...item, ...partial } : item
+        ),
+        subsections: sec.subsections.map((sub) => ({
+          ...sub,
+          items: sub.items.map((item) =>
             item.id === itemId ? { ...item, ...partial } : item
           ),
-          subsections: sec.subsections.map((sub) => ({
-            ...sub,
-            items: sub.items.map((item) =>
-              item.id === itemId ? { ...item, ...partial } : item
-            ),
-          })),
         })),
-      },
-    }));
+      }));
+      const subtotal = sumLineItemsFromSections(sections_after);
+      const next_estimate = { ...prev.estimate, sections: sections_after, subtotal };
+      const totals = computeEstimateTotals(next_estimate);
+      return { ...prev, estimate: { ...next_estimate, ...totals } };
+    });
     // Task 28 auto-save will pick this up.
   }
 
@@ -416,25 +432,25 @@ export function EstimateBuilder({
   }
 
   function onLineItemAdded(newItem: EstimateLineItem) {
-    setState((prev) => ({
-      ...prev,
-      estimate: {
-        ...prev.estimate,
-        sections: prev.estimate.sections.map((sec) => {
-          if (sec.id === newItem.section_id) {
-            return { ...sec, items: [...sec.items, newItem] };
-          }
-          return {
-            ...sec,
-            subsections: sec.subsections.map((sub) =>
-              sub.id === newItem.section_id
-                ? { ...sub, items: [...sub.items, newItem] }
-                : sub
-            ),
-          };
-        }),
-      },
-    }));
+    setState((prev) => {
+      const sections_after = prev.estimate.sections.map((sec) => {
+        if (sec.id === newItem.section_id) {
+          return { ...sec, items: [...sec.items, newItem] };
+        }
+        return {
+          ...sec,
+          subsections: sec.subsections.map((sub) =>
+            sub.id === newItem.section_id
+              ? { ...sub, items: [...sub.items, newItem] }
+              : sub
+          ),
+        };
+      });
+      const subtotal = sumLineItemsFromSections(sections_after);
+      const next_estimate = { ...prev.estimate, sections: sections_after, subtotal };
+      const totals = computeEstimateTotals(next_estimate);
+      return { ...prev, estimate: { ...next_estimate, ...totals } };
+    });
   }
 
   // ── Slot 5: drag-end handler ───────────────────────────────────────────
@@ -557,7 +573,8 @@ export function EstimateBuilder({
           onVoid={onVoid}
           onSend={() => {}}
           onPdfExport={() => {}}
-          isSaving={state.saveStatus === "saving"}
+          saveStatus={state.saveStatus}
+          lastSavedAt={state.lastSavedAt}
           isVoiding={isVoiding}
         />
 
@@ -695,56 +712,14 @@ export function EstimateBuilder({
         />
       </main>
 
-      {/* ── SLOT 7: TotalsPanel (sticky bottom-right) ───────────────────────
-          TODO: refine position + overflow handling in Task 27 */}
-      <div
-        className="fixed bottom-4 right-4 z-10 w-64 rounded-lg border border-dashed border-border bg-card p-4 shadow-lg"
-        aria-label="Totals panel placeholder"
-      >
-        <SlotLabel>Task 27 · TotalsPanel</SlotLabel>
-        <div className="space-y-1 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Subtotal</span>
-            <span className="text-foreground font-mono">
-              {formatCurrency(state.estimate.subtotal)}
-            </span>
-          </div>
-          {state.estimate.markup_amount !== 0 && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Markup</span>
-              <span className="text-foreground font-mono">
-                {formatCurrency(state.estimate.markup_amount)}
-              </span>
-            </div>
-          )}
-          {state.estimate.discount_amount !== 0 && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Discount</span>
-              <span className="text-foreground font-mono">
-                −{formatCurrency(state.estimate.discount_amount)}
-              </span>
-            </div>
-          )}
-          {state.estimate.tax_amount !== 0 && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Tax</span>
-              <span className="text-foreground font-mono">
-                {formatCurrency(state.estimate.tax_amount)}
-              </span>
-            </div>
-          )}
-          <div className="flex justify-between border-t border-border pt-1 mt-1 font-semibold">
-            <span className="text-foreground">Total</span>
-            <span className="text-foreground font-mono">
-              {formatCurrency(state.estimate.total)}
-            </span>
-          </div>
-        </div>
-        {/* Task 27: add SaveIndicator (saveStatus, lastSavedAt) here */}
-        <div className="mt-2 text-xs text-muted-foreground">
-          Save indicator — Task 28
-        </div>
-      </div>
+      {/* ── SLOT 7: TotalsPanel (sticky bottom-right) ─────────────────────── */}
+      <TotalsPanel
+        estimate={state.estimate}
+        onMarkupChange={onMarkupChange}
+        onDiscountChange={onDiscountChange}
+        onTaxRateChange={onTaxRateChange}
+        readOnly={isVoided}
+      />
 
       {/* ── Task 26: AddItemDialog ────────────────────────────────────────── */}
       <AddItemDialog
