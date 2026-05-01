@@ -9,6 +9,7 @@ import type { EstimateWithContents } from "@/lib/types";
 import { HeaderBar } from "./header-bar";
 import { MetadataBar } from "./metadata-bar";
 import { CustomerBlock } from "./customer-block";
+import { StatementEditor } from "./statement-editor";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -24,6 +25,8 @@ export interface EstimateBuilderProps {
   estimate: EstimateWithContents;
   job: Job & { contact: Contact | null };
   defaultValidDays: number;
+  defaultOpeningStatement: string;
+  defaultClosingStatement: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,7 +65,13 @@ function Slot({
 // EstimateBuilder — central state container (client component)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function EstimateBuilder({ estimate, job, defaultValidDays }: EstimateBuilderProps) {
+export function EstimateBuilder({
+  estimate,
+  job,
+  defaultValidDays,
+  defaultOpeningStatement,
+  defaultClosingStatement,
+}: EstimateBuilderProps) {
   const [state, setState] = useState<BuilderState>({
     estimate,
     saveStatus: "idle",
@@ -100,6 +109,16 @@ export function EstimateBuilder({ estimate, job, defaultValidDays }: EstimateBui
 
   function onValidUntilChange(d: string | null) {
     setState((prev) => ({ ...prev, estimate: { ...prev.estimate, valid_until: d } }));
+    // Task 28 auto-save will pick this up.
+  }
+
+  function onOpeningStatementChange(next: string | null) {
+    setState((prev) => ({ ...prev, estimate: { ...prev.estimate, opening_statement: next } }));
+    // Task 28 auto-save will pick this up.
+  }
+
+  function onClosingStatementChange(next: string | null) {
+    setState((prev) => ({ ...prev, estimate: { ...prev.estimate, closing_statement: next } }));
     // Task 28 auto-save will pick this up.
   }
 
@@ -184,14 +203,13 @@ export function EstimateBuilder({ estimate, job, defaultValidDays }: EstimateBui
         <CustomerBlock job={job} />
 
         {/* ── SLOT 4: Opening statement ────────────────────────────────────── */}
-        <Slot>
-          <SlotLabel>Task 23 · Opening Statement (Tiptap editor)</SlotLabel>
-          <div className="text-sm text-muted-foreground italic">
-            {state.estimate.opening_statement
-              ? state.estimate.opening_statement.slice(0, 200)
-              : "(no opening statement)"}
-          </div>
-        </Slot>
+        <StatementEditor
+          label="Opening statement"
+          value={state.estimate.opening_statement}
+          onChange={onOpeningStatementChange}
+          defaultText={defaultOpeningStatement}
+          readOnly={isVoided}
+        />
 
         {/* ── SLOT 5: Sections list ────────────────────────────────────────── */}
         <Slot>
@@ -234,14 +252,13 @@ export function EstimateBuilder({ estimate, job, defaultValidDays }: EstimateBui
         </Slot>
 
         {/* ── SLOT 6: Closing statement ────────────────────────────────────── */}
-        <Slot>
-          <SlotLabel>Task 23 · Closing Statement (Tiptap editor)</SlotLabel>
-          <div className="text-sm text-muted-foreground italic">
-            {state.estimate.closing_statement
-              ? state.estimate.closing_statement.slice(0, 200)
-              : "(no closing statement)"}
-          </div>
-        </Slot>
+        <StatementEditor
+          label="Closing statement"
+          value={state.estimate.closing_statement}
+          onChange={onClosingStatementChange}
+          defaultText={defaultClosingStatement}
+          readOnly={isVoided}
+        />
       </main>
 
       {/* ── SLOT 7: TotalsPanel (sticky bottom-right) ───────────────────────

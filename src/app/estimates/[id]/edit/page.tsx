@@ -101,6 +101,28 @@ export default async function EstimateEditPage({
     .maybeSingle();
   const defaultValidDays = parseInt(validDaysSetting?.value ?? "30", 10) || 30;
 
-  // 5. Hand off to the client-component state container.
-  return <EstimateBuilder estimate={estimate} job={job} defaultValidDays={defaultValidDays} />;
+  // 5. Fetch the default opening + closing statement settings.
+  const { data: openingSetting } = await supabase
+    .from("company_settings")
+    .select("value")
+    .eq("key", "default_estimate_opening_statement")
+    .maybeSingle();
+  const { data: closingSetting } = await supabase
+    .from("company_settings")
+    .select("value")
+    .eq("key", "default_estimate_closing_statement")
+    .maybeSingle();
+  const defaultOpeningStatement: string = openingSetting?.value ?? "";
+  const defaultClosingStatement: string = closingSetting?.value ?? "";
+
+  // 6. Hand off to the client-component state container.
+  return (
+    <EstimateBuilder
+      estimate={estimate}
+      job={job}
+      defaultValidDays={defaultValidDays}
+      defaultOpeningStatement={defaultOpeningStatement}
+      defaultClosingStatement={defaultClosingStatement}
+    />
+  );
 }
