@@ -39,11 +39,18 @@ export async function POST(request: Request, ctx: RouteCtx) {
   // Compute sort_order if not given
   let sort_order = body.sort_order;
   if (sort_order === undefined) {
-    const { data: max } = await supabase
+    let query = supabase
       .from("estimate_sections")
       .select("sort_order")
-      .eq("estimate_id", estimateId)
-      .is("parent_section_id", body.parent_section_id ?? null)
+      .eq("estimate_id", estimateId);
+
+    if (body.parent_section_id) {
+      query = query.eq("parent_section_id", body.parent_section_id);
+    } else {
+      query = query.is("parent_section_id", null);
+    }
+
+    const { data: max } = await query
       .order("sort_order", { ascending: false })
       .limit(1)
       .maybeSingle<{ sort_order: number }>();
