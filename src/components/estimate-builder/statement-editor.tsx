@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import TiptapEditor from "@/components/tiptap-editor";
@@ -54,6 +54,7 @@ export function StatementEditor({
   // resetCounter forces TiptapEditor to unmount/remount when the user clicks
   // "Reset to default", so the editor re-initializes with the new content prop.
   const [resetCounter, setResetCounter] = useState(0);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const showResetButton =
     !readOnly && defaultText !== "" && value !== defaultText;
@@ -104,34 +105,59 @@ export function StatementEditor({
 
   // ── editable path ──────────────────────────────────────────────────────────
 
+  // Collapsed preview: strip HTML tags from the value (or fall back to default), truncate
+  const collapsedPreview = (() => {
+    const source = !isEmptyHtml(value) ? (value as string) : defaultText;
+    const stripped = stripHtmlTags(source).trim();
+    if (!stripped) return null;
+    return stripped.length > 80 ? stripped.slice(0, 80) + "…" : stripped;
+  })();
+
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-2">
-      {/* Header row: label + reset button */}
-      <div className="flex items-center justify-between">
-        <Label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+      {/* Header row: label + reset button + collapse toggle */}
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-xs uppercase tracking-wide text-muted-foreground font-medium shrink-0">
           {label}
         </Label>
-        {showResetButton && (
-          <Button
+        <div className="flex items-center gap-1 shrink-0">
+          {showResetButton && !isCollapsed && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+              onClick={handleReset}
+            >
+              <RotateCcw size={12} />
+              Reset to default
+            </Button>
+          )}
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
-            onClick={handleReset}
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            aria-label={isCollapsed ? `Expand ${label.toLowerCase()}` : `Collapse ${label.toLowerCase()}`}
+            title={isCollapsed ? "Expand" : "Collapse"}
           >
-            <RotateCcw size={12} />
-            Reset to default
-          </Button>
-        )}
+            {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+          </button>
+        </div>
       </div>
 
-      {/* Editor */}
-      <TiptapEditor
-        key={resetCounter}
-        content={editorContent}
-        onChange={handleChange}
-        placeholder={placeholder}
-      />
+      {/* Collapsed preview OR full editor */}
+      {isCollapsed ? (
+        <div className="text-sm text-muted-foreground italic">
+          {collapsedPreview || "(empty)"}
+        </div>
+      ) : (
+        <TiptapEditor
+          key={resetCounter}
+          content={editorContent}
+          onChange={handleChange}
+          placeholder={placeholder}
+        />
+      )}
     </div>
   );
 }

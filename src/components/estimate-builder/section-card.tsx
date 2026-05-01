@@ -31,6 +31,8 @@ import {
   Plus,
   Pencil,
   FolderPlus,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -236,6 +238,7 @@ export function SectionCard({
   const [draftTitle, setDraftTitle] = useState(section.title);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [addSubOpen, setAddSubOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -340,6 +343,17 @@ export function SectionCard({
           </button>
         )}
 
+        {/* Collapse toggle — always visible */}
+        <button
+          type="button"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+          aria-label={isCollapsed ? "Expand section" : "Collapse section"}
+          title={isCollapsed ? "Expand" : "Collapse"}
+        >
+          {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+        </button>
+
         {/* Kebab menu — hidden when readOnly */}
         {!readOnly && (
           <DropdownMenu>
@@ -371,7 +385,8 @@ export function SectionCard({
         )}
       </header>
 
-      {/* ── Body ────────────────────────────────────────────────────────── */}
+      {/* ── Body — hidden when collapsed ─────────────────────────────────── */}
+      {!isCollapsed && (
       <div className="p-3 space-y-3">
 
         {/* ── Subsections list ──────────────────────────────────────────── */}
@@ -430,9 +445,10 @@ export function SectionCard({
           </p>
         )}
       </div>
+      )}
 
-      {/* ── Footer — hidden when readOnly ────────────────────────────────── */}
-      {!readOnly && (
+      {/* ── Footer — hidden when readOnly OR collapsed ────────────────────── */}
+      {!readOnly && !isCollapsed && (
         <div className="px-3 pb-3 flex items-center gap-2">
           <button
             onClick={() => {

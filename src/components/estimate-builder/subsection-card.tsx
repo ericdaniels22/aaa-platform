@@ -19,6 +19,8 @@ import {
   Trash2,
   Plus,
   Pencil,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -139,6 +141,7 @@ export function SubsectionCard({
   const [editingTitle, setEditingTitle] = useState(false);
   const [draftTitle, setDraftTitle] = useState(subsection.title);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -228,6 +231,17 @@ export function SubsectionCard({
           </button>
         )}
 
+        {/* Collapse toggle — always visible */}
+        <button
+          type="button"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+          aria-label={isCollapsed ? "Expand subsection" : "Collapse subsection"}
+          title={isCollapsed ? "Expand" : "Collapse"}
+        >
+          {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+        </button>
+
         {/* Kebab menu — no "Add subsection" (one-level rule). Hidden when readOnly. */}
         {!readOnly && (
           <DropdownMenu>
@@ -255,7 +269,8 @@ export function SubsectionCard({
         )}
       </header>
 
-      {/* ── Items list ──────────────────────────────────────────────────── */}
+      {/* ── Items list — hidden when collapsed ──────────────────────────── */}
+      {!isCollapsed && (
       <div className="p-2 space-y-1">
         {/* SortableContext for this subsection's items — cross-subsection drags
             snap back because items in other subsections are in a different context. */}
@@ -281,9 +296,10 @@ export function SubsectionCard({
           </p>
         )}
       </div>
+      )}
 
-      {/* ── Footer — hidden when readOnly ────────────────────────────────── */}
-      {!readOnly && (
+      {/* ── Footer — hidden when readOnly OR collapsed ────────────────────── */}
+      {!readOnly && !isCollapsed && (
         <div className="px-2 pb-2">
           <button
             onClick={() => {
