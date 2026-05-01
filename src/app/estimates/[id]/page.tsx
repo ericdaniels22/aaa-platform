@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertCircle, FileText, Pencil } from "lucide-react";
+import { AlertCircle, ArrowLeft, FileText, Pencil } from "lucide-react";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission } from "@/lib/permissions-api";
 import { getEstimateWithContents } from "@/lib/estimates";
@@ -169,6 +169,15 @@ export default async function EstimateViewPage({
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      {/* ── BACK LINK ───────────────────────────────────────────────────────── */}
+      <Link
+        href={`/jobs/${estimate.job_id}`}
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft size={14} />
+        Back to job
+      </Link>
+
       {/* ── VOIDED BANNER ───────────────────────────────────────────────────── */}
       {isVoided && (
         <div className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-2 text-destructive font-medium">
