@@ -7,6 +7,8 @@ import { formatCurrency } from "@/lib/format";
 import type { Contact, Job } from "@/lib/types";
 import type { EstimateWithContents } from "@/lib/types";
 import { HeaderBar } from "./header-bar";
+import { MetadataBar } from "./metadata-bar";
+import { CustomerBlock } from "./customer-block";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -21,6 +23,7 @@ interface BuilderState {
 export interface EstimateBuilderProps {
   estimate: EstimateWithContents;
   job: Job & { contact: Contact | null };
+  defaultValidDays: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -59,7 +62,7 @@ function Slot({
 // EstimateBuilder — central state container (client component)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function EstimateBuilder({ estimate, job }: EstimateBuilderProps) {
+export function EstimateBuilder({ estimate, job, defaultValidDays }: EstimateBuilderProps) {
   const [state, setState] = useState<BuilderState>({
     estimate,
     saveStatus: "idle",
@@ -73,6 +76,30 @@ export function EstimateBuilder({ estimate, job }: EstimateBuilderProps) {
 
   function onTitleChange(title: string) {
     setState((prev) => ({ ...prev, estimate: { ...prev.estimate, title } }));
+    // Task 28 auto-save will pick this up.
+  }
+
+  function onIssuedDateChange(d: string | null) {
+    setState((prev) => {
+      const next = { ...prev, estimate: { ...prev.estimate, issued_date: d } };
+      // Auto-default valid_until if issued date is set and valid_until is currently null.
+      // Use UTC components to avoid timezone off-by-one on the day-add.
+      if (d && prev.estimate.valid_until === null) {
+        const [y, m, day] = d.split("-").map(Number);
+        const issued = new Date(Date.UTC(y, m - 1, day));
+        issued.setUTCDate(issued.getUTCDate() + defaultValidDays);
+        const yyyy = issued.getUTCFullYear();
+        const mm = String(issued.getUTCMonth() + 1).padStart(2, "0");
+        const dd = String(issued.getUTCDate()).padStart(2, "0");
+        next.estimate.valid_until = `${yyyy}-${mm}-${dd}`;
+      }
+      return next;
+    });
+    // Task 28 auto-save will pick this up.
+  }
+
+  function onValidUntilChange(d: string | null) {
+    setState((prev) => ({ ...prev, estimate: { ...prev.estimate, valid_until: d } }));
     // Task 28 auto-save will pick this up.
   }
 
@@ -105,11 +132,6 @@ export function EstimateBuilder({ estimate, job }: EstimateBuilderProps) {
   }
 
   const isVoided = state.estimate.status === "voided";
-
-  const { contact } = job;
-  const customerName = contact
-    ? `${contact.first_name} ${contact.last_name}`.trim()
-    : "—";
 
   // Count sections and items for the sections-list placeholder.
   const sections = state.estimate.sections;
@@ -152,38 +174,14 @@ export function EstimateBuilder({ estimate, job }: EstimateBuilderProps) {
         />
 
         {/* ── SLOT 2: MetadataBar ──────────────────────────────────────────── */}
-        <Slot>
-          <SlotLabel>Task 22 · MetadataBar</SlotLabel>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">Issued date: </span>
-              <span className="text-foreground">
-                {state.estimate.issued_date ?? "—"}
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Valid until: </span>
-              <span className="text-foreground">
-                {state.estimate.valid_until ?? "—"}
-              </span>
-            </div>
-          </div>
-        </Slot>
+        <MetadataBar
+          estimate={state.estimate}
+          onIssuedDateChange={onIssuedDateChange}
+          onValidUntilChange={onValidUntilChange}
+        />
 
         {/* ── SLOT 3: CustomerBlock ────────────────────────────────────────── */}
-        <Slot>
-          <SlotLabel>Task 22 · CustomerBlock</SlotLabel>
-          <div className="text-sm space-y-1">
-            <div className="font-medium text-foreground">{customerName}</div>
-            <div className="text-muted-foreground">{job.property_address}</div>
-            {contact?.email && (
-              <div className="text-muted-foreground">{contact.email}</div>
-            )}
-            {contact?.phone && (
-              <div className="text-muted-foreground">{contact.phone}</div>
-            )}
-          </div>
-        </Slot>
+        <CustomerBlock job={job} />
 
         {/* ── SLOT 4: Opening statement ────────────────────────────────────── */}
         <Slot>

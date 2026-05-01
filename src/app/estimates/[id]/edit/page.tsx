@@ -92,6 +92,15 @@ export default async function EstimateEditPage({
     notFound();
   }
 
-  // 4. Hand off to the client-component state container.
-  return <EstimateBuilder estimate={estimate} job={job} />;
+  // 4. Fetch the default_estimate_valid_days setting.
+  //    RLS handles org-scoping — no need to call getActiveOrganizationId.
+  const { data: validDaysSetting } = await supabase
+    .from("company_settings")
+    .select("value")
+    .eq("key", "default_estimate_valid_days")
+    .maybeSingle();
+  const defaultValidDays = parseInt(validDaysSetting?.value ?? "30", 10) || 30;
+
+  // 5. Hand off to the client-component state container.
+  return <EstimateBuilder estimate={estimate} job={job} defaultValidDays={defaultValidDays} />;
 }
