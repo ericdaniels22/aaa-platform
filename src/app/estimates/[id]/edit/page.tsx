@@ -4,7 +4,7 @@ import { AlertCircle } from "lucide-react";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission } from "@/lib/permissions-api";
 import { getEstimateWithContents } from "@/lib/estimates";
-import { EstimateBuilder } from "@/components/estimate-builder";
+import { EstimateBuilder } from "@/components/estimate-builder/estimate-builder";
 import type { Contact, Job } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
