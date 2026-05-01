@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { Job, JobAdjuster, Contact, JobActivity, Payment, Invoice, Photo, PhotoTag, PhotoReport, Email } from "@/lib/types";
 import FinancialsTab from "@/components/job-detail/financials-tab";
+import { EstimatesInvoicesSection } from "@/components/job-detail/estimates-invoices-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -746,6 +747,8 @@ export default function JobDetail({ jobId }: { jobId: string }) {
         existingAdjusterIds={(job.job_adjusters || []).map((ja) => ja.contact_id)}
         onSaved={fetchData}
       />
+
+      <EstimatesInvoicesSection jobId={jobId} />
 
       <JobFiles jobId={jobId} />
 
