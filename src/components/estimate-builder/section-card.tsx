@@ -33,7 +33,6 @@ import {
   FolderPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -52,6 +51,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { SubsectionCard } from "./subsection-card";
+import { LineItemRow } from "./line-item-row";
 import type { EstimateSection, EstimateLineItem } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,47 +69,13 @@ export interface SectionCardProps {
   onAddSubsection: (parentId: string, title: string) => void;
   onAddLineItem: (sectionId: string) => void;
   onLineItemDelete: (id: string) => void;
+  /** Task 25: called when an inline cell is committed; parent updates local state. */
+  onLineItemChange: (itemId: string, partial: Partial<EstimateLineItem>) => void;
   onSubsectionRename: (id: string, title: string) => void;
   onSubsectionDelete: (id: string) => void;
   onSubsectionLineItemDelete: (id: string) => void;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ReadOnlyLineItemRow — Task 24 placeholder; Task 25 replaces with LineItemRow
-// ─────────────────────────────────────────────────────────────────────────────
-
-function ReadOnlyLineItemRow({
-  item,
-  onDelete,
-}: {
-  item: EstimateLineItem;
-  onDelete: () => void;
-}) {
-  const total = item.quantity * item.unit_price;
-  const desc =
-    item.description.length > 80
-      ? item.description.slice(0, 80) + "…"
-      : item.description;
-  const qtyUnit = item.unit ? `${item.quantity} ${item.unit}` : String(item.quantity);
-
-  return (
-    <div className="group flex items-center gap-3 px-3 py-2 rounded-md border border-border bg-card text-sm">
-      <span className="flex-1 text-foreground truncate" title={item.description}>
-        {desc}
-      </span>
-      <span className="text-muted-foreground shrink-0 tabular-nums">{qtyUnit}</span>
-      <span className="text-foreground font-mono shrink-0 tabular-nums">
-        {formatCurrency(total)}
-      </span>
-      <button
-        onClick={onDelete}
-        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-        aria-label="Delete line item"
-      >
-        <Trash2 size={13} />
-      </button>
-    </div>
-  );
+  /** Task 25: when true, hides editing controls (voided estimate). */
+  readOnly?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -248,9 +214,11 @@ export function SectionCard({
   onAddSubsection,
   onAddLineItem,
   onLineItemDelete,
+  onLineItemChange,
   onSubsectionRename,
   onSubsectionDelete,
   onSubsectionLineItemDelete,
+  readOnly = false,
 }: SectionCardProps) {
   const {
     attributes,
@@ -319,16 +287,18 @@ export function SectionCard({
     >
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <header className="flex items-center gap-2 px-4 py-3 bg-muted/30 border-b border-border">
-        <button
-          {...attributes}
-          {...listeners}
-          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 -ml-1 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
-          aria-label="Drag section to reorder"
-        >
-          <GripVertical size={16} />
-        </button>
+        {!readOnly && (
+          <button
+            {...attributes}
+            {...listeners}
+            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 -ml-1 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
+            aria-label="Drag section to reorder"
+          >
+            <GripVertical size={16} />
+          </button>
+        )}
 
-        {editingTitle ? (
+        {!readOnly && editingTitle ? (
           <Input
             autoFocus
             value={draftTitle}
@@ -344,6 +314,18 @@ export function SectionCard({
             }}
             className="h-7 text-sm font-semibold flex-1"
           />
+        ) : readOnly ? (
+          <div className="flex-1 text-left">
+            <span className="text-sm font-semibold text-foreground">
+              {section.title}
+            </span>
+            <span className="text-xs text-muted-foreground ml-2">
+              {section.items.length} direct item{section.items.length !== 1 ? "s" : ""}
+              {section.subsections.length > 0 && (
+                <> · {section.subsections.length} subsection{section.subsections.length !== 1 ? "s" : ""}</>
+              )}
+            </span>
+          </div>
         ) : (
           <button onClick={startEditing} className="flex-1 text-left">
             <span className="text-sm font-semibold text-foreground">
@@ -358,33 +340,35 @@ export function SectionCard({
           </button>
         )}
 
-        {/* Kebab menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
-            aria-label="Section actions"
-          >
-            <MoreVertical size={16} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="bottom" align="end">
-            <DropdownMenuItem onClick={startEditing}>
-              <Pencil size={13} />
-              Rename
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setAddSubOpen(true)}>
-              <FolderPlus size={13} />
-              Add subsection
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="destructive"
-              onClick={() => setDeleteOpen(true)}
+        {/* Kebab menu — hidden when readOnly */}
+        {!readOnly && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+              aria-label="Section actions"
             >
-              <Trash2 size={13} />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <MoreVertical size={16} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="bottom" align="end">
+              <DropdownMenuItem onClick={startEditing}>
+                <Pencil size={13} />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setAddSubOpen(true)}>
+                <FolderPlus size={13} />
+                Add subsection
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 size={13} />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </header>
 
       {/* ── Body ────────────────────────────────────────────────────────── */}
@@ -409,6 +393,8 @@ export function SectionCard({
                     onDelete={onSubsectionDelete}
                     onAddLineItem={onAddLineItem}
                     onLineItemDelete={onSubsectionLineItemDelete}
+                    onLineItemChange={onLineItemChange}
+                    readOnly={readOnly}
                   />
                 ))}
               </ul>
@@ -426,11 +412,13 @@ export function SectionCard({
         >
           <div className="space-y-1">
             {sortedItems.map((item) => (
-              // Task 24: read-only rows — Task 25 adds useSortable + full edit UI
-              <ReadOnlyLineItemRow
+              <LineItemRow
                 key={item.id}
                 item={item}
+                parentSectionId={section.id}
+                onChange={(partial) => onLineItemChange(item.id, partial)}
                 onDelete={() => onLineItemDelete(item.id)}
+                readOnly={readOnly}
               />
             ))}
           </div>
@@ -443,26 +431,28 @@ export function SectionCard({
         )}
       </div>
 
-      {/* ── Footer ──────────────────────────────────────────────────────── */}
-      <div className="px-3 pb-3 flex items-center gap-2">
-        <button
-          onClick={() => {
-            // TODO Task 26: replace with AddItemDialog
-            onAddLineItem(section.id);
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors border border-dashed border-border"
-        >
-          <Plus size={12} />
-          Add item
-        </button>
-        <button
-          onClick={() => setAddSubOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors border border-dashed border-border"
-        >
-          <FolderPlus size={12} />
-          Add subsection
-        </button>
-      </div>
+      {/* ── Footer — hidden when readOnly ────────────────────────────────── */}
+      {!readOnly && (
+        <div className="px-3 pb-3 flex items-center gap-2">
+          <button
+            onClick={() => {
+              // TODO Task 26: replace with AddItemDialog
+              onAddLineItem(section.id);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors border border-dashed border-border"
+          >
+            <Plus size={12} />
+            Add item
+          </button>
+          <button
+            onClick={() => setAddSubOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors border border-dashed border-border"
+          >
+            <FolderPlus size={12} />
+            Add subsection
+          </button>
+        </div>
+      )}
 
       {/* ── Dialogs ─────────────────────────────────────────────────────── */}
       <DeleteSectionDialog

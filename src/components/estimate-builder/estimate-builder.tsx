@@ -383,11 +383,28 @@ export function EstimateBuilder({
     }
   }
 
-  // ── Slot 5: stubs for Task 25 / Task 26 ──────────────────────────────
+  // ── Slot 5: line-item inline edit (Task 25) ───────────────────────────
 
-  // TODO Task 25: replace with real LineItemRow in-place edit
-  function onLineItemEdit(item: EstimateLineItem) {
-    toast.info(`Line item editing comes in Task 25 (item: ${item.id.slice(0, 8)}…)`);
+  function onLineItemChange(itemId: string, partial: Partial<EstimateLineItem>) {
+    setState((prev) => ({
+      ...prev,
+      estimate: {
+        ...prev.estimate,
+        sections: prev.estimate.sections.map((sec) => ({
+          ...sec,
+          items: sec.items.map((item) =>
+            item.id === itemId ? { ...item, ...partial } : item
+          ),
+          subsections: sec.subsections.map((sub) => ({
+            ...sub,
+            items: sub.items.map((item) =>
+              item.id === itemId ? { ...item, ...partial } : item
+            ),
+          })),
+        })),
+      },
+    }));
+    // Task 28 auto-save will pick this up.
   }
 
   // TODO Task 26: replace with AddItemDialog
@@ -577,9 +594,11 @@ export function EstimateBuilder({
                     onAddSubsection={onSubsectionAdd}
                     onAddLineItem={onAddLineItem}
                     onLineItemDelete={onLineItemDelete}
+                    onLineItemChange={onLineItemChange}
                     onSubsectionRename={onSubsectionRename}
                     onSubsectionDelete={onSubsectionDelete}
                     onSubsectionLineItemDelete={onLineItemDelete}
+                    readOnly={isVoided}
                   />
                 ))}
               </ul>
