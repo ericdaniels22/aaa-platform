@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, AlertOctagon } from "lucide-react";
+import { AlertOctagon } from "lucide-react";
+import { toast } from "sonner";
 import { formatCurrency } from "@/lib/format";
 import type { Contact, Job } from "@/lib/types";
 import type { EstimateWithContents } from "@/lib/types";
+import { HeaderBar } from "./header-bar";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -58,11 +60,38 @@ function Slot({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function EstimateBuilder({ estimate, job }: EstimateBuilderProps) {
-  const [state] = useState<BuilderState>({
+  const [state, setState] = useState<BuilderState>({
     estimate,
     saveStatus: "idle",
     lastSavedAt: null,
   });
+
+  // ── Callbacks ──────────────────────────────────────────────────────────────
+
+  function onTitleChange(title: string) {
+    setState((prev) => ({ ...prev, estimate: { ...prev.estimate, title } }));
+    // Task 28 auto-save will pick this up.
+  }
+
+  async function onVoid(reason: string) {
+    const url = `/api/estimates/${state.estimate.id}?reason=${encodeURIComponent(reason)}`;
+    const res = await fetch(url, { method: "DELETE" });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      toast.error(body.error || "Failed to void estimate");
+      return;
+    }
+    setState((prev) => ({
+      ...prev,
+      estimate: {
+        ...prev.estimate,
+        status: "voided",
+        void_reason: reason,
+        voided_at: new Date().toISOString(),
+      },
+    }));
+    toast.success("Estimate voided");
+  }
 
   const isVoided = state.estimate.status === "voided";
 
@@ -101,34 +130,14 @@ export function EstimateBuilder({ estimate, job }: EstimateBuilderProps) {
       <main className="max-w-4xl mx-auto px-4 py-6 pb-24 space-y-4">
 
         {/* ── SLOT 1: HeaderBar ────────────────────────────────────────────── */}
-        <Slot>
-          <SlotLabel>Task 21 · HeaderBar</SlotLabel>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <FileText size={16} className="text-muted-foreground shrink-0" />
-                <span
-                  className={`text-base font-semibold text-foreground ${
-                    isVoided ? "line-through text-muted-foreground" : ""
-                  }`}
-                >
-                  {state.estimate.title}
-                </span>
-                {isVoided && (
-                  <span className="ml-2 px-2 py-0.5 text-xs font-bold rounded bg-destructive text-destructive-foreground">
-                    VOIDED
-                  </span>
-                )}
-              </div>
-              <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-                <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
-                  {state.estimate.estimate_number}
-                </span>
-                <span className="capitalize">{state.estimate.status}</span>
-              </div>
-            </div>
-          </div>
-        </Slot>
+        <HeaderBar
+          estimate={state.estimate}
+          onTitleChange={onTitleChange}
+          onVoid={onVoid}
+          onSend={() => {}}
+          onPdfExport={() => {}}
+          isSaving={state.saveStatus === "saving"}
+        />
 
         {/* ── SLOT 2: MetadataBar ──────────────────────────────────────────── */}
         <Slot>
