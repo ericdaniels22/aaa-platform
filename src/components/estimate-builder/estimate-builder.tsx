@@ -26,6 +26,7 @@ import { MetadataBar } from "./metadata-bar";
 import { CustomerBlock } from "./customer-block";
 import { StatementEditor } from "./statement-editor";
 import { SectionCard } from "./section-card";
+import { AddItemDialog } from "./add-item-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -78,6 +79,9 @@ export function EstimateBuilder({
 
   // Separate transient flag — not part of BuilderState because it's purely UI.
   const [isVoiding, setIsVoiding] = useState(false);
+
+  // ── Task 26: AddItemDialog state ───────────────────────────────────────
+  const [addItemTarget, setAddItemTarget] = useState<{ sectionId: string } | null>(null);
 
   // ── Slot 5: Add-section inline input state ─────────────────────────────
   const [showAddSection, setShowAddSection] = useState(false);
@@ -407,9 +411,30 @@ export function EstimateBuilder({
     // Task 28 auto-save will pick this up.
   }
 
-  // TODO Task 26: replace with AddItemDialog
   function onAddLineItem(sectionId: string) {
-    toast.info(`Add Item dialog comes in Task 26 (section: ${sectionId.slice(0, 8)}…)`);
+    setAddItemTarget({ sectionId });
+  }
+
+  function onLineItemAdded(newItem: EstimateLineItem) {
+    setState((prev) => ({
+      ...prev,
+      estimate: {
+        ...prev.estimate,
+        sections: prev.estimate.sections.map((sec) => {
+          if (sec.id === newItem.section_id) {
+            return { ...sec, items: [...sec.items, newItem] };
+          }
+          return {
+            ...sec,
+            subsections: sec.subsections.map((sub) =>
+              sub.id === newItem.section_id
+                ? { ...sub, items: [...sub.items, newItem] }
+                : sub
+            ),
+          };
+        }),
+      },
+    }));
   }
 
   // ── Slot 5: drag-end handler ───────────────────────────────────────────
@@ -720,6 +745,16 @@ export function EstimateBuilder({
           Save indicator — Task 28
         </div>
       </div>
+
+      {/* ── Task 26: AddItemDialog ────────────────────────────────────────── */}
+      <AddItemDialog
+        open={addItemTarget !== null}
+        onOpenChange={(open) => !open && setAddItemTarget(null)}
+        estimateId={state.estimate.id}
+        sectionId={addItemTarget?.sectionId ?? ""}
+        jobDamageType={job.damage_type}
+        onAdded={onLineItemAdded}
+      />
     </div>
   );
 }
