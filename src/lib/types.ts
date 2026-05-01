@@ -510,3 +510,161 @@ export const EMAIL_PROVIDERS: Record<string, { label: string; imap_host: string;
   outlook: { label: "Outlook / Microsoft 365", imap_host: "outlook.office365.com", imap_port: 993, smtp_host: "smtp.office365.com", smtp_port: 587 },
   custom: { label: "Custom", imap_host: "", imap_port: 993, smtp_host: "", smtp_port: 465 },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Build 67a — Estimates & Invoices
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type EstimateStatus = 'draft' | 'sent' | 'approved' | 'rejected' | 'converted' | 'voided';
+export type AdjustmentType = 'percent' | 'amount' | 'none';
+export type ItemCategory = 'labor' | 'equipment' | 'materials' | 'services' | 'other';
+
+export interface Estimate {
+  id: string;
+  organization_id: string;
+  job_id: string;
+  estimate_number: string;
+  sequence_number: number;
+  title: string;
+  status: EstimateStatus;
+  opening_statement: string | null;
+  closing_statement: string | null;
+  subtotal: number;
+  markup_type: AdjustmentType;
+  markup_value: number;
+  markup_amount: number;
+  discount_type: AdjustmentType;
+  discount_value: number;
+  discount_amount: number;
+  adjusted_subtotal: number;
+  tax_rate: number;
+  tax_amount: number;
+  total: number;
+  issued_date: string | null;
+  valid_until: string | null;
+  converted_to_invoice_id: string | null;
+  converted_at: string | null;
+  sent_at: string | null;
+  approved_at: string | null;
+  rejected_at: string | null;
+  voided_at: string | null;
+  void_reason: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EstimateSection {
+  id: string;
+  organization_id: string;
+  estimate_id: string;
+  parent_section_id: string | null;
+  title: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EstimateLineItem {
+  id: string;
+  organization_id: string;
+  estimate_id: string;
+  section_id: string;
+  library_item_id: string | null;
+  description: string;
+  code: string | null;
+  quantity: number;
+  unit: string | null;
+  unit_price: number;
+  total: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ItemLibraryItem {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string;
+  code: string | null;
+  category: ItemCategory;
+  default_quantity: number;
+  default_unit: string | null;
+  unit_price: number;
+  damage_type_tags: string[];
+  section_tags: string[];
+  is_active: boolean;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Convenience: a fully-loaded estimate with nested sections + items.
+export interface EstimateWithContents extends Estimate {
+  sections: Array<EstimateSection & {
+    items: EstimateLineItem[];
+    subsections: Array<EstimateSection & { items: EstimateLineItem[] }>;
+  }>;
+}
+
+// Schema-only in 67a (no UI yet). Defined here so 67b/c don't reshape types later.
+export interface TemplateItem {
+  library_item_id: string;
+  description_override: string | null;
+  quantity_override: number | null;
+  unit_price_override: number | null;
+  sort_order: number;
+}
+
+export interface EstimateTemplate {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string | null;
+  damage_type_tags: string[];
+  opening_statement: string | null;
+  closing_statement: string | null;
+  structure: { sections: Array<{
+    title: string;
+    sort_order: number;
+    subsections: Array<{ title: string; sort_order: number; items: TemplateItem[] }>;
+    items: TemplateItem[];
+  }> };
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PdfPreset {
+  id: string;
+  organization_id: string;
+  name: string;
+  document_type: 'estimate' | 'invoice';
+  document_title: string;
+  group_items_by: 'section';
+  show_code: boolean;
+  show_description: boolean;
+  show_quantity: boolean;
+  show_unit_cost: boolean;
+  show_total: boolean;
+  show_notes: boolean;
+  show_markup: boolean;
+  show_discount: boolean;
+  show_taxes: boolean;
+  show_company_details: boolean;
+  show_sender_details: boolean;
+  show_recipient_details: boolean;
+  show_document_details: boolean;
+  show_opening_statement: boolean;
+  show_line_items: boolean;
+  show_category_subtotals: boolean;
+  show_total_cost: boolean;
+  show_closing_statement: boolean;
+  is_default: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
