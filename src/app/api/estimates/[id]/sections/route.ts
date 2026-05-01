@@ -1,0 +1,90 @@
+import { NextResponse } from "next/server";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { requirePermission } from "@/lib/permissions-api";
+import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
+import { assertSectionDepth } from "@/lib/estimates";
+import type { EstimateSection } from "@/lib/types";
+
+interface RouteCtx { params: Promise<{ id: string }> }
+
+interface CreatePayload {
+  title: string;
+  parent_section_id?: string | null;
+  sort_order?: number;
+}
+
+interface ReorderPayload {
+  sections: Array<{ id: string; sort_order: number; parent_section_id: string | null }>;
+}
+
+export async function POST(request: Request, ctx: RouteCtx) {
+  const { id: estimateId } = await ctx.params;
+  const supabase = await createServerSupabaseClient();
+  const auth = await requirePermission(supabase, "edit_estimates");
+  if (!auth.ok) return auth.response;
+
+  const body = (await request.json()) as CreatePayload;
+  if (!body.title?.trim()) return NextResponse.json({ error: "title required" }, { status: 400 });
+
+  if (body.parent_section_id) {
+    try {
+      await assertSectionDepth(body.parent_section_id, supabase);
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+    }
+  }
+
+  const orgId = await getActiveOrganizationId(supabase);
+
+  // Compute sort_order if not given
+  let sort_order = body.sort_order;
+  if (sort_order === undefined) {
+    const { data: max } = await supabase
+      .from("estimate_sections")
+      .select("sort_order")
+      .eq("estimate_id", estimateId)
+      .is("parent_section_id", body.parent_section_id ?? null)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ sort_order: number }>();
+    sort_order = (max?.sort_order ?? -1) + 1;
+  }
+
+  const { data, error } = await supabase
+    .from("estimate_sections")
+    .insert({
+      organization_id: orgId,
+      estimate_id: estimateId,
+      parent_section_id: body.parent_section_id ?? null,
+      title: body.title.trim(),
+      sort_order,
+    })
+    .select("*")
+    .single<EstimateSection>();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ section: data }, { status: 201 });
+}
+
+export async function PUT(request: Request, ctx: RouteCtx) {
+  const { id: estimateId } = await ctx.params;
+  const supabase = await createServerSupabaseClient();
+  const auth = await requirePermission(supabase, "edit_estimates");
+  if (!auth.ok) return auth.response;
+
+  const body = (await request.json()) as ReorderPayload;
+  if (!Array.isArray(body.sections)) {
+    return NextResponse.json({ error: "sections array required" }, { status: 400 });
+  }
+
+  for (const s of body.sections) {
+    const { error } = await supabase
+      .from("estimate_sections")
+      .update({ sort_order: s.sort_order, parent_section_id: s.parent_section_id })
+      .eq("id", s.id)
+      .eq("estimate_id", estimateId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}
