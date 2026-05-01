@@ -562,8 +562,8 @@ export function EstimateBuilder({
         </div>
       )}
 
-      {/* Main content column
-          TODO: refine padding-right in Task 27 to avoid TotalsPanel overlap on small screens */}
+      {/* Main content column. TotalsPanel — fixed bottom-right at desktop widths.
+          Post-67a: responsive layout for mobile (overlap is expected on narrow viewports). */}
       <main className="max-w-4xl mx-auto px-4 py-6 pb-24 space-y-4">
 
         {/* ── SLOT 1: HeaderBar ────────────────────────────────────────────── */}

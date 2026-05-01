@@ -5,11 +5,7 @@
 // edits markup / discount / tax fields, and when line-item qty/price changes.
 
 import type { AdjustmentType } from "@/lib/types";
-import type { EstimateWithContents } from "@/lib/types";
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
+import { round2 } from "@/lib/format";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // computeEstimateTotals
@@ -75,19 +71,3 @@ export function sumLineItemsFromSections(sections: SectionLike[]): number {
   return round2(total);
 }
 
-// Convenience: recompute subtotal + all derived totals from sections + current estimate fields.
-export function recomputeFromSections(
-  estimate: EstimateWithContents,
-  sections: EstimateWithContents["sections"],
-): Partial<EstimateWithContents> {
-  const subtotal = sumLineItemsFromSections(sections);
-  const totals = computeEstimateTotals({
-    subtotal,
-    markup_type: estimate.markup_type,
-    markup_value: estimate.markup_value,
-    discount_type: estimate.discount_type,
-    discount_value: estimate.discount_value,
-    tax_rate: estimate.tax_rate,
-  });
-  return { subtotal, ...totals };
-}
