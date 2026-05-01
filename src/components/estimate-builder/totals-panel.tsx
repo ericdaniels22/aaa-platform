@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import type { AdjustmentType, Estimate } from "@/lib/types";
@@ -142,12 +143,54 @@ export function TotalsPanel({
   readOnly = false,
 }: TotalsPanelProps) {
   const isNegative = estimate.total < 0;
+  const [isMinimized, setIsMinimized] = useState(false);
+
+  if (isMinimized) {
+    return (
+      <div
+        className="fixed bottom-4 right-4 z-10 rounded-lg border border-border bg-card shadow-lg"
+        aria-label="Estimate totals (minimized)"
+      >
+        <button
+          type="button"
+          onClick={() => setIsMinimized(false)}
+          className="flex items-center gap-3 px-4 py-2 hover:bg-muted/40 rounded-lg transition-colors"
+          aria-label="Expand totals panel"
+        >
+          <span className="font-semibold text-sm text-foreground">Total</span>
+          <span
+            className={`font-bold text-base font-mono ${
+              isNegative ? "text-destructive" : "text-foreground"
+            }`}
+          >
+            {formatCurrency(estimate.total)}
+          </span>
+          <ChevronUp size={16} className="text-muted-foreground" />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
       className="fixed bottom-4 right-4 z-10 w-72 rounded-lg border border-border bg-card p-4 shadow-lg"
       aria-label="Estimate totals"
     >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+          Totals
+        </span>
+        <button
+          type="button"
+          onClick={() => setIsMinimized(true)}
+          className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+          aria-label="Minimize totals panel"
+          title="Minimize"
+        >
+          <ChevronDown size={14} />
+        </button>
+      </div>
+
       <div className="space-y-2 text-sm">
 
         {/* Subtotal */}
