@@ -54,12 +54,22 @@ export default async function NewEstimatePage({
   }
 
   // 2. Verify the job exists and belongs to the active org (RLS enforces org scope).
-  const { data: job } = await supabase
+  const { data: job, error: jobErr } = await supabase
     .from("jobs")
     .select("id")
     .eq("id", jobId)
     .maybeSingle<{ id: string }>();
 
+  if (jobErr) {
+    return (
+      <ErrorPage
+        title="Could not load job"
+        message={jobErr.message}
+        backHref={`/jobs/${jobId}`}
+        backLabel="Back to job"
+      />
+    );
+  }
   if (!job) {
     return (
       <ErrorPage
@@ -93,44 +103,42 @@ export default async function NewEstimatePage({
     .maybeSingle();
   const title = (setting?.value as string | null | undefined) || "Estimate";
 
-  // 5. Generate the atomic estimate number via RPC, then insert.
-  let estimate: Estimate;
+  // 5a. Generate the atomic estimate number via RPC (throws on RPC failure).
+  let numbered: { estimate_number: string; sequence_number: number };
   try {
-    const numbered = await generateEstimateNumber(jobId, supabase);
-
-    const { data, error } = await supabase
-      .from("estimates")
-      .insert({
-        organization_id: orgId,
-        job_id: jobId,
-        estimate_number: numbered.estimate_number,
-        sequence_number: numbered.sequence_number,
-        title,
-        status: "draft",
-        created_by: auth.userId,
-      })
-      .select("*")
-      .single<Estimate>();
-
-    if (error || !data) {
-      const msg = error?.message ?? "Unknown error";
-      return (
-        <ErrorPage
-          title="Failed to create estimate"
-          message={`Failed to create estimate: ${msg}`}
-          backHref={`/jobs/${jobId}`}
-          backLabel="Back to job"
-        />
-      );
-    }
-
-    estimate = data;
+    numbered = await generateEstimateNumber(jobId, supabase);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unexpected error";
     return (
       <ErrorPage
-        title="Failed to create estimate"
-        message={msg}
+        title="Could not assign estimate number"
+        message={err instanceof Error ? err.message : "Unexpected error"}
+        backHref={`/jobs/${jobId}`}
+        backLabel="Back to job"
+      />
+    );
+  }
+
+  // 5b. Insert the estimate — supabase-js v2 returns {data, error}; does not throw.
+  const { data: estimate, error: insertError } = await supabase
+    .from("estimates")
+    .insert({
+      organization_id: orgId,
+      job_id: jobId,
+      estimate_number: numbered.estimate_number,
+      sequence_number: numbered.sequence_number,
+      title,
+      status: "draft",
+      created_by: auth.userId,
+    })
+    .select("*")
+    .single<Estimate>();
+
+  if (insertError || !estimate) {
+    const msg = insertError?.message ?? "Unknown error";
+    return (
+      <ErrorPage
+        title="Failed to save estimate"
+        message={`Failed to save estimate: ${msg}`}
         backHref={`/jobs/${jobId}`}
         backLabel="Back to job"
       />
