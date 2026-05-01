@@ -5,6 +5,7 @@ import { AlertOctagon, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { AdjustmentType, Contact, Job } from "@/lib/types";
 import type { EstimateWithContents, EstimateLineItem } from "@/lib/types";
+import { useAutoSave } from "./use-auto-save";
 import { computeEstimateTotals, sumLineItemsFromSections } from "@/lib/estimates-calc";
 import {
   DndContext,
@@ -37,8 +38,6 @@ import { Input } from "@/components/ui/input";
 
 interface BuilderState {
   estimate: EstimateWithContents;
-  saveStatus: "idle" | "saving" | "saved" | "error";
-  lastSavedAt: Date | null;
 }
 
 export interface EstimateBuilderProps {
@@ -62,9 +61,11 @@ export function EstimateBuilder({
 }: EstimateBuilderProps) {
   const [state, setState] = useState<BuilderState>({
     estimate,
-    saveStatus: "idle",
-    lastSavedAt: null,
   });
+
+  // ── Task 28: auto-save hook ────────────────────────────────────────────────
+  const { saveStatus, lastSavedAt, saveSectionsReorder, saveLineItemsReorder } =
+    useAutoSave(state.estimate);
 
   // Separate transient flag — not part of BuilderState because it's purely UI.
   const [isVoiding, setIsVoiding] = useState(false);
@@ -453,9 +454,9 @@ export function EstimateBuilder({
     });
   }
 
-  // ── Slot 5: drag-end handler ───────────────────────────────────────────
-  // NOTE: Drag-reorder updates local state only — Task 28 will add the
-  // PUT /sections bulk-reorder API call when auto-save lands.
+  // ── Slot 5 / Task 28: drag-end handler ────────────────────────────────────
+  // Drag-reorder updates local state optimistically, then fires the appropriate
+  // PUT immediately (not debounced). On failure, the local state is rolled back.
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -464,19 +465,39 @@ export function EstimateBuilder({
     const activeType = active.data.current?.type as string | undefined;
 
     if (activeType === "section") {
+      const snapshot = state.estimate; // capture before mutation
+
+      let reorderedSections: typeof state.estimate.sections = [];
       setState((prev) => {
         const secs = prev.estimate.sections;
         const oldIdx = secs.findIndex((s) => s.id === active.id);
         const newIdx = secs.findIndex((s) => s.id === over.id);
         if (oldIdx === -1 || newIdx === -1) return prev;
+        reorderedSections = arrayMove(secs, oldIdx, newIdx);
         return {
           ...prev,
-          estimate: {
-            ...prev.estimate,
-            sections: arrayMove(secs, oldIdx, newIdx),
-          },
+          estimate: { ...prev.estimate, sections: reorderedSections },
         };
       });
+
+      if (reorderedSections.length > 0) {
+        // Build the flat list including subsections with updated sort_order
+        const sectionPayload = reorderedSections.flatMap((sec, idx) => [
+          { id: sec.id, sort_order: idx, parent_section_id: null as string | null },
+          ...sec.subsections.map((sub, subIdx) => ({
+            id: sub.id,
+            sort_order: subIdx,
+            parent_section_id: sec.id,
+          })),
+        ]);
+
+        void saveSectionsReorder(sectionPayload).then((ok) => {
+          if (!ok) {
+            toast.error("Failed to save section order");
+            setState((prev) => ({ ...prev, estimate: snapshot }));
+          }
+        });
+      }
       return;
     }
 
@@ -486,32 +507,50 @@ export function EstimateBuilder({
       const overParent = over.data.current?.parentSectionId as string | undefined;
       if (activeParent !== overParent) return; // snap back
 
-      setState((prev) => ({
-        ...prev,
-        estimate: {
-          ...prev.estimate,
-          sections: prev.estimate.sections.map((s) => {
-            if (s.id !== activeParent) return s;
-            const subs = s.subsections;
-            const oldIdx = subs.findIndex((sub) => sub.id === active.id);
-            const newIdx = subs.findIndex((sub) => sub.id === over.id);
-            if (oldIdx === -1 || newIdx === -1) return s;
-            return { ...s, subsections: arrayMove(subs, oldIdx, newIdx) };
-          }),
-        },
-      }));
+      const snapshot = state.estimate;
+      let reorderedSections: typeof state.estimate.sections = [];
+
+      setState((prev) => {
+        const updated = prev.estimate.sections.map((s) => {
+          if (s.id !== activeParent) return s;
+          const subs = s.subsections;
+          const oldIdx = subs.findIndex((sub) => sub.id === active.id);
+          const newIdx = subs.findIndex((sub) => sub.id === over.id);
+          if (oldIdx === -1 || newIdx === -1) return s;
+          return { ...s, subsections: arrayMove(subs, oldIdx, newIdx) };
+        });
+        reorderedSections = updated;
+        return { ...prev, estimate: { ...prev.estimate, sections: updated } };
+      });
+
+      if (reorderedSections.length > 0) {
+        const sectionPayload = reorderedSections.flatMap((sec, idx) => [
+          { id: sec.id, sort_order: idx, parent_section_id: null as string | null },
+          ...sec.subsections.map((sub, subIdx) => ({
+            id: sub.id,
+            sort_order: subIdx,
+            parent_section_id: sec.id,
+          })),
+        ]);
+
+        void saveSectionsReorder(sectionPayload).then((ok) => {
+          if (!ok) {
+            toast.error("Failed to save subsection order");
+            setState((prev) => ({ ...prev, estimate: snapshot }));
+          }
+        });
+      }
       return;
     }
 
     if (activeType === "line-item") {
-      // Task 25 will register useSortable({ id, data: { type: "line-item", parentSectionId } })
-      // for each LineItemRow. The parentSectionId is either a section.id or a subsection.id —
-      // whichever immediate parent the line item lives in.
-
       // Cross-section/cross-subsection drags: snap back.
       const activeParentSectionId = active.data.current?.parentSectionId as string | undefined;
       const overParentSectionId = over.data.current?.parentSectionId as string | undefined;
       if (activeParentSectionId !== overParentSectionId) return; // snap back
+
+      const snapshot = state.estimate;
+      let reorderedItems: import("@/lib/types").EstimateLineItem[] = [];
 
       setState((prev) => ({
         ...prev,
@@ -524,7 +563,8 @@ export function EstimateBuilder({
               const oldIdx = items.findIndex((i) => i.id === active.id);
               const newIdx = items.findIndex((i) => i.id === over.id);
               if (oldIdx === -1 || newIdx === -1) return s;
-              return { ...s, items: arrayMove(items, oldIdx, newIdx) };
+              reorderedItems = arrayMove(items, oldIdx, newIdx);
+              return { ...s, items: reorderedItems };
             }
             // Check subsection items
             return {
@@ -535,12 +575,28 @@ export function EstimateBuilder({
                 const oldIdx = items.findIndex((i) => i.id === active.id);
                 const newIdx = items.findIndex((i) => i.id === over.id);
                 if (oldIdx === -1 || newIdx === -1) return sub;
-                return { ...sub, items: arrayMove(items, oldIdx, newIdx) };
+                reorderedItems = arrayMove(items, oldIdx, newIdx);
+                return { ...sub, items: reorderedItems };
               }),
             };
           }),
         },
       }));
+
+      if (reorderedItems.length > 0) {
+        const itemPayload = reorderedItems.map((item, idx) => ({
+          id: item.id,
+          section_id: item.section_id,
+          sort_order: idx,
+        }));
+
+        void saveLineItemsReorder(itemPayload).then((ok) => {
+          if (!ok) {
+            toast.error("Failed to save line item order");
+            setState((prev) => ({ ...prev, estimate: snapshot }));
+          }
+        });
+      }
     }
   }
 
@@ -573,8 +629,8 @@ export function EstimateBuilder({
           onVoid={onVoid}
           onSend={() => {}}
           onPdfExport={() => {}}
-          saveStatus={state.saveStatus}
-          lastSavedAt={state.lastSavedAt}
+          saveStatus={saveStatus}
+          lastSavedAt={lastSavedAt}
           isVoiding={isVoiding}
         />
 
