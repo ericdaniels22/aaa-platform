@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission } from "@/lib/permissions-api";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
-import { assertSectionDepth } from "@/lib/estimates";
+import { assertSectionDepth, checkSnapshot, touchEstimate } from "@/lib/estimates";
 import type { EstimateSection } from "@/lib/types";
 
 interface RouteCtx { params: Promise<{ id: string }> }
@@ -15,6 +15,7 @@ interface CreatePayload {
 
 interface ReorderPayload {
   sections: Array<{ id: string; sort_order: number; parent_section_id: string | null }>;
+  updated_at_snapshot?: string;
 }
 
 export async function POST(request: Request, ctx: RouteCtx) {
@@ -84,6 +85,9 @@ export async function PUT(request: Request, ctx: RouteCtx) {
     return NextResponse.json({ error: "sections array required" }, { status: 400 });
   }
 
+  const snap = await checkSnapshot(supabase, estimateId, body.updated_at_snapshot);
+  if (!snap.ok) return snap.response;
+
   for (const s of body.sections) {
     const { error } = await supabase
       .from("estimate_sections")
@@ -93,5 +97,8 @@ export async function PUT(request: Request, ctx: RouteCtx) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  // Bump the parent estimate's updated_at so future snapshot checks see the change.
+  const updated_at = await touchEstimate(supabase, estimateId);
+
+  return NextResponse.json({ ok: true, updated_at });
 }

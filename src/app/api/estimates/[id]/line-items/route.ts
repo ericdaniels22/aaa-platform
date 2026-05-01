@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission } from "@/lib/permissions-api";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
-import { recalculateTotals } from "@/lib/estimates";
+import { checkSnapshot, recalculateTotals, touchEstimate } from "@/lib/estimates";
 import { round2 } from "@/lib/format";
 import type { EstimateLineItem } from "@/lib/types";
 
@@ -21,6 +21,7 @@ interface CreatePayload {
 
 interface ReorderPayload {
   items: Array<{ id: string; section_id: string; sort_order: number }>;
+  updated_at_snapshot?: string;
 }
 
 export async function POST(request: Request, ctx: RouteCtx) {
@@ -156,6 +157,9 @@ export async function PUT(request: Request, ctx: RouteCtx) {
     return NextResponse.json({ error: "items array required" }, { status: 400 });
   }
 
+  const snap = await checkSnapshot(supabase, estimateId, body.updated_at_snapshot);
+  if (!snap.ok) return snap.response;
+
   for (const it of body.items) {
     if (typeof it.id !== "string" || typeof it.section_id !== "string" ||
         typeof it.sort_order !== "number") {
@@ -172,6 +176,8 @@ export async function PUT(request: Request, ctx: RouteCtx) {
   // Sort-only reorder doesn't change quantity * unit_price totals, but
   // section moves COULD if the future per-section subtotal feature ships.
   // No recalc needed today; revisit if subtotals-by-section land.
+  // Bump the parent estimate's updated_at so future snapshot checks see the change.
+  const updated_at = await touchEstimate(supabase, estimateId);
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, updated_at });
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission } from "@/lib/permissions-api";
-import { recalculateTotals } from "@/lib/estimates";
+import { checkSnapshot, recalculateTotals } from "@/lib/estimates";
 import { round2 } from "@/lib/format";
 import type { EstimateLineItem } from "@/lib/types";
 
@@ -15,6 +15,7 @@ interface UpdatePayload {
   unit_price?: number;
   section_id?: string;
   sort_order?: number;
+  updated_at_snapshot?: string;
 }
 
 export async function PUT(request: Request, ctx: RouteCtx) {
@@ -29,6 +30,9 @@ export async function PUT(request: Request, ctx: RouteCtx) {
   } catch {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
+
+  const snap = await checkSnapshot(supabase, estimateId, body.updated_at_snapshot);
+  if (!snap.ok) return snap.response;
 
   // Existing row — needed for recompute of total when only one of qty
   // or unit_price changes
@@ -115,7 +119,14 @@ export async function PUT(request: Request, ctx: RouteCtx) {
 
   await recalculateTotals(estimateId, supabase);
 
-  return NextResponse.json({ line_item: data });
+  // Read the parent's new updated_at so the client can refresh its snapshot.
+  const { data: parent } = await supabase
+    .from("estimates")
+    .select("updated_at")
+    .eq("id", estimateId)
+    .maybeSingle<{ updated_at: string }>();
+
+  return NextResponse.json({ line_item: data, updated_at: parent?.updated_at ?? null });
 }
 
 export async function DELETE(_request: Request, ctx: RouteCtx) {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission } from "@/lib/permissions-api";
-import { getEstimateWithContents, recalculateTotals } from "@/lib/estimates";
+import { checkSnapshot, getEstimateWithContents, recalculateTotals } from "@/lib/estimates";
 import type { Estimate } from "@/lib/types";
 
 interface RouteCtx { params: Promise<{ id: string }> }
@@ -41,18 +41,8 @@ export async function PUT(request: Request, ctx: RouteCtx) {
 
   const body = (await request.json()) as UpdatePayload;
 
-  // Concurrent-edit guard
-  if (body.updated_at_snapshot) {
-    const { data: current } = await supabase
-      .from("estimates")
-      .select("updated_at")
-      .eq("id", id)
-      .maybeSingle<{ updated_at: string }>();
-    if (current && current.updated_at !== body.updated_at_snapshot) {
-      const fresh = await getEstimateWithContents(id, supabase);
-      return NextResponse.json({ error: "stale", estimate: fresh }, { status: 409 });
-    }
-  }
+  const snap = await checkSnapshot(supabase, id, body.updated_at_snapshot);
+  if (!snap.ok) return snap.response;
 
   const update: Record<string, unknown> = {};
   for (const k of ["title","opening_statement","closing_statement","issued_date","valid_until",

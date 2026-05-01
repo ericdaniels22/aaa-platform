@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   Estimate,
@@ -177,6 +178,64 @@ export async function recalculateTotals(
     })
     .eq("id", estimateId);
   if (updErr) throw new Error(`recalc write totals: ${updErr.message}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Concurrent-edit guard
+// Returns 409 + fresh state if the parent estimate has been modified since the
+// caller's snapshot. Used by the 4 PUT routes that auto-save mutates: the
+// estimate-level fields PUT, line-item field PUT, and the two reorder PUTs.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SnapshotCheckResult =
+  | { ok: true; updated_at: string | null }
+  | { ok: false; response: NextResponse };
+
+export async function checkSnapshot(
+  supabase: SupabaseClient,
+  estimateId: string,
+  snapshot: string | undefined,
+): Promise<SnapshotCheckResult> {
+  if (!snapshot) {
+    // Caller opted out of the guard; allow.
+    const { data: row } = await supabase
+      .from("estimates")
+      .select("updated_at")
+      .eq("id", estimateId)
+      .maybeSingle<{ updated_at: string }>();
+    return { ok: true, updated_at: row?.updated_at ?? null };
+  }
+  const { data: current } = await supabase
+    .from("estimates")
+    .select("updated_at")
+    .eq("id", estimateId)
+    .maybeSingle<{ updated_at: string }>();
+  if (current && current.updated_at !== snapshot) {
+    const fresh = await getEstimateWithContents(estimateId, supabase);
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "stale", estimate: fresh }, { status: 409 }),
+    };
+  }
+  return { ok: true, updated_at: current?.updated_at ?? null };
+}
+
+// Force-bump estimates.updated_at (used by reorder PUTs that don't otherwise
+// touch the estimates row but should still mark it dirty for snapshot guards).
+// The BEFORE UPDATE trigger on estimates rewrites updated_at to now() so any
+// UPDATE here works; we name updated_at explicitly for clarity.
+export async function touchEstimate(
+  supabase: SupabaseClient,
+  estimateId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("estimates")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", estimateId)
+    .select("updated_at")
+    .maybeSingle<{ updated_at: string }>();
+  if (error) throw new Error(`touchEstimate: ${error.message}`);
+  return data?.updated_at ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

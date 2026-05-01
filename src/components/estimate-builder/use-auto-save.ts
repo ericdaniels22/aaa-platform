@@ -147,6 +147,8 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lineItemTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const sectionsReorderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lineItemsReorderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backoffMsRef = useRef<number>(0);
   const inFlightRef = useRef<boolean>(false);
   const inFlightItemsRef = useRef<Set<string>>(new Set());
@@ -166,6 +168,8 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      if (sectionsReorderTimerRef.current) clearTimeout(sectionsReorderTimerRef.current);
+      if (lineItemsReorderTimerRef.current) clearTimeout(lineItemsReorderTimerRef.current);
       for (const t of lineItemTimersRef.current.values()) clearTimeout(t);
     };
   }, []);
@@ -192,14 +196,20 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
     });
   }, []);
 
-  /** Handles a 5xx / network error — sets error state and schedules retry. */
-  const handleSaveError = useCallback((retryFn: () => void) => {
-    setSaveStatus("error");
-    const delay = backoffMsRef.current === 0 ? 1000 : Math.min(backoffMsRef.current * 2, MAX_BACKOFF_MS);
-    backoffMsRef.current = delay;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(retryFn, delay);
-  }, []);
+  /** Handles a 5xx / network error — sets error state and schedules retry on the given timer ref. */
+  const handleSaveError = useCallback(
+    (
+      timerRef: { current: ReturnType<typeof setTimeout> | null },
+      retryFn: () => void,
+    ) => {
+      setSaveStatus("error");
+      const delay = backoffMsRef.current === 0 ? 1000 : Math.min(backoffMsRef.current * 2, MAX_BACKOFF_MS);
+      backoffMsRef.current = delay;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(retryFn, delay);
+    },
+    [],
+  );
 
   // ── Estimate-level auto-save ──────────────────────────────────────────────
 
@@ -248,14 +258,14 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
         handleStaleConflict();
       } else {
         // 4xx other than 409: treat as error too
-        handleSaveError(performEstimateSave);
+        handleSaveError(saveTimerRef, performEstimateSave);
       }
     } catch (err) {
       // AbortError (timeout) is treated the same as a network error
       if (err instanceof Error && err.name === "AbortError") {
-        handleSaveError(performEstimateSave);
+        handleSaveError(saveTimerRef, performEstimateSave);
       } else {
-        handleSaveError(performEstimateSave);
+        handleSaveError(saveTimerRef, performEstimateSave);
       }
     } finally {
       clearTimeout(timeoutId);
@@ -318,6 +328,18 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
       // the watch effect will re-pick it up on the next render (still-dirty).
       if (inFlightItemsRef.current.has(item.id)) return;
 
+      // I1: schedule a retry of this item via lineItemTimersRef. Re-typing the
+      // same item clears this timer in the watch effect, replacing it with a
+      // fresh debounce that reads the latest state.
+      const scheduleLineItemRetry = () => {
+        const delay = backoffMsRef.current === 0 ? 1000 : Math.min(backoffMsRef.current * 2, MAX_BACKOFF_MS);
+        backoffMsRef.current = delay;
+        const existing = lineItemTimersRef.current.get(item.id);
+        if (existing) clearTimeout(existing);
+        const timer = setTimeout(() => void performLineItemSave(item), delay);
+        lineItemTimersRef.current.set(item.id, timer);
+      };
+
       inFlightItemsRef.current.add(item.id);
       setSaveStatus("saving");
 
@@ -329,29 +351,33 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(currentSubset),
+            body: JSON.stringify({
+              ...currentSubset,
+              updated_at_snapshot: updatedAtRef.current,
+            }),
             signal: controller.signal,
           }
         );
 
         if (res.ok) {
+          const data = (await res.json()) as { line_item: EstimateLineItem; updated_at?: string | null };
           lastSavedLineItemsRef.current.set(item.id, currentSubset);
+          if (data.updated_at) updatedAtRef.current = data.updated_at;
           transitionToSaved();
-        } else if (res.status === 409) {
+        } else if (res.status === 409 || res.status === 404) {
+          // I3: 404 (item gone — likely deleted by another user) is also a stale signal.
           handleStaleConflict();
         } else {
+          // 5xx / other 4xx — schedule retry with exp backoff.
           setSaveStatus("error");
-          toast.error("Failed to save line item");
+          scheduleLineItemRetry();
         }
       } catch (err) {
-        // AbortError (timeout) is treated the same as a network error
-        if (err instanceof Error && err.name === "AbortError") {
-          setSaveStatus("error");
-          toast.error("Network error — could not save line item");
-        } else {
-          setSaveStatus("error");
-          toast.error("Network error — could not save line item");
-        }
+        // AbortError (timeout) and network errors — schedule retry.
+        setSaveStatus("error");
+        scheduleLineItemRetry();
+        // Reference err to keep the catch typed without an unused-var warning.
+        void err;
       } finally {
         clearTimeout(timeoutId);
         inFlightItemsRef.current.delete(item.id);
@@ -396,6 +422,12 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
     async (sections: ReorderedSection[]): Promise<boolean> => {
       if (staleConflictRef.current) return false;
 
+      // A new reorder supersedes any pending retry — clear before issuing.
+      if (sectionsReorderTimerRef.current) {
+        clearTimeout(sectionsReorderTimerRef.current);
+        sectionsReorderTimerRef.current = null;
+      }
+
       setSaveStatus("saving");
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -403,40 +435,43 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
         const res = await fetch(`/api/estimates/${estimate.id}/sections`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sections }),
+          body: JSON.stringify({ sections, updated_at_snapshot: updatedAtRef.current }),
           signal: controller.signal,
         });
         if (res.ok) {
+          const data = (await res.json()) as { ok: true; updated_at?: string | null };
+          if (data.updated_at) updatedAtRef.current = data.updated_at;
           transitionToSaved();
           return true;
-        } else if (res.status === 409) {
+        } else if (res.status === 409 || res.status === 404) {
+          // I3: 404 (a section we're reordering is gone) is treated as stale.
           handleStaleConflict();
           return false;
         } else {
-          setSaveStatus("error");
-          toast.error("Failed to save section order");
+          // I1: retry with the same payload after exp backoff.
+          handleSaveError(sectionsReorderTimerRef, () => void saveSectionsReorder(sections));
           return false;
         }
       } catch (err) {
-        // AbortError (timeout) is treated the same as a network error
-        if (err instanceof Error && err.name === "AbortError") {
-          setSaveStatus("error");
-          toast.error("Network error — could not save section order");
-        } else {
-          setSaveStatus("error");
-          toast.error("Network error — could not save section order");
-        }
+        // AbortError (timeout) and network errors — retry with same payload.
+        handleSaveError(sectionsReorderTimerRef, () => void saveSectionsReorder(sections));
+        void err;
         return false;
       } finally {
         clearTimeout(timeoutId);
       }
     },
-    [estimate.id, transitionToSaved, handleStaleConflict]
+    [estimate.id, transitionToSaved, handleStaleConflict, handleSaveError]
   );
 
   const saveLineItemsReorder = useCallback(
     async (items: ReorderedLineItem[]): Promise<boolean> => {
       if (staleConflictRef.current) return false;
+
+      if (lineItemsReorderTimerRef.current) {
+        clearTimeout(lineItemsReorderTimerRef.current);
+        lineItemsReorderTimerRef.current = null;
+      }
 
       setSaveStatus("saving");
       const controller = new AbortController();
@@ -445,35 +480,30 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
         const res = await fetch(`/api/estimates/${estimate.id}/line-items`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items }),
+          body: JSON.stringify({ items, updated_at_snapshot: updatedAtRef.current }),
           signal: controller.signal,
         });
         if (res.ok) {
+          const data = (await res.json()) as { ok: true; updated_at?: string | null };
+          if (data.updated_at) updatedAtRef.current = data.updated_at;
           transitionToSaved();
           return true;
-        } else if (res.status === 409) {
+        } else if (res.status === 409 || res.status === 404) {
           handleStaleConflict();
           return false;
         } else {
-          setSaveStatus("error");
-          toast.error("Failed to save line item order");
+          handleSaveError(lineItemsReorderTimerRef, () => void saveLineItemsReorder(items));
           return false;
         }
       } catch (err) {
-        // AbortError (timeout) is treated the same as a network error
-        if (err instanceof Error && err.name === "AbortError") {
-          setSaveStatus("error");
-          toast.error("Network error — could not save line item order");
-        } else {
-          setSaveStatus("error");
-          toast.error("Network error — could not save line item order");
-        }
+        handleSaveError(lineItemsReorderTimerRef, () => void saveLineItemsReorder(items));
+        void err;
         return false;
       } finally {
         clearTimeout(timeoutId);
       }
     },
-    [estimate.id, transitionToSaved, handleStaleConflict]
+    [estimate.id, transitionToSaved, handleStaleConflict, handleSaveError]
   );
 
   // ── Public interface ──────────────────────────────────────────────────────
