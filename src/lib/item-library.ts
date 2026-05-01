@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { escapeOrFilterValue } from "@/lib/postgrest";
 import type { ItemLibraryItem, ItemCategory } from "@/lib/types";
 
 export interface ListItemsFilters {
@@ -23,8 +24,8 @@ export async function listItems(
     q = q.contains("damage_type_tags", JSON.stringify([filters.damage_type]));
   }
   if (filters.search) {
-    const s = filters.search;
-    q = q.or(`name.ilike.%${s}%,description.ilike.%${s}%,code.ilike.%${s}%`);
+    const term = escapeOrFilterValue(`%${filters.search}%`);
+    q = q.or(`name.ilike.${term},description.ilike.${term},code.ilike.${term}`);
   }
   q = q.order("sort_order", { ascending: true }).order("name", { ascending: true });
   const { data, error } = await q.returns<ItemLibraryItem[]>();

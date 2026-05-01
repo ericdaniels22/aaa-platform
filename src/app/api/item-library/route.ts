@@ -1,29 +1,18 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
-import { requirePermission } from "@/lib/permissions-api";
+import { requirePermission, requireAnyPermission } from "@/lib/permissions-api";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { listItems, createItem } from "@/lib/item-library";
+import { apiError } from "@/lib/api-errors";
 import type { ItemCategory } from "@/lib/types";
 
 const VALID_CATEGORIES: ItemCategory[] = [
   "labor", "equipment", "materials", "services", "other",
 ];
 
-async function requireEither(
-  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
-  keys: string[],
-) {
-  for (const k of keys) {
-    const r = await requirePermission(supabase, k);
-    if (r.ok) return r;
-  }
-  // Last response wins; all keys failed.
-  return await requirePermission(supabase, keys[keys.length - 1]);
-}
-
 export async function GET(request: Request) {
   const supabase = await createServerSupabaseClient();
-  const auth = await requireEither(supabase, ["view_estimates", "view_invoices"]);
+  const auth = await requireAnyPermission(supabase, ["view_estimates", "view_invoices"]);
   if (!auth.ok) return auth.response;
 
   const url = new URL(request.url);
@@ -53,7 +42,7 @@ export async function GET(request: Request) {
     const items = await listItems({ search, category, damage_type, is_active }, supabase);
     return NextResponse.json({ items });
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    return apiError(e, "GET /api/item-library list");
   }
 }
 
@@ -104,6 +93,12 @@ export async function POST(request: Request) {
   if (body.description.length > 2000) {
     return NextResponse.json({ error: "description too long (max 2000)" }, { status: 400 });
   }
+  if (body.code !== undefined && body.code !== null && typeof body.code !== "string") {
+    return NextResponse.json({ error: "code must be a string or null" }, { status: 400 });
+  }
+  if (body.default_unit !== undefined && body.default_unit !== null && typeof body.default_unit !== "string") {
+    return NextResponse.json({ error: "default_unit must be a string or null" }, { status: 400 });
+  }
 
   const orgId = await getActiveOrganizationId(supabase);
   if (!orgId) return NextResponse.json({ error: "no active org" }, { status: 400 });
@@ -127,6 +122,6 @@ export async function POST(request: Request) {
     );
     return NextResponse.json({ item }, { status: 201 });
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    return apiError(e, "POST /api/item-library");
   }
 }

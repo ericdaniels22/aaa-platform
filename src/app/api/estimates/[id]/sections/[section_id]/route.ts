@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission } from "@/lib/permissions-api";
 import { recalculateTotals } from "@/lib/estimates";
+import { apiDbError } from "@/lib/api-errors";
 
 interface RouteCtx { params: Promise<{ id: string; section_id: string }> }
 
@@ -48,7 +49,7 @@ export async function PUT(request: Request, ctx: RouteCtx) {
     .eq("estimate_id", estimateId)
     .select("*")
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiDbError(error.message, "PUT /api/estimates/[id]/sections/[section_id] rename");
 
   return NextResponse.json({ section: data });
 }
@@ -76,7 +77,7 @@ export async function DELETE(_request: Request, ctx: RouteCtx) {
     .delete()
     .eq("id", sectionId)
     .eq("estimate_id", estimateId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiDbError(error.message, "DELETE /api/estimates/[id]/sections/[section_id]");
 
   // Recalc — items just disappeared, subtotal needs to reflect that.
   await recalculateTotals(estimateId, supabase);

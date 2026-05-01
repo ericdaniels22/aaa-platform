@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
-import { requirePermission } from "@/lib/permissions-api";
+import { requirePermission, requireAnyPermission } from "@/lib/permissions-api";
 import { getItem, updateItem, deactivateItem } from "@/lib/item-library";
+import { apiError } from "@/lib/api-errors";
 import type { ItemCategory } from "@/lib/types";
 
 interface RouteCtx { params: Promise<{ id: string }> }
@@ -10,21 +11,10 @@ const VALID_CATEGORIES: ItemCategory[] = [
   "labor", "equipment", "materials", "services", "other",
 ];
 
-async function requireEither(
-  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
-  keys: string[],
-) {
-  for (const k of keys) {
-    const r = await requirePermission(supabase, k);
-    if (r.ok) return r;
-  }
-  return await requirePermission(supabase, keys[keys.length - 1]);
-}
-
 export async function GET(_request: Request, ctx: RouteCtx) {
   const { id } = await ctx.params;
   const supabase = await createServerSupabaseClient();
-  const auth = await requireEither(supabase, ["view_estimates", "view_invoices"]);
+  const auth = await requireAnyPermission(supabase, ["view_estimates", "view_invoices"]);
   if (!auth.ok) return auth.response;
 
   const item = await getItem(id, supabase);
@@ -83,8 +73,18 @@ export async function PUT(request: Request, ctx: RouteCtx) {
     }
     update.description = body.description;
   }
-  if (body.code !== undefined) update.code = body.code;
-  if (body.default_unit !== undefined) update.default_unit = body.default_unit;
+  if (body.code !== undefined) {
+    if (body.code !== null && typeof body.code !== "string") {
+      return NextResponse.json({ error: "code must be a string or null" }, { status: 400 });
+    }
+    update.code = body.code;
+  }
+  if (body.default_unit !== undefined) {
+    if (body.default_unit !== null && typeof body.default_unit !== "string") {
+      return NextResponse.json({ error: "default_unit must be a string or null" }, { status: 400 });
+    }
+    update.default_unit = body.default_unit;
+  }
   if (body.category !== undefined) {
     if (!VALID_CATEGORIES.includes(body.category)) {
       return NextResponse.json({ error: "invalid category" }, { status: 400 });
@@ -130,7 +130,7 @@ export async function PUT(request: Request, ctx: RouteCtx) {
     const item = await updateItem(id, update as Parameters<typeof updateItem>[1], supabase);
     return NextResponse.json({ item });
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    return apiError(e, "PUT /api/item-library/[id] update");
   }
 }
 
@@ -152,6 +152,6 @@ export async function DELETE(_request: Request, ctx: RouteCtx) {
     await deactivateItem(id, supabase);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    return apiError(e, "DELETE /api/item-library/[id] deactivate");
   }
 }

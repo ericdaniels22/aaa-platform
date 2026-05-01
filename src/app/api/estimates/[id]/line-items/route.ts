@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission } from "@/lib/permissions-api";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { checkSnapshot, recalculateTotals, touchEstimate } from "@/lib/estimates";
+import { apiDbError } from "@/lib/api-errors";
 import { round2 } from "@/lib/format";
 import type { EstimateLineItem } from "@/lib/types";
 
@@ -85,7 +86,15 @@ export async function POST(request: Request, ctx: RouteCtx) {
     description = lib.description;
     code = lib.code;
     unit = lib.default_unit;
-    unit_price = body.unit_price ?? lib.unit_price; // allow override at add-time
+    // Allow per-call override of the library unit_price; validate finite when supplied.
+    if (body.unit_price !== undefined) {
+      if (typeof body.unit_price !== "number" || !Number.isFinite(body.unit_price)) {
+        return NextResponse.json({ error: "unit_price must be a finite number" }, { status: 400 });
+      }
+      unit_price = body.unit_price;
+    } else {
+      unit_price = lib.unit_price;
+    }
   } else {
     if (typeof body.description !== "string" || !body.description.trim()) {
       return NextResponse.json({ error: "description required for custom items" }, { status: 400 });
@@ -134,7 +143,7 @@ export async function POST(request: Request, ctx: RouteCtx) {
     })
     .select("*")
     .single<EstimateLineItem>();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiDbError(error.message, "POST /api/estimates/[id]/line-items insert");
 
   await recalculateTotals(estimateId, supabase);
 
@@ -160,17 +169,42 @@ export async function PUT(request: Request, ctx: RouteCtx) {
   const snap = await checkSnapshot(supabase, estimateId, body.updated_at_snapshot);
   if (!snap.ok) return snap.response;
 
+  // Pre-validate item shape and that every section_id in the payload belongs
+  // to this estimate. RLS keeps cross-org bleed out, but within an org an
+  // attacker (or client bug) could otherwise reparent a line item under a
+  // section belonging to a different estimate in the same org.
   for (const it of body.items) {
     if (typeof it.id !== "string" || typeof it.section_id !== "string" ||
         typeof it.sort_order !== "number") {
       return NextResponse.json({ error: "invalid item shape" }, { status: 400 });
     }
+  }
+  const referencedSectionIds = Array.from(new Set(body.items.map((i) => i.section_id)));
+  if (referencedSectionIds.length > 0) {
+    const { data: legal } = await supabase
+      .from("estimate_sections")
+      .select("id")
+      .eq("estimate_id", estimateId)
+      .in("id", referencedSectionIds)
+      .returns<Array<{ id: string }>>();
+    const legalSet = new Set((legal ?? []).map((s) => s.id));
+    for (const sid of referencedSectionIds) {
+      if (!legalSet.has(sid)) {
+        return NextResponse.json(
+          { error: "section_id does not belong to this estimate" },
+          { status: 400 },
+        );
+      }
+    }
+  }
+
+  for (const it of body.items) {
     const { error } = await supabase
       .from("estimate_line_items")
       .update({ section_id: it.section_id, sort_order: it.sort_order })
       .eq("id", it.id)
       .eq("estimate_id", estimateId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return apiDbError(error.message, "PUT /api/estimates/[id]/line-items reorder");
   }
 
   // Sort-only reorder doesn't change quantity * unit_price totals, but

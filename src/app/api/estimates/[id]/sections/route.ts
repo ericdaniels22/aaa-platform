@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission } from "@/lib/permissions-api";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { assertSectionDepth, checkSnapshot, touchEstimate } from "@/lib/estimates";
+import { apiDbError } from "@/lib/api-errors";
 import type { EstimateSection } from "@/lib/types";
 
 interface RouteCtx { params: Promise<{ id: string }> }
@@ -69,7 +70,7 @@ export async function POST(request: Request, ctx: RouteCtx) {
     })
     .select("*")
     .single<EstimateSection>();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiDbError(error.message, "POST /api/estimates/[id]/sections insert");
 
   return NextResponse.json({ section: data }, { status: 201 });
 }
@@ -94,7 +95,7 @@ export async function PUT(request: Request, ctx: RouteCtx) {
       .update({ sort_order: s.sort_order, parent_section_id: s.parent_section_id })
       .eq("id", s.id)
       .eq("estimate_id", estimateId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return apiDbError(error.message, "PUT /api/estimates/[id]/sections reorder");
   }
 
   // Bump the parent estimate's updated_at so future snapshot checks see the change.

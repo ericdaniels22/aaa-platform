@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission } from "@/lib/permissions-api";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
 import { generateEstimateNumber } from "@/lib/estimates";
+import { apiDbError } from "@/lib/api-errors";
 import type { Estimate } from "@/lib/types";
 
 interface CreatePayload {
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
     .select("*")
     .single<Estimate>();
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return apiDbError(error.message, "POST /api/estimates insert");
   }
 
   return NextResponse.json({ estimate }, { status: 201 });
@@ -69,7 +70,7 @@ export async function GET(request: Request) {
     .eq("job_id", jobId)
     .order("sequence_number", { ascending: true })
     .returns<Estimate[]>();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiDbError(error.message, "GET /api/estimates list");
 
   return NextResponse.json({ estimates: data ?? [] });
 }

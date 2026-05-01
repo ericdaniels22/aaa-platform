@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission } from "@/lib/permissions-api";
 import { checkSnapshot, getEstimateWithContents, recalculateTotals } from "@/lib/estimates";
+import { apiDbError } from "@/lib/api-errors";
 import type { Estimate } from "@/lib/types";
 
 interface RouteCtx { params: Promise<{ id: string }> }
@@ -57,7 +58,7 @@ export async function PUT(request: Request, ctx: RouteCtx) {
 
   if (Object.keys(update).length > 0) {
     const { error } = await supabase.from("estimates").update(update).eq("id", id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return apiDbError(error.message, "PUT /api/estimates/[id] update");
   }
 
   // Always recalc — markup/discount/tax may have changed
@@ -85,7 +86,7 @@ export async function DELETE(request: Request, ctx: RouteCtx) {
       void_reason: reason,
     })
     .eq("id", id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiDbError(error.message, "DELETE /api/estimates/[id] void");
 
   return NextResponse.json({ ok: true });
 }

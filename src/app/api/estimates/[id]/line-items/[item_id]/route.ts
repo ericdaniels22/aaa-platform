@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission } from "@/lib/permissions-api";
 import { checkSnapshot, recalculateTotals } from "@/lib/estimates";
+import { apiDbError } from "@/lib/api-errors";
 import { round2 } from "@/lib/format";
 import type { EstimateLineItem } from "@/lib/types";
 
@@ -115,7 +116,7 @@ export async function PUT(request: Request, ctx: RouteCtx) {
     .eq("estimate_id", estimateId)
     .select("*")
     .single<EstimateLineItem>();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiDbError(error.message, "PUT /api/estimates/[id]/line-items/[item_id] update");
 
   await recalculateTotals(estimateId, supabase);
 
@@ -150,7 +151,7 @@ export async function DELETE(_request: Request, ctx: RouteCtx) {
     .delete()
     .eq("id", itemId)
     .eq("estimate_id", estimateId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiDbError(error.message, "DELETE /api/estimates/[id]/line-items/[item_id]");
 
   await recalculateTotals(estimateId, supabase);
 
