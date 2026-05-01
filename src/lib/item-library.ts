@@ -15,7 +15,13 @@ export async function listItems(
   let q = supabase.from("item_library").select("*");
   if (filters.category) q = q.eq("category", filters.category);
   if (typeof filters.is_active === "boolean") q = q.eq("is_active", filters.is_active);
-  if (filters.damage_type) q = q.contains("damage_type_tags", [filters.damage_type]);
+  if (filters.damage_type) {
+    // damage_type_tags is jsonb, not text[]; supabase-js's .contains() with a
+    // JS array serializes to Postgres array literal `{x}`, which the server
+    // rejects as "invalid input syntax for type json". Pass a JSON-formatted
+    // string so PostgREST emits `cs.["x"]` instead.
+    q = q.contains("damage_type_tags", JSON.stringify([filters.damage_type]));
+  }
   if (filters.search) {
     const s = filters.search;
     q = q.or(`name.ilike.%${s}%,description.ilike.%${s}%,code.ilike.%${s}%`);
