@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { FileText, Send, FileDown, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +39,7 @@ interface HeaderBarProps {
   onSend: () => void;
   onPdfExport: () => void;
   isSaving: boolean;
+  isVoiding: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,13 +56,12 @@ function VoidDialog({
   onConfirm: (reason: string) => void;
 }) {
   const [reason, setReason] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // Reset reason when dialog opens
   useEffect(() => {
     if (open) {
       setReason("");
-      // Focus is handled by autoFocus on the input
+      // Focus is handled by autoFocus on the textarea
     }
   }, [open]);
 
@@ -85,9 +86,9 @@ function VoidDialog({
         </DialogHeader>
 
         <div className="space-y-1">
-          <Input
-            ref={inputRef}
+          <Textarea
             autoFocus
+            rows={3}
             placeholder="Reason for voiding…"
             value={reason}
             onChange={(e) => {
@@ -95,10 +96,6 @@ function VoidDialog({
             }}
             maxLength={500}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleConfirm();
-              }
               if (e.key === "Escape") {
                 onOpenChange(false);
               }
@@ -144,6 +141,7 @@ export function HeaderBar({
   onSend,
   onPdfExport,
   isSaving,
+  isVoiding,
 }: HeaderBarProps) {
   const isVoided = estimate.status === "voided";
 
@@ -220,11 +218,6 @@ export function HeaderBar({
           >
             {statusLabel}
           </span>
-          {isVoided && (
-            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold bg-destructive text-destructive-foreground">
-              VOIDED
-            </span>
-          )}
         </div>
 
         {/* ── Middle: editable title ────────────────────────────────────── */}
@@ -265,8 +258,8 @@ export function HeaderBar({
           <Button
             variant="destructive"
             size="sm"
-            disabled={isVoided}
-            title={isVoided ? "Already voided" : undefined}
+            disabled={isVoided || isVoiding}
+            title={isVoided ? "Already voided" : isVoiding ? "Voiding…" : undefined}
             onClick={() => setVoidOpen(true)}
           >
             <Ban size={14} />

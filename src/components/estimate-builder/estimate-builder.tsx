@@ -66,6 +66,9 @@ export function EstimateBuilder({ estimate, job }: EstimateBuilderProps) {
     lastSavedAt: null,
   });
 
+  // Separate transient flag — not part of BuilderState because it's purely UI.
+  const [isVoiding, setIsVoiding] = useState(false);
+
   // ── Callbacks ──────────────────────────────────────────────────────────────
 
   function onTitleChange(title: string) {
@@ -74,23 +77,31 @@ export function EstimateBuilder({ estimate, job }: EstimateBuilderProps) {
   }
 
   async function onVoid(reason: string) {
-    const url = `/api/estimates/${state.estimate.id}?reason=${encodeURIComponent(reason)}`;
-    const res = await fetch(url, { method: "DELETE" });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      toast.error(body.error || "Failed to void estimate");
-      return;
+    if (isVoiding) return;
+    setIsVoiding(true);
+    try {
+      const url = `/api/estimates/${state.estimate.id}?reason=${encodeURIComponent(reason)}`;
+      const res = await fetch(url, { method: "DELETE" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error || "Failed to void estimate");
+        return;
+      }
+      // Optimistic update — voided_at uses client clock; server's value is canonical
+      // and will be reconciled on the next read. Display-only divergence today.
+      setState((prev) => ({
+        ...prev,
+        estimate: {
+          ...prev.estimate,
+          status: "voided",
+          void_reason: reason,
+          voided_at: new Date().toISOString(),
+        },
+      }));
+      toast.success("Estimate voided");
+    } finally {
+      setIsVoiding(false);
     }
-    setState((prev) => ({
-      ...prev,
-      estimate: {
-        ...prev.estimate,
-        status: "voided",
-        void_reason: reason,
-        voided_at: new Date().toISOString(),
-      },
-    }));
-    toast.success("Estimate voided");
   }
 
   const isVoided = state.estimate.status === "voided";
@@ -137,6 +148,7 @@ export function EstimateBuilder({ estimate, job }: EstimateBuilderProps) {
           onSend={() => {}}
           onPdfExport={() => {}}
           isSaving={state.saveStatus === "saving"}
+          isVoiding={isVoiding}
         />
 
         {/* ── SLOT 2: MetadataBar ──────────────────────────────────────────── */}
