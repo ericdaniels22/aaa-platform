@@ -68,7 +68,6 @@ export interface SectionCardProps {
   onDelete: (id: string) => void;
   onAddSubsection: (parentId: string, title: string) => void;
   onAddLineItem: (sectionId: string) => void;
-  onLineItemEdit: (item: EstimateLineItem) => void;
   onLineItemDelete: (id: string) => void;
   onSubsectionRename: (id: string, title: string) => void;
   onSubsectionDelete: (id: string) => void;
@@ -248,7 +247,6 @@ export function SectionCard({
   onDelete,
   onAddSubsection,
   onAddLineItem,
-  onLineItemEdit,
   onLineItemDelete,
   onSubsectionRename,
   onSubsectionDelete,
@@ -410,7 +408,6 @@ export function SectionCard({
                     onRename={onSubsectionRename}
                     onDelete={onSubsectionDelete}
                     onAddLineItem={onAddLineItem}
-                    onLineItemEdit={onLineItemEdit}
                     onLineItemDelete={onSubsectionLineItemDelete}
                   />
                 ))}

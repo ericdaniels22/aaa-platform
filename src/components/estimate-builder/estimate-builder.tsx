@@ -223,6 +223,7 @@ export function EstimateBuilder({
   }
 
   async function onSectionDelete(id: string) {
+    const snapshot = state.estimate; // capture before mutation
     setState((prev) => ({
       ...prev,
       estimate: {
@@ -238,9 +239,13 @@ export function EstimateBuilder({
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         toast.error(body.error || "Failed to delete section");
+        setState((prev) => ({ ...prev, estimate: snapshot }));
+      } else {
+        toast.success("Section deleted");
       }
     } catch {
       toast.error("Network error — could not delete section");
+      setState((prev) => ({ ...prev, estimate: snapshot }));
     }
   }
 
@@ -312,6 +317,7 @@ export function EstimateBuilder({
   }
 
   async function onSubsectionDelete(id: string) {
+    const snapshot = state.estimate; // capture before mutation
     setState((prev) => ({
       ...prev,
       estimate: {
@@ -330,15 +336,20 @@ export function EstimateBuilder({
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         toast.error(body.error || "Failed to delete subsection");
+        setState((prev) => ({ ...prev, estimate: snapshot }));
+      } else {
+        toast.success("Subsection deleted");
       }
     } catch {
       toast.error("Network error — could not delete subsection");
+      setState((prev) => ({ ...prev, estimate: snapshot }));
     }
   }
 
   // ── Slot 5: line-item delete ───────────────────────────────────────────
 
   async function onLineItemDelete(id: string) {
+    const snapshot = state.estimate; // capture before mutation
     // Remove from local state (works for items in sections OR subsections)
     setState((prev) => ({
       ...prev,
@@ -362,9 +373,13 @@ export function EstimateBuilder({
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         toast.error(body.error || "Failed to delete line item");
+        setState((prev) => ({ ...prev, estimate: snapshot }));
+      } else {
+        toast.success("Line item deleted");
       }
     } catch {
       toast.error("Network error — could not delete line item");
+      setState((prev) => ({ ...prev, estimate: snapshot }));
     }
   }
 
@@ -431,10 +446,14 @@ export function EstimateBuilder({
     }
 
     if (activeType === "line-item") {
+      // Task 25 will register useSortable({ id, data: { type: "line-item", parentSectionId } })
+      // for each LineItemRow. The parentSectionId is either a section.id or a subsection.id —
+      // whichever immediate parent the line item lives in.
+
       // Cross-section/cross-subsection drags: snap back.
-      const activeSectionId = active.data.current?.sectionId as string | undefined;
-      const overSectionId = over.data.current?.sectionId as string | undefined;
-      if (activeSectionId !== overSectionId) return; // snap back
+      const activeParentSectionId = active.data.current?.parentSectionId as string | undefined;
+      const overParentSectionId = over.data.current?.parentSectionId as string | undefined;
+      if (activeParentSectionId !== overParentSectionId) return; // snap back
 
       setState((prev) => ({
         ...prev,
@@ -442,7 +461,7 @@ export function EstimateBuilder({
           ...prev.estimate,
           sections: prev.estimate.sections.map((s) => {
             // Check direct items
-            if (s.id === activeSectionId) {
+            if (s.id === activeParentSectionId) {
               const items = s.items;
               const oldIdx = items.findIndex((i) => i.id === active.id);
               const newIdx = items.findIndex((i) => i.id === over.id);
@@ -453,7 +472,7 @@ export function EstimateBuilder({
             return {
               ...s,
               subsections: s.subsections.map((sub) => {
-                if (sub.id !== activeSectionId) return sub;
+                if (sub.id !== activeParentSectionId) return sub;
                 const items = sub.items;
                 const oldIdx = items.findIndex((i) => i.id === active.id);
                 const newIdx = items.findIndex((i) => i.id === over.id);
@@ -557,7 +576,6 @@ export function EstimateBuilder({
                     onDelete={onSectionDelete}
                     onAddSubsection={onSubsectionAdd}
                     onAddLineItem={onAddLineItem}
-                    onLineItemEdit={onLineItemEdit}
                     onLineItemDelete={onLineItemDelete}
                     onSubsectionRename={onSubsectionRename}
                     onSubsectionDelete={onSubsectionDelete}

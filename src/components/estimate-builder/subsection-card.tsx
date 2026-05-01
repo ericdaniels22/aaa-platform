@@ -20,7 +20,6 @@ import {
   Plus,
   Pencil,
 } from "lucide-react";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -51,7 +50,6 @@ export interface SubsectionCardProps {
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onAddLineItem: (sectionId: string) => void;
-  onLineItemEdit: (item: EstimateLineItem) => void;
   onLineItemDelete: (id: string) => void;
 }
 
@@ -150,7 +148,6 @@ export function SubsectionCard({
   onRename,
   onDelete,
   onAddLineItem,
-  onLineItemEdit,
   onLineItemDelete,
 }: SubsectionCardProps) {
   const {
