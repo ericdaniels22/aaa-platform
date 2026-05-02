@@ -251,7 +251,7 @@ export function HeaderBar({
 
         {/* ── Right: action buttons + save indicator ────────────────────── */}
         <div className="flex items-center gap-2 shrink-0">
-          <SaveIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
+          <SaveIndicator status={saveStatus} lastSavedAt={lastSavedAt} mode={mode} />
 
           {/* Void button */}
           <Button
