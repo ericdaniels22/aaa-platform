@@ -2,9 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, MoreVertical, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { InvoiceStatusPill } from "./invoice-status-pill";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  formatStatusLabel,
+  getStatusBadgeClasses,
+} from "@/lib/estimate-status";
 import type { InvoiceRow, InvoiceStatus } from "@/lib/invoices";
 
 type StatusFilter = "all" | InvoiceStatus;
@@ -47,6 +56,21 @@ export default function InvoiceListClient() {
     refresh();
   }, [refresh]);
 
+  const onVoid = useCallback(
+    async (r: InvoiceWithJob) => {
+      if (!confirm(`Void invoice ${r.invoice_number}? This cannot be undone.`)) return;
+      const res = await fetch(`/api/invoices/${r.id}/void`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}) as { error?: string });
+        toast.error(body?.error ?? "Failed to void invoice");
+        return;
+      }
+      toast.success(`Invoice ${r.invoice_number} voided`);
+      refresh();
+    },
+    [refresh],
+  );
+
   return (
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between">
@@ -78,7 +102,7 @@ export default function InvoiceListClient() {
         ))}
         <input
           type="text"
-          placeholder="Search invoice #, memo, notes…"
+          placeholder="Search invoice #, title, memo…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="ml-auto border border-border rounded-lg px-3 py-1.5 bg-background text-sm w-72"
@@ -94,14 +118,14 @@ export default function InvoiceListClient() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="text-left px-4 py-2 font-medium">Invoice</th>
-                <th className="text-left px-4 py-2 font-medium">Customer</th>
+                <th className="text-left px-4 py-2 font-medium">Invoice #</th>
+                <th className="text-left px-4 py-2 font-medium">Title</th>
                 <th className="text-left px-4 py-2 font-medium">Job</th>
+                <th className="text-left px-4 py-2 font-medium">Status</th>
                 <th className="text-right px-4 py-2 font-medium">Total</th>
                 <th className="text-left px-4 py-2 font-medium">Issued</th>
                 <th className="text-left px-4 py-2 font-medium">Due</th>
-                <th className="text-left px-4 py-2 font-medium">Status</th>
-                <th className="text-left px-4 py-2 font-medium">QB</th>
+                <th className="px-4 py-2 font-medium w-10" />
               </tr>
             </thead>
             <tbody>
@@ -114,27 +138,61 @@ export default function InvoiceListClient() {
               )}
               {rows.map((r) => (
                 <tr key={r.id} className="border-t border-border hover:bg-accent/30">
-                  <td className="px-4 py-2">
+                  <td className="px-4 py-2 font-mono text-xs">
                     <Link href={`/invoices/${r.id}`} className="text-primary hover:underline">
                       {r.invoice_number}
                     </Link>
                   </td>
-                  <td className="px-4 py-2">
-                    {[r.jobs?.contacts?.first_name, r.jobs?.contacts?.last_name]
-                      .filter(Boolean)
-                      .join(" ") || "—"}
-                  </td>
+                  <td className="px-4 py-2">{r.title || "—"}</td>
                   <td className="px-4 py-2 text-muted-foreground">
-                    {r.jobs?.property_address ?? r.jobs?.job_number ?? "—"}
+                    {r.jobs ? (
+                      <Link
+                        href={`/jobs/${r.jobs.id}`}
+                        className="text-primary hover:underline"
+                      >
+                        {r.jobs.property_address ?? r.jobs.job_number}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <span
+                      className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${getStatusBadgeClasses(
+                        "invoice",
+                        r.status,
+                      )}`}
+                    >
+                      {formatStatusLabel("invoice", r.status)}
+                    </span>
                   </td>
                   <td className="px-4 py-2 text-right">${Number(r.total_amount).toFixed(2)}</td>
                   <td className="px-4 py-2 text-muted-foreground">{formatDate(r.issued_date)}</td>
                   <td className="px-4 py-2 text-muted-foreground">{formatDate(r.due_date)}</td>
-                  <td className="px-4 py-2">
-                    <InvoiceStatusPill status={r.status} />
-                  </td>
-                  <td className="px-4 py-2 text-xs text-muted-foreground">
-                    {r.qb_invoice_id ? `QB ${r.qb_invoice_id}` : "—"}
+                  <td className="px-4 py-2 text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        className="inline-flex items-center justify-center rounded-md h-7 w-7 p-0 hover:bg-accent hover:text-accent-foreground transition-colors"
+                        aria-label={`Actions for ${r.invoice_number}`}
+                      >
+                        <MoreVertical size={14} />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem render={<Link href={`/invoices/${r.id}`} />}>
+                          View
+                        </DropdownMenuItem>
+                        <DropdownMenuItem render={<Link href={`/invoices/${r.id}/edit`} />}>
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={r.status === "voided" || r.status === "draft"}
+                          onClick={() => onVoid(r)}
+                          className="text-destructive"
+                        >
+                          Void
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </td>
                 </tr>
               ))}
