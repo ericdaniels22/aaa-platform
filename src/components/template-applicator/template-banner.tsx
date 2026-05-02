@@ -98,10 +98,12 @@ export default function TemplateBanner({
       <span className="text-sm">
         📋 <strong>Start from a template?</strong>
       </span>
-      <Combobox
-        value={selected}
-        onValueChange={(v) => {
-          const id = typeof v === "string" ? v : null;
+      <Combobox<Template>
+        items={templates}
+        itemToStringLabel={(t) => t.name}
+        value={templates.find((t) => t.id === selected) ?? null}
+        onValueChange={(t) => {
+          const id = t?.id ?? null;
           setSelected(id);
           if (id) void handleApply(id);
         }}
@@ -111,7 +113,7 @@ export default function TemplateBanner({
         <ComboboxContent>
           <ComboboxList>
             {templates.map((t) => (
-              <ComboboxItem key={t.id} value={t.id}>
+              <ComboboxItem key={t.id} value={t}>
                 {t.name}
                 {t.damage_type_tags.length > 0 && (
                   <span className="ml-2 text-xs text-muted-foreground">
