@@ -18,6 +18,7 @@ import {
   Link2,
   CreditCard,
   Library,
+  LayoutTemplate,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
@@ -35,6 +36,7 @@ export const settingsNavItems: SettingsNavItem[] = [
   { href: "/settings/statuses", label: "Job Statuses", icon: ListChecks },
   { href: "/settings/damage-types", label: "Damage Types", icon: Flame },
   { href: "/settings/item-library", label: "Item Library", icon: Library },
+  { href: "/settings/estimate-templates", label: "Estimate Templates", icon: LayoutTemplate },
   { href: "/settings/vendors", label: "Vendors", icon: Store },
   { href: "/settings/expense-categories", label: "Expense Categories", icon: Receipt },
   { href: "/settings/users", label: "Users & Crew", icon: Users },
