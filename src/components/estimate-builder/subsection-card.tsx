@@ -58,6 +58,10 @@ export interface SubsectionCardProps {
   /** Task 25: when true, hides editing controls (voided estimate). */
   readOnly?: boolean;
   mode?: BuilderMode;
+  /** Task 36: parent section index in the entity tree; used to build DOM ids for scroll-to-item. */
+  sectionIdx?: number;
+  /** Task 36: this subsection's index in the parent section's subsections array. */
+  subsectionIdx?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -121,6 +125,8 @@ export function SubsectionCard({
   onLineItemChange,
   readOnly = false,
   mode = "estimate",
+  sectionIdx,
+  subsectionIdx,
 }: SubsectionCardProps) {
   const {
     attributes,
@@ -280,7 +286,7 @@ export function SubsectionCard({
           items={sortedItems.map((i) => i.id)}
           strategy={verticalListSortingStrategy}
         >
-          {sortedItems.map((item) => (
+          {sortedItems.map((item, iIdx) => (
             <LineItemRow
               key={item.id}
               item={item}
@@ -289,6 +295,11 @@ export function SubsectionCard({
               onDelete={() => onLineItemDelete(item.id)}
               readOnly={readOnly}
               mode={mode}
+              domId={
+                sectionIdx !== undefined && subsectionIdx !== undefined
+                  ? `line-item-s${sectionIdx}-i${iIdx}-sub${subsectionIdx}`
+                  : undefined
+              }
             />
           ))}
         </SortableContext>

@@ -79,6 +79,8 @@ export interface SectionCardProps {
   /** Task 25: when true, hides editing controls (voided estimate). */
   readOnly?: boolean;
   mode?: BuilderMode;
+  /** Task 36: index of this section in the parent sections array; used to build DOM ids for scroll-to-item. */
+  sectionIdx?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -223,6 +225,7 @@ export function SectionCard({
   onSubsectionLineItemDelete,
   readOnly = false,
   mode = "estimate",
+  sectionIdx,
 }: SectionCardProps) {
   const {
     attributes,
@@ -402,7 +405,7 @@ export function SectionCard({
               strategy={verticalListSortingStrategy}
             >
               <ul className="space-y-2">
-                {sortedSubsections.map((sub) => (
+                {sortedSubsections.map((sub, subIdx) => (
                   <SubsectionCard
                     key={sub.id}
                     subsection={sub}
@@ -413,6 +416,8 @@ export function SectionCard({
                     onLineItemChange={onLineItemChange}
                     readOnly={readOnly}
                     mode={mode}
+                    sectionIdx={sectionIdx}
+                    subsectionIdx={subIdx}
                   />
                 ))}
               </ul>
@@ -429,7 +434,7 @@ export function SectionCard({
           strategy={verticalListSortingStrategy}
         >
           <div className="space-y-1">
-            {sortedItems.map((item) => (
+            {sortedItems.map((item, iIdx) => (
               <LineItemRow
                 key={item.id}
                 item={item}
@@ -438,6 +443,11 @@ export function SectionCard({
                 onDelete={() => onLineItemDelete(item.id)}
                 readOnly={readOnly}
                 mode={mode}
+                domId={
+                  sectionIdx !== undefined
+                    ? `line-item-s${sectionIdx}-i${iIdx}`
+                    : undefined
+                }
               />
             ))}
           </div>

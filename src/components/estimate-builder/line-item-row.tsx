@@ -29,6 +29,12 @@ export interface LineItemRowProps {
   onDelete: () => void;
   readOnly?: boolean;
   mode?: BuilderMode;
+  /**
+   * Task 36: optional DOM id for scroll-to-item helpers (broken-refs banner).
+   * Format: `line-item-s${sIdx}-i${iIdx}` or `line-item-s${sIdx}-i${iIdx}-sub${subIdx}`.
+   * Constructed by parents (section-card / subsection-card) which know the indices.
+   */
+  domId?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -42,6 +48,7 @@ export function LineItemRow({
   onDelete,
   readOnly = false,
   mode = "estimate",
+  domId,
 }: LineItemRowProps) {
   // ── dnd-kit sortable ──────────────────────────────────────────────────────
   const {
@@ -146,6 +153,7 @@ export function LineItemRow({
   return (
     <div
       ref={setNodeRef}
+      id={domId}
       style={style}
       className={cn(
         "group flex items-center gap-1 px-2 py-1.5 rounded-md border border-border bg-card text-sm",

@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertOctagon, Plus } from "lucide-react";
 import { toast } from "sonner";
+import TemplateBanner from "@/components/template-applicator/template-banner";
+import BrokenRefsBanner from "@/components/template-applicator/broken-refs-banner";
 import type {
   AdjustmentType,
   BuilderEntity,
@@ -128,6 +131,16 @@ interface BuilderState {
   entity: BuilderEntity;
 }
 
+// Task 36: kept inline (not exported from lib/types) per plan note.
+interface BrokenRef {
+  section_idx: number;
+  item_idx: number;
+  library_item_id: string | null;
+  placeholder: boolean;
+  in_subsection?: boolean;
+  subsection_idx?: number;
+}
+
 export interface EstimateBuilderProps {
   entity: BuilderEntity;
   job?: (Job & { contact: Contact | null }) | null;
@@ -148,7 +161,10 @@ export function EstimateBuilder({
   defaultOpeningStatement = "",
   defaultClosingStatement = "",
 }: EstimateBuilderProps) {
+  const router = useRouter();
   const [state, setState] = useState<BuilderState>({ entity });
+  // Task 36: broken-refs banner state — set by template-applicator after apply.
+  const [brokenRefs, setBrokenRefs] = useState<BrokenRef[] | null>(null);
 
   // ── Task 33.5: auto-save config branches on entity.kind ───────────────────
   const autoSaveConfig =
@@ -1179,6 +1195,20 @@ export function EstimateBuilder({
   const sections = estimate.sections;
   const mode = estimateEntity.kind;
 
+  // ── Task 36: Apply Template banner gating ────────────────────────────────
+  // Banner is hidden once the user has applied a template (even if zero
+  // sections came in — e.g. statements-only template) OR once they've
+  // manually added any section. Template-banner sets the localStorage flag
+  // on successful apply.
+  const appliedFlag =
+    typeof window !== "undefined"
+      ? localStorage.getItem(`nookleus.template-applied.${estimate.id}`) === "1"
+      : false;
+  const showTemplateBanner =
+    state.entity.kind === "estimate" &&
+    sections.length === 0 &&
+    !appliedFlag;
+
   return (
     <div className="relative min-h-screen bg-background">
       {/* Voided banner */}
@@ -1215,6 +1245,32 @@ export function EstimateBuilder({
           onValidUntilChange={onValidUntilChange}
           mode={mode}
         />
+
+        {/* ── Task 36: Apply Template banner ───────────────────────────────── */}
+        {showTemplateBanner && (
+          <TemplateBanner
+            estimateId={estimate.id}
+            jobDamageType={job?.damage_type ?? null}
+            onApplied={(result) => {
+              setBrokenRefs(result.broken_refs);
+              router.refresh();
+            }}
+          />
+        )}
+
+        {/* ── Task 36: Broken-refs banner (post-apply warns) ───────────────── */}
+        {brokenRefs && brokenRefs.length > 0 && (
+          <BrokenRefsBanner
+            estimateId={estimate.id}
+            brokenRefs={brokenRefs}
+            onScrollToItem={(sIdx, subIdx, iIdx) => {
+              const target = document.getElementById(
+                `line-item-s${sIdx}-i${iIdx}${subIdx !== undefined ? `-sub${subIdx}` : ""}`,
+              );
+              target?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+          />
+        )}
 
         {/* ── SLOT 3: CustomerBlock ────────────────────────────────────────── */}
         {job && <CustomerBlock job={job} mode={mode} />}
@@ -1259,7 +1315,7 @@ export function EstimateBuilder({
               strategy={verticalListSortingStrategy}
             >
               <ul className="space-y-3">
-                {sections.map((sec) => (
+                {sections.map((sec, sIdx) => (
                   <SectionCard
                     key={sec.id}
                     section={sec}
@@ -1274,6 +1330,7 @@ export function EstimateBuilder({
                     onSubsectionLineItemDelete={onLineItemDelete}
                     readOnly={isVoided}
                     mode={mode}
+                    sectionIdx={sIdx}
                   />
                 ))}
               </ul>
