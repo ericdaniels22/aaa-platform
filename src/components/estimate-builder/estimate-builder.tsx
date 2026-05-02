@@ -42,6 +42,7 @@ import { CustomerBlock } from "./customer-block";
 import { StatementEditor } from "./statement-editor";
 import { SectionCard } from "./section-card";
 import { AddItemDialog } from "./add-item-dialog";
+import ConvertConfirmModal from "@/components/conversion/convert-confirm-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -249,6 +250,45 @@ export function EstimateBuilder({
   // ── Slot 5: Add-section inline input state ─────────────────────────────
   const [showAddSection, setShowAddSection] = useState(false);
   const [newSectionTitle, setNewSectionTitle] = useState("");
+
+  // ── Task 38: Convert modal state ───────────────────────────────────────
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [alreadyConvertedTo, setAlreadyConvertedTo] = useState<
+    { id: string; number: string } | null
+  >(null);
+
+  async function handleConvertConfirm() {
+    if (state.entity.kind !== "estimate") return;
+    const res = await fetch(
+      `/api/estimates/${state.entity.data.id}/convert`,
+      { method: "POST" },
+    );
+    if (res.ok) {
+      const data = (await res.json()) as {
+        new_invoice_id: string;
+        new_invoice_number: string;
+      };
+      router.push(`/invoices/${data.new_invoice_id}/edit`);
+      return;
+    }
+    if (res.status === 409) {
+      const err = (await res.json()) as {
+        existing_invoice_id: string;
+        existing_invoice_number: string;
+      };
+      setAlreadyConvertedTo({
+        id: err.existing_invoice_id,
+        number: err.existing_invoice_number,
+      });
+      return;
+    }
+    const err = (await res.json().catch(() => ({}))) as {
+      message?: string;
+      error?: string;
+    };
+    toast.error(err.message || err.error || "Convert failed");
+    setConvertOpen(false);
+  }
 
   // ── Callbacks ──────────────────────────────────────────────────────────────
 
@@ -1236,6 +1276,7 @@ export function EstimateBuilder({
           saveStatus={saveStatus}
           lastSavedAt={lastSavedAt}
           isVoiding={isVoiding}
+          onConvertClick={() => setConvertOpen(true)}
         />
 
         {/* ── SLOT 2: MetadataBar ──────────────────────────────────────────── */}
@@ -1423,6 +1464,21 @@ export function EstimateBuilder({
         onAdded={onLineItemAdded}
         mode={mode}
       />
+
+      {/* ── Task 38: Convert confirmation modal ──────────────────────────── */}
+      {state.entity.kind === "estimate" && (
+        <ConvertConfirmModal
+          open={convertOpen}
+          onClose={() => {
+            setConvertOpen(false);
+            setAlreadyConvertedTo(null);
+          }}
+          estimateNumber={state.entity.data.estimate_number}
+          jobNumber={job?.job_number ?? ""}
+          alreadyConvertedTo={alreadyConvertedTo}
+          onConfirm={handleConvertConfirm}
+        />
+      )}
     </div>
   );
 }
