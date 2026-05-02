@@ -21,13 +21,20 @@ function stripHtmlTags(s: string): string {
   return s.replace(/<[^>]*>/g, "");
 }
 
-function buildPlaceholder(defaultText: string): string {
-  if (!defaultText) return "Type your statement…";
-  const stripped = stripHtmlTags(defaultText).trim();
-  if (!stripped) return "Type your statement…";
-  if (stripped.length > 120) return stripped.slice(0, 120) + "…";
-  return stripped;
-}
+const placeholders: Record<string, Record<string, string>> = {
+  estimate: {
+    opening: "Estimate opening — describe scope, conditions, expectations.",
+    closing: "Estimate closing — payment terms, validity, signature line.",
+  },
+  invoice: {
+    opening: "Invoice opening — thank-you, summary, project context.",
+    closing: "Invoice closing — payment terms, late-fee policy, contact info.",
+  },
+  template: {
+    opening: "Template opening — pre-fills new estimates.",
+    closing: "Template closing — pre-fills new estimates.",
+  },
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Props
@@ -72,7 +79,8 @@ export function StatementEditor({
     setResetCounter((c) => c + 1);
   }
 
-  const placeholder = buildPlaceholder(defaultText);
+  const which = label === "Opening statement" ? "opening" : "closing";
+  const placeholder = placeholders[mode][which];
 
   // When value is empty, pass empty string as content so TiptapEditor shows
   // the placeholder; otherwise pass the actual HTML.
