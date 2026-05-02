@@ -7,6 +7,7 @@ import type {
   EstimateWithContents,
 } from "@/lib/types";
 import { round2 } from "@/lib/format";
+import { recalculateMonetary, touchEntity, checkSnapshot as checkSnapshotGeneric } from "@/lib/builder-shared";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Numbering — atomic per-job sequence via RPC (uses SELECT FOR UPDATE in SQL)
@@ -125,13 +126,7 @@ export async function recalculateTotals(
     }
   }
 
-  // 3. Subtotal from authoritative line totals
-  const subtotal = round2(
-    ((items ?? []) as Array<{ quantity: number; unit_price: number }>)
-      .reduce((acc, li) => acc + Number(li.quantity) * Number(li.unit_price), 0),
-  );
-
-  // 4. Load adjustment fields
+  // 3. Load adjustment fields
   const { data: est, error: estErr } = await supabase
     .from("estimates")
     .select("markup_type, markup_value, discount_type, discount_value, tax_rate")
@@ -146,26 +141,22 @@ export async function recalculateTotals(
   if (estErr) throw new Error(`recalc fetch est: ${estErr.message}`);
   if (!est) throw new Error(`estimate ${estimateId} not found during recalc`);
 
-  // 5. Markup
-  let markup_amount = 0;
-  if (est.markup_type === "amount") markup_amount = round2(Number(est.markup_value));
-  else if (est.markup_type === "percent") markup_amount = round2(subtotal * Number(est.markup_value) / 100);
+  // 4. Compute authoritative per-line totals (same as the defensive write above)
+  const lineItemTotals = ((items ?? []) as Array<{ quantity: number; unit_price: number }>)
+    .map((li) => round2(Number(li.quantity) * Number(li.unit_price)));
 
-  // 6. Discount
-  let discount_amount = 0;
-  if (est.discount_type === "amount") discount_amount = round2(Number(est.discount_value));
-  else if (est.discount_type === "percent") discount_amount = round2(subtotal * Number(est.discount_value) / 100);
+  // 5. Delegate pure monetary calc to shared helper
+  const { subtotal, markup_amount, discount_amount, adjusted_subtotal, tax_amount, total } =
+    recalculateMonetary({
+      lineItemTotals,
+      markup_type: est.markup_type,
+      markup_value: Number(est.markup_value),
+      discount_type: est.discount_type,
+      discount_value: Number(est.discount_value),
+      tax_rate: Number(est.tax_rate),
+    });
 
-  // 7. Adjusted subtotal
-  const adjusted_subtotal = round2(subtotal + markup_amount - discount_amount);
-
-  // 8. Tax
-  const tax_amount = round2(adjusted_subtotal * Number(est.tax_rate) / 100);
-
-  // 9. Total
-  const total = round2(adjusted_subtotal + tax_amount);
-
-  // 10. Write back
+  // 6. Write back
   const { error: updErr } = await supabase
     .from("estimates")
     .update({
@@ -196,28 +187,17 @@ export async function checkSnapshot(
   estimateId: string,
   snapshot: string | undefined,
 ): Promise<SnapshotCheckResult> {
-  if (!snapshot) {
-    // Caller opted out of the guard; allow.
-    const { data: row } = await supabase
-      .from("estimates")
-      .select("updated_at")
-      .eq("id", estimateId)
-      .maybeSingle<{ updated_at: string }>();
-    return { ok: true, updated_at: row?.updated_at ?? null };
-  }
-  const { data: current } = await supabase
-    .from("estimates")
-    .select("updated_at")
-    .eq("id", estimateId)
-    .maybeSingle<{ updated_at: string }>();
-  if (current && current.updated_at !== snapshot) {
+  // When no snapshot is supplied the caller opts out of the guard — always allow,
+  // even if the row has gone missing (mirrors original 67a behavior).
+  const result = await checkSnapshotGeneric(supabase, "estimates", estimateId, snapshot);
+  if (result.stale && snapshot) {
     const fresh = await getEstimateWithContents(estimateId, supabase);
     return {
       ok: false,
       response: NextResponse.json({ error: "stale", estimate: fresh }, { status: 409 }),
     };
   }
-  return { ok: true, updated_at: current?.updated_at ?? null };
+  return { ok: true, updated_at: result.current };
 }
 
 // Force-bump estimates.updated_at (used by reorder PUTs that don't otherwise
@@ -228,13 +208,12 @@ export async function touchEstimate(
   supabase: SupabaseClient,
   estimateId: string,
 ): Promise<string | null> {
-  const { data, error } = await supabase
+  await touchEntity(supabase, "estimates", estimateId);
+  const { data } = await supabase
     .from("estimates")
-    .update({ updated_at: new Date().toISOString() })
-    .eq("id", estimateId)
     .select("updated_at")
+    .eq("id", estimateId)
     .maybeSingle<{ updated_at: string }>();
-  if (error) throw new Error(`touchEstimate: ${error.message}`);
   return data?.updated_at ?? null;
 }
 
