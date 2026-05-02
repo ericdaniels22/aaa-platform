@@ -1,20 +1,24 @@
 {
   "main": {
-    "id": "4751cf7fb10144fb",
+    "id": "e2aa1b0d4f522bf9",
     "type": "split",
     "children": [
       {
-        "id": "cf17307c2dbba3ba",
+        "id": "818a180590ddba32",
         "type": "tabs",
         "children": [
           {
-            "id": "f964b49a75495c89",
+            "id": "0ac80e818bc8c473",
             "type": "leaf",
             "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
+              "type": "markdown",
+              "state": {
+                "file": "end-of-session-handoff/SKILL.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "SKILL"
             }
           }
         ]
@@ -23,15 +27,15 @@
     "direction": "vertical"
   },
   "left": {
-    "id": "099bb74043fa0133",
+    "id": "299665b75e71e0b3",
     "type": "split",
     "children": [
       {
-        "id": "5e7c7e12ccdfa125",
+        "id": "17eb1eb6eed4c2c2",
         "type": "tabs",
         "children": [
           {
-            "id": "f73ba63b8ea667e6",
+            "id": "3d32aa963b2ca5eb",
             "type": "leaf",
             "state": {
               "type": "file-explorer",
@@ -44,7 +48,7 @@
             }
           },
           {
-            "id": "ffa2dec5c73944ec",
+            "id": "a99877c359da251b",
             "type": "leaf",
             "state": {
               "type": "search",
@@ -61,7 +65,7 @@
             }
           },
           {
-            "id": "9fada1de960bab15",
+            "id": "86d32acd542cf51b",
             "type": "leaf",
             "state": {
               "type": "bookmarks",
@@ -77,19 +81,20 @@
     "width": 300
   },
   "right": {
-    "id": "f71513d13c663e88",
+    "id": "a0682f3ff089e312",
     "type": "split",
     "children": [
       {
-        "id": "0758f00de800c3ad",
+        "id": "ee10cd636ca0d236",
         "type": "tabs",
         "children": [
           {
-            "id": "a8ce1230efc67bbd",
+            "id": "ac1c559a7e312874",
             "type": "leaf",
             "state": {
               "type": "backlink",
               "state": {
+                "file": "end-of-session-handoff/SKILL.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -99,24 +104,25 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks"
+              "title": "Backlinks for SKILL"
             }
           },
           {
-            "id": "8274b58a8881a462",
+            "id": "6b32c56d11e02834",
             "type": "leaf",
             "state": {
               "type": "outgoing-link",
               "state": {
+                "file": "end-of-session-handoff/SKILL.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links"
+              "title": "Outgoing links from SKILL"
             }
           },
           {
-            "id": "963a9bf0cc046939",
+            "id": "c9d0fdd965046c56",
             "type": "leaf",
             "state": {
               "type": "tag",
@@ -131,7 +137,7 @@
             }
           },
           {
-            "id": "72c7c312c6243c68",
+            "id": "1eecb173ba8ed1f1",
             "type": "leaf",
             "state": {
               "type": "all-properties",
@@ -145,17 +151,18 @@
             }
           },
           {
-            "id": "8fafbb6989fd50b1",
+            "id": "e85261674679af2f",
             "type": "leaf",
             "state": {
               "type": "outline",
               "state": {
+                "file": "end-of-session-handoff/SKILL.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline"
+              "title": "Outline of SKILL"
             }
           }
         ]
@@ -176,14 +183,9 @@
       "bases:Create new base": false
     }
   },
-  "active": "f964b49a75495c89",
+  "active": "0ac80e818bc8c473",
   "lastOpenFiles": [
-    "handoffs/2026-05-02-build-67b-2.md",
-    "handoffs/2026-04-29-build-66d.md",
-    "handoffs/2026-04-29-build-65b.md",
-    "_templates/build.md",
-    "_templates/decision.md",
-    "decisions/README.md",
-    "builds/build-64.md"
+    "start-of-session-orientation/SKILL.md",
+    "end-of-session-handoff/SKILL.md"
   ]
 }
