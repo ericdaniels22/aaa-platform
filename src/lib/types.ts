@@ -68,15 +68,38 @@ export interface JobActivity {
 
 export interface Invoice {
   id: string;
+  organization_id: string;
   job_id: string;
   invoice_number: string;
+  sequence_number: number;
+  title: string;
+  status: "draft" | "sent" | "partial" | "paid" | "voided";
+  issued_date: string;
+  due_date: string | null;
+  opening_statement: string | null;
+  closing_statement: string | null;
+  subtotal: number;
+  markup_type: "percent" | "amount" | "none";
+  markup_value: number;
+  markup_amount: number;
+  discount_type: "percent" | "amount" | "none";
+  discount_value: number;
+  discount_amount: number;
+  adjusted_subtotal: number;
+  tax_rate: number;
+  tax_amount: number;
   total_amount: number;
-  status: "draft" | "sent" | "partial" | "paid";
-  issued_date: string | null;
+  po_number: string | null;
+  memo: string | null;
   notes: string | null;
+  converted_from_estimate_id: string | null;
+  voided_at: string | null;
+  voided_by: string | null;
+  void_reason: string | null;
+  qb_invoice_id: string | null;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
-  line_items?: LineItem[];
 }
 
 export interface LineItem {
@@ -609,7 +632,7 @@ export interface EstimateWithContents extends Estimate {
   }>;
 }
 
-// Schema-only in 67a (no UI yet). Defined here so 67b/c don't reshape types later.
+// TemplateItem kept for back-compat (superseded by TemplateStructureItem in 67b).
 export interface TemplateItem {
   library_item_id: string;
   description_override: string | null;
@@ -626,12 +649,7 @@ export interface EstimateTemplate {
   damage_type_tags: string[];
   opening_statement: string | null;
   closing_statement: string | null;
-  structure: { sections: Array<{
-    title: string;
-    sort_order: number;
-    subsections: Array<{ title: string; sort_order: number; items: TemplateItem[] }>;
-    items: TemplateItem[];
-  }> };
+  structure: TemplateStructure;
   is_active: boolean;
   created_by: string | null;
   created_at: string;
@@ -667,4 +685,135 @@ export interface PdfPreset {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// =============================================================================
+// 67b — invoices, templates, builder entity union
+// =============================================================================
+
+export interface InvoiceSection {
+  id: string;
+  organization_id: string;
+  invoice_id: string;
+  parent_section_id: string | null;
+  title: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InvoiceLineItem {
+  id: string;
+  organization_id: string;
+  invoice_id: string;
+  section_id: string | null;
+  library_item_id: string | null;
+  description: string;
+  code: string | null;
+  quantity: number;
+  unit: string | null;
+  unit_price: number;
+  amount: number; // = total in estimate-land
+  sort_order: number;
+  xactimate_code: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InvoiceWithContents extends Invoice {
+  sections: Array<InvoiceSection & {
+    items: InvoiceLineItem[];
+    subsections: Array<InvoiceSection & { items: InvoiceLineItem[] }>;
+  }>;
+}
+
+export interface TemplateStructure {
+  sections: Array<{
+    title: string;
+    sort_order: number;
+    subsections?: Array<{
+      title: string;
+      sort_order: number;
+      items?: TemplateStructureItem[];
+    }>;
+    items?: TemplateStructureItem[];
+  }>;
+}
+
+export interface TemplateStructureItem {
+  library_item_id: string | null;
+  description_override: string | null;
+  quantity_override: number | null;
+  unit_price_override: number | null;
+  sort_order: number;
+}
+
+/** Templates use the builder shell, so they need a "with contents" projection too —
+ *  but unlike estimates/invoices, the live builder state is what the editor edits;
+ *  the `structure` JSONB column is materialized via the explicit Save Template button. */
+export interface TemplateWithContents extends EstimateTemplate {
+  // Mirror estimate shape so the builder shell renders a familiar tree.
+  // Backed by transient estimate_templates_sections / _line_items? No — we use
+  // the SAME estimate_sections / estimate_line_items tables but scoped via a
+  // hidden "draft estimate" pattern. Implemented in Task 13.
+  sections: Array<{
+    id: string;
+    title: string;
+    sort_order: number;
+    parent_section_id: string | null;
+    items: Array<{
+      id: string;
+      library_item_id: string | null;
+      description: string;
+      code: string | null;
+      quantity: number;
+      unit: string | null;
+      unit_price: number;
+      sort_order: number;
+    }>;
+    subsections: Array<{
+      id: string;
+      title: string;
+      sort_order: number;
+      items: Array<{
+        id: string;
+        library_item_id: string | null;
+        description: string;
+        code: string | null;
+        quantity: number;
+        unit: string | null;
+        unit_price: number;
+        sort_order: number;
+      }>;
+    }>;
+  }>;
+}
+
+// =============================================================================
+// Builder entity discriminated union — used by the shared builder shell
+// =============================================================================
+
+export type BuilderEntity =
+  | { kind: "estimate"; data: EstimateWithContents }
+  | { kind: "invoice";  data: InvoiceWithContents }
+  | { kind: "template"; data: TemplateWithContents };
+
+export type BuilderMode = "estimate" | "invoice" | "template";
+
+// =============================================================================
+// Auto-save config — used by use-auto-save.ts
+// =============================================================================
+
+export interface AutoSaveConfig<T extends { id: string; updated_at?: string | null }> {
+  entityKind: BuilderMode;
+  entityId: string;
+  paths: {
+    rootPut: string;
+    sectionsReorder: string;
+    sectionRoute: (sectionId: string) => string;
+    lineItemsReorder: string;
+    lineItemRoute: (itemId: string) => string;
+  };
+  serializeRootPut: (entity: T) => unknown;
+  hasSnapshotConcurrency: boolean;
 }
