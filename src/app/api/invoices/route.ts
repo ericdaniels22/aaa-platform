@@ -5,12 +5,26 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
+// Uses deprecated InvoiceWithItems — replaced in Task 14
 import {
   computeTotals,
-  type CreateInvoiceInput,
   type InvoiceRow,
   type InvoiceLineItemInput,
-} from "@/lib/invoices/types";
+} from "@/lib/invoices";
+
+// Legacy POST body shape — Task 10's new CreateInvoiceInput drops lineItems/taxRate/etc
+// (the new flow is create-empty-draft + redirect-to-builder). Inlined here until
+// Task 14 rewrites POST.
+interface LegacyCreateInvoiceInput {
+  jobId: string;
+  issuedDate?: string;
+  dueDate?: string | null;
+  lineItems: InvoiceLineItemInput[];
+  taxRate?: number;
+  poNumber?: string | null;
+  memo?: string | null;
+  notes?: string | null;
+}
 
 function addDays(iso: string, days: number): string {
   const d = new Date(iso);
@@ -58,7 +72,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const body = (await request.json().catch(() => null)) as CreateInvoiceInput | null;
+  const body = (await request.json().catch(() => null)) as LegacyCreateInvoiceInput | null;
   if (!body || typeof body.jobId !== "string") {
     return NextResponse.json({ error: "jobId is required" }, { status: 400 });
   }

@@ -2,7 +2,7 @@
 
 import { renderToBuffer } from "@react-pdf/renderer";
 import { InvoicePdfDocument } from "@/components/invoices/invoice-pdf-document";
-import type { InvoiceWithItems } from "@/lib/invoices/types";
+import type { InvoiceWithContents } from "@/lib/types";
 
 export interface PdfCompany {
   name: string | null;
@@ -17,7 +17,7 @@ export interface PdfCustomer {
 }
 
 export async function generateInvoicePdf(
-  invoice: InvoiceWithItems,
+  invoice: InvoiceWithContents,
   company: PdfCompany,
   customer: PdfCustomer,
 ): Promise<Buffer> {

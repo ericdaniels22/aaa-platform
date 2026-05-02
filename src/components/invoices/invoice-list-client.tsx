@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { InvoiceStatusPill } from "./invoice-status-pill";
-import type { InvoiceRow, InvoiceStatus } from "@/lib/invoices/types";
+import type { InvoiceRow, InvoiceStatus } from "@/lib/invoices";
 
 type StatusFilter = "all" | InvoiceStatus;
 

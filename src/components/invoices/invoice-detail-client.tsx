@@ -24,12 +24,13 @@ import LineItemsEditor, {
   type EditableLineItem,
 } from "./line-items-editor";
 import InvoiceTotalsPanel from "./invoice-totals-panel";
+// Uses deprecated InvoiceWithItems — replaced in Task 47
 import type {
   InvoiceLineItemInput,
   InvoiceLineItemRow,
   InvoiceStatus,
   InvoiceWithItems,
-} from "@/lib/invoices/types";
+} from "@/lib/invoices";
 
 interface JobSummary {
   id: string;

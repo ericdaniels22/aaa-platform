@@ -2,7 +2,7 @@
 // No design polish — line items, totals, company header, payment info.
 
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
-import type { InvoiceWithItems } from "@/lib/invoices/types";
+import type { InvoiceWithContents, InvoiceSection, InvoiceLineItem } from "@/lib/types";
 
 interface CompanyBlock {
   name: string | null;
@@ -29,6 +29,22 @@ const styles = StyleSheet.create({
   table: { marginTop: 8, borderTop: "1 solid #ddd" },
   tr: { flexDirection: "row", borderBottom: "1 solid #eee", paddingVertical: 6 },
   thRow: { flexDirection: "row", paddingVertical: 6, backgroundColor: "#f5f5f5" },
+  sectionHeader: {
+    fontWeight: "bold",
+    fontSize: 11,
+    marginTop: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    backgroundColor: "#fafafa",
+  },
+  subsectionHeader: {
+    fontWeight: "bold",
+    fontSize: 9,
+    marginTop: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 12,
+    color: "#444",
+  },
   tdDesc: { flex: 3, paddingHorizontal: 6 },
   tdQty: { flex: 0.6, paddingHorizontal: 6, textAlign: "right" },
   tdPrice: { flex: 1, paddingHorizontal: 6, textAlign: "right" },
@@ -52,12 +68,31 @@ function fmtDate(ts: string | null): string {
   });
 }
 
+type SectionWithContents = InvoiceSection & {
+  items: InvoiceLineItem[];
+  subsections: Array<InvoiceSection & { items: InvoiceLineItem[] }>;
+};
+
+function ItemRow({ li }: { li: InvoiceLineItem }) {
+  return (
+    <View key={li.id} style={styles.tr}>
+      <Text style={styles.tdDesc}>
+        {li.xactimate_code ? `[${li.xactimate_code}] ` : ""}
+        {li.description}
+      </Text>
+      <Text style={styles.tdQty}>{Number(li.quantity)}</Text>
+      <Text style={styles.tdPrice}>{money(Number(li.unit_price))}</Text>
+      <Text style={styles.tdAmt}>{money(Number(li.amount))}</Text>
+    </View>
+  );
+}
+
 export function InvoicePdfDocument({
   invoice,
   company,
   customer,
 }: {
-  invoice: InvoiceWithItems;
+  invoice: InvoiceWithContents;
   company: CompanyBlock;
   customer: CustomerBlock;
 }) {
@@ -107,15 +142,20 @@ export function InvoicePdfDocument({
             <Text style={styles.tdPrice}>Unit price</Text>
             <Text style={styles.tdAmt}>Amount</Text>
           </View>
-          {invoice.line_items.map((li) => (
-            <View key={li.id} style={styles.tr}>
-              <Text style={styles.tdDesc}>
-                {li.xactimate_code ? `[${li.xactimate_code}] ` : ""}
-                {li.description}
-              </Text>
-              <Text style={styles.tdQty}>{Number(li.quantity)}</Text>
-              <Text style={styles.tdPrice}>{money(Number(li.unit_price))}</Text>
-              <Text style={styles.tdAmt}>{money(Number(li.amount))}</Text>
+          {(invoice.sections as SectionWithContents[]).map((section) => (
+            <View key={section.id}>
+              <Text style={styles.sectionHeader}>{section.title}</Text>
+              {section.items.map((li) => (
+                <ItemRow key={li.id} li={li} />
+              ))}
+              {section.subsections.map((sub) => (
+                <View key={sub.id}>
+                  <Text style={styles.subsectionHeader}>{sub.title}</Text>
+                  {sub.items.map((li) => (
+                    <ItemRow key={li.id} li={li} />
+                  ))}
+                </View>
+              ))}
             </View>
           ))}
         </View>

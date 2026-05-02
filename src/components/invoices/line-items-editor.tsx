@@ -1,7 +1,7 @@
 "use client";
 
 import { GripVertical, Plus, Trash2 } from "lucide-react";
-import type { InvoiceLineItemInput } from "@/lib/invoices/types";
+import type { InvoiceLineItemInput } from "@/lib/invoices";
 
 export interface EditableLineItem extends InvoiceLineItemInput {
   key: string; // client-only; stable React key across reorders

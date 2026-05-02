@@ -1,6 +1,6 @@
 "use client";
 
-import type { InvoiceStatus } from "@/lib/invoices/types";
+import type { InvoiceStatus } from "@/lib/invoices";
 
 const MAP: Record<InvoiceStatus, { label: string; className: string }> = {
   draft: { label: "Draft", className: "bg-muted text-muted-foreground" },

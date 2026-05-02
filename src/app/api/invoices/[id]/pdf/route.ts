@@ -8,7 +8,8 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
 import { generateInvoicePdf } from "@/lib/invoices/generate-invoice-pdf";
-import type { InvoiceWithItems } from "@/lib/invoices/types";
+import { getInvoiceWithContents } from "@/lib/invoices";
+import type { InvoiceWithContents } from "@/lib/types";
 
 interface CompanySettingRow {
   key: string;
@@ -38,22 +39,12 @@ async function loadPayload(
   service: ReturnType<typeof createServiceClient>,
   id: string,
 ): Promise<{
-  invoice: InvoiceWithItems;
+  invoice: InvoiceWithContents;
   company: { name: string | null; address: string | null; phone: string | null; email: string | null };
   customer: { name: string; address: string };
 } | null> {
-  const { data: invoice } = await service
-    .from("invoices")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle<InvoiceWithItems>();
+  const invoice = await getInvoiceWithContents(service, id);
   if (!invoice) return null;
-  const { data: items } = await service
-    .from("invoice_line_items")
-    .select("*")
-    .eq("invoice_id", id)
-    .order("sort_order", { ascending: true });
-  invoice.line_items = items ?? [];
 
   const { data: job } = await service
     .from("jobs")

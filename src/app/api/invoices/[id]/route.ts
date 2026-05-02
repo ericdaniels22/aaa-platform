@@ -9,12 +9,12 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
 import { getActiveOrganizationId } from "@/lib/supabase/get-active-org";
+// Uses deprecated InvoiceWithItems — replaced in Task 15
 import {
   computeTotals,
   type InvoiceLineItemInput,
   type InvoiceRow,
-  type InvoiceWithItems,
-} from "@/lib/invoices/types";
+} from "@/lib/invoices";
 
 export async function GET(
   _request: Request,

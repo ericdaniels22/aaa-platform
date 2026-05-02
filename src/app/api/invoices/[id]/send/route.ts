@@ -6,7 +6,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase-api";
-import type { InvoiceRow } from "@/lib/invoices/types";
+import type { InvoiceRow } from "@/lib/invoices";
 
 export async function POST(
   _request: Request,

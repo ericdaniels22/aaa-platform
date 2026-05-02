@@ -1,6 +1,6 @@
 "use client";
 
-import { computeTotals, type InvoiceLineItemInput } from "@/lib/invoices/types";
+import { computeTotals, type InvoiceLineItemInput } from "@/lib/invoices";
 
 export default function InvoiceTotalsPanel({
   items,
