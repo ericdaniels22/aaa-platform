@@ -54,4 +54,16 @@ Recommend C if 67c is imminent; A otherwise.
 
 ---
 
+## From Task 7 (commit `b6d3bcf`)
+
+### V1 — `use-auto-save.ts` manual browser verification deferred
+
+**Location:** `src/components/estimate-builder/use-auto-save.ts` (refactored to generic `AutoSaveConfig<T>`).
+
+**Finding:** Plan Task 7 Step 5 specified mandatory manual verification (open existing 67a estimate, confirm auto-save fires on field edit, sections reorder, line-item reorder, per-line-item edit). The implementer's environment couldn't reach Supabase (`ENOTFOUND` on the project's hostname) so the live check did not run. `tsc --noEmit` clean; structural refactor described correctly.
+
+**Mitigation:** Verification deferred to Task 52's spec §11 test 15 ("Builder mode-prop sanity: estimate builder still works identically to 67a"). If a regression slips through, it surfaces there.
+
+**Action when addressed:** Run the 4-check happy path in browser preview before declaring 67b shipped.
+
 ## (Future findings appended here as build progresses.)
