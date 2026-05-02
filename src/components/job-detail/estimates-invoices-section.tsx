@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Eye, Pencil, Ban, Plus, Lock } from "lucide-react";
+import { Eye, Pencil, Ban, Plus } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import InvoicesList from "./invoices-list";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -177,6 +178,7 @@ export function EstimatesInvoicesSection({ jobId }: EstimatesInvoicesSectionProp
   const canView = !authLoading && hasPermission("view_estimates");
   const canEdit = !authLoading && hasPermission("edit_estimates");
   const canCreate = !authLoading && hasPermission("create_estimates");
+  const canCreateInvoices = !authLoading && hasPermission("create_invoices");
 
   return (
     <div className="space-y-6 mb-6">
@@ -228,9 +230,20 @@ export function EstimatesInvoicesSection({ jobId }: EstimatesInvoicesSectionProp
                 <TableRow key={est.id}>
                   {/* Estimate number — monospace */}
                   <TableCell>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {est.estimate_number}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {est.estimate_number}
+                      </span>
+                      {est.converted_to_invoice_id && (
+                        <Link
+                          href={`/invoices/${est.converted_to_invoice_id}`}
+                          className="text-xs text-blue-600 hover:underline"
+                          title="View linked invoice"
+                        >
+                          → INV
+                        </Link>
+                      )}
+                    </div>
                   </TableCell>
 
                   {/* Title */}
@@ -306,15 +319,9 @@ export function EstimatesInvoicesSection({ jobId }: EstimatesInvoicesSectionProp
         )}
       </div>
 
-      {/* ── Invoices placeholder card ───────────────────────────────────────── */}
+      {/* ── Invoices card ───────────────────────────────────────────────────── */}
       <div className="bg-card rounded-xl border border-border p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-foreground">Invoices</h3>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Lock size={14} />
-          <span>Available in build 67b</span>
-        </div>
+        <InvoicesList jobId={jobId} canCreate={canCreateInvoices} />
       </div>
 
       {/* ── Void confirm dialog ─────────────────────────────────────────────── */}
