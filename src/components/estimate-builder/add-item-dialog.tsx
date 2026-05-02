@@ -31,6 +31,7 @@ import {
 export interface AddItemDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The entity's ID regardless of mode (estimate, invoice, or template). */
   estimateId: string;
   sectionId: string;
   jobDamageType?: string;
@@ -59,6 +60,7 @@ function LibraryTab({
   onAdded,
   open,
   onClose,
+  mode = "estimate",
 }: {
   estimateId: string;
   sectionId: string;
@@ -66,7 +68,11 @@ function LibraryTab({
   onAdded: (item: EstimateLineItem) => void;
   open: boolean;
   onClose: () => void;
+  mode?: BuilderMode;
 }) {
+  // Template mode has no granular line-item routes — see Part 2 plan deviation;
+  // parent's rootPut auto-save handles persistence.
+  const entityBase = mode === "invoice" ? "invoices" : "estimates";
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [category, setCategory] = useState<ItemCategory | "">("");
@@ -135,7 +141,32 @@ function LibraryTab({
   async function handleAddFromLibrary(libItem: ItemLibraryItem) {
     setAddingId(libItem.id);
     try {
-      const res = await fetch(`/api/estimates/${estimateId}/line-items`, {
+      // Template mode has no granular line-item routes — see Part 2 plan
+      // deviation; parent's rootPut auto-save persists via setEntity callback.
+      if (mode === "template") {
+        const now = new Date().toISOString();
+        const localItem: EstimateLineItem = {
+          id: crypto.randomUUID(),
+          organization_id: "",
+          estimate_id: estimateId,
+          section_id: sectionId,
+          library_item_id: libItem.id,
+          description: libItem.name,
+          code: libItem.code ?? null,
+          quantity: libItem.default_quantity,
+          unit: libItem.default_unit ?? null,
+          unit_price: libItem.unit_price,
+          total: libItem.default_quantity * libItem.unit_price,
+          sort_order: 0,
+          created_at: now,
+          updated_at: now,
+        };
+        onAdded(localItem);
+        toast.success(`Added: ${libItem.name}`);
+        return;
+      }
+
+      const res = await fetch(`/api/${entityBase}/${estimateId}/line-items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -290,12 +321,18 @@ function CustomTab({
   sectionId,
   onAdded,
   onClose,
+  mode = "estimate",
 }: {
   estimateId: string;
   sectionId: string;
   onAdded: (item: EstimateLineItem) => void;
   onClose: () => void;
+  mode?: BuilderMode;
 }) {
+  // Template mode has no granular line-item routes — see Part 2 plan deviation;
+  // parent's rootPut auto-save handles persistence.
+  const entityBase = mode === "invoice" ? "invoices" : "estimates";
+
   const [description, setDescription] = useState("");
   const [code, setCode] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -328,7 +365,33 @@ function CustomTab({
 
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/estimates/${estimateId}/line-items`, {
+      // Template mode has no granular line-item routes — see Part 2 plan
+      // deviation; parent's rootPut auto-save persists via setEntity callback.
+      if (mode === "template") {
+        const now = new Date().toISOString();
+        const localItem: EstimateLineItem = {
+          id: crypto.randomUUID(),
+          organization_id: "",
+          estimate_id: estimateId,
+          section_id: sectionId,
+          library_item_id: null,
+          description: description.trim(),
+          code: code.trim() || null,
+          quantity: qty,
+          unit: unit.trim() || null,
+          unit_price: price,
+          total: qty * price,
+          sort_order: 0,
+          created_at: now,
+          updated_at: now,
+        };
+        onAdded(localItem);
+        toast.success("Item added");
+        onClose();
+        return;
+      }
+
+      const res = await fetch(`/api/${entityBase}/${estimateId}/line-items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -500,6 +563,7 @@ export function AddItemDialog({
               onAdded={onAdded}
               open={open}
               onClose={() => onOpenChange(false)}
+              mode={mode}
             />
           </TabsContent>
 
@@ -509,6 +573,7 @@ export function AddItemDialog({
               sectionId={sectionId}
               onAdded={onAdded}
               onClose={() => onOpenChange(false)}
+              mode={mode}
             />
           </TabsContent>
         </Tabs>
