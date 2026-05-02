@@ -42,6 +42,7 @@ import { CustomerBlock } from "./customer-block";
 import { StatementEditor } from "./statement-editor";
 import { SectionCard } from "./section-card";
 import { AddItemDialog } from "./add-item-dialog";
+import TemplateMetaBar from "./template-meta-bar";
 import ConvertConfirmModal from "@/components/conversion/convert-confirm-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -293,11 +294,37 @@ export function EstimateBuilder({
   // ── Callbacks ──────────────────────────────────────────────────────────────
 
   function onTitleChange(title: string) {
-    setState((prev) => ({
-      ...prev,
-      entity: { ...prev.entity, data: { ...prev.entity.data, title } } as BuilderEntity,
-    }));
+    setState((prev) => {
+      // Templates store the user-facing title in `name`, not `title`.
+      if (prev.entity.kind === "template") {
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: { ...prev.entity.data, name: title },
+          } as BuilderEntity,
+        };
+      }
+      return {
+        ...prev,
+        entity: { ...prev.entity, data: { ...prev.entity.data, title } } as BuilderEntity,
+      };
+    });
     // Task 28 auto-save will pick this up.
+  }
+
+  // Task 40: template meta-bar patch handler — merges arbitrary template fields.
+  function onTemplatePatch(patch: Partial<TemplateWithContents>) {
+    setState((prev) => {
+      if (prev.entity.kind !== "template") return prev;
+      return {
+        ...prev,
+        entity: {
+          ...prev.entity,
+          data: { ...prev.entity.data, ...patch },
+        } as BuilderEntity,
+      };
+    });
   }
 
   function onIssuedDateChange(d: string | null) {
@@ -1216,14 +1243,169 @@ export function EstimateBuilder({
   }
 
   if (state.entity.kind === "template") {
-    // TODO Task 40 — template builder consumer page wires this up.
+    // ── Template-mode JSX (Task 40) ────────────────────────────────────────
+    // Mirrors estimate-mode shape but strips: MetadataBar (replaced by
+    // TemplateMetaBar), CustomerBlock, TotalsPanel, TemplateBanner,
+    // BrokenRefsBanner, voided banner, Convert modal.
+    const templateEntity = state.entity; // narrowed
+    const template = templateEntity.data;
+    const tmplSections = template.sections;
+    const tmplMode = templateEntity.kind;
+
     return (
       <div className="relative min-h-screen bg-background">
-        <main className="max-w-4xl mx-auto px-4 py-6 pb-24">
-          <p className="text-sm text-muted-foreground">
-            Template builder coming in Task 40.
-          </p>
+        <main className="max-w-4xl mx-auto px-4 py-6 pb-24 space-y-4">
+          {/* ── HeaderBar — Save Template / Cancel-edit per spec §4.1 ── */}
+          <HeaderBar
+            entity={templateEntity}
+            onTitleChange={onTitleChange}
+            onVoid={() => {
+              /* templates have no void flow */
+            }}
+            saveStatus={saveStatus}
+            lastSavedAt={lastSavedAt}
+            isVoiding={false}
+          />
+
+          {/* ── TemplateMetaBar — name, description, damage_type_tags ── */}
+          <TemplateMetaBar template={template} onChange={onTemplatePatch} />
+
+          {/* ── Opening statement ── */}
+          <StatementEditor
+            label="Opening statement"
+            value={template.opening_statement}
+            onChange={onOpeningStatementChange}
+            defaultText=""
+            mode={tmplMode}
+          />
+
+          {/* ── Sections list ── */}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            {tmplSections.length === 0 ? (
+              <div className="rounded-xl border-2 border-dashed border-border bg-card p-12 flex flex-col items-center gap-4 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Add a section to get started
+                </p>
+                <Button
+                  onClick={() => setShowAddSection(true)}
+                  size="sm"
+                  className="gap-1.5"
+                >
+                  <Plus size={14} />
+                  New Section
+                </Button>
+              </div>
+            ) : (
+              <SortableContext
+                items={tmplSections.map((s) => s.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <ul className="space-y-3">
+                  {tmplSections.map((sec, sIdx) => (
+                    <SectionCard
+                      key={sec.id}
+                      // Template sections have a structurally compatible
+                      // shape but lack the EstimateSection scalar fields
+                      // (organization_id, estimate_id, created_at,
+                      // updated_at). Cast through unknown — SectionCard
+                      // only reads id/title/sort_order/items/subsections.
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      section={sec as any}
+                      onRename={onSectionRename}
+                      onDelete={onSectionDelete}
+                      onAddSubsection={onSubsectionAdd}
+                      onAddLineItem={onAddLineItem}
+                      onLineItemDelete={onLineItemDelete}
+                      onLineItemChange={onLineItemChange}
+                      onSubsectionRename={onSubsectionRename}
+                      onSubsectionDelete={onSubsectionDelete}
+                      onSubsectionLineItemDelete={onLineItemDelete}
+                      mode={tmplMode}
+                      sectionIdx={sIdx}
+                    />
+                  ))}
+                </ul>
+              </SortableContext>
+            )}
+
+            {/* Add Section inline input */}
+            <div className="mt-3 pt-3 border-t border-border">
+              {showAddSection ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    autoFocus
+                    value={newSectionTitle}
+                    maxLength={200}
+                    placeholder="Section name"
+                    onChange={(e) => setNewSectionTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newSectionTitle.trim()) {
+                        void onAddSection(newSectionTitle.trim());
+                      }
+                      if (e.key === "Escape") {
+                        setShowAddSection(false);
+                        setNewSectionTitle("");
+                      }
+                    }}
+                    className="h-8 text-sm flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (newSectionTitle.trim()) {
+                        void onAddSection(newSectionTitle.trim());
+                      }
+                    }}
+                    disabled={!newSectionTitle.trim()}
+                  >
+                    Add
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setShowAddSection(false);
+                      setNewSectionTitle("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAddSection(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 w-full rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors border border-dashed border-border"
+                >
+                  <Plus size={13} />
+                  Add Section
+                </button>
+              )}
+            </div>
+          </DndContext>
+
+          {/* ── Closing statement ── */}
+          <StatementEditor
+            label="Closing statement"
+            value={template.closing_statement}
+            onChange={onClosingStatementChange}
+            defaultText=""
+            mode={tmplMode}
+          />
         </main>
+
+        {/* ── AddItemDialog — template-aware per Task 32 ── */}
+        <AddItemDialog
+          open={addItemTarget !== null}
+          onOpenChange={(open) => !open && setAddItemTarget(null)}
+          estimateId={template.id}
+          sectionId={addItemTarget?.sectionId ?? ""}
+          onAdded={onLineItemAdded}
+          mode={tmplMode}
+        />
       </div>
     );
   }
