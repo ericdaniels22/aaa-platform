@@ -239,10 +239,6 @@ export async function touchInvoice(
 // Compat helpers — kept routes (mark-sent, pdf, send, void) still call these
 // =============================================================================
 
-/** Old typing alias used by the legacy /api/invoices POST + PATCH (deleted in
- *  Tasks 14, 15, but the kept routes' imports might still reference it).
- *  Kept as `InvoiceWithItems = InvoiceWithContents` re-export above. */
-
 /** computeTotals retained for kept-route compatibility. New routes use recalculateMonetary. */
 export function computeTotals(
   items: InvoiceLineItemInput[],
