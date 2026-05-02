@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { AlertOctagon, Plus } from "lucide-react";
 import { toast } from "sonner";
-import type { AdjustmentType, Contact, Job } from "@/lib/types";
+import type { AdjustmentType, BuilderMode, Contact, Job } from "@/lib/types";
 import type { EstimateWithContents, EstimateLineItem } from "@/lib/types";
 import { useAutoSave } from "./use-auto-save";
 import { computeEstimateTotals, sumLineItemsFromSections } from "@/lib/estimates-calc";
@@ -76,6 +76,7 @@ export interface EstimateBuilderProps {
   defaultValidDays: number;
   defaultOpeningStatement: string;
   defaultClosingStatement: string;
+  mode?: BuilderMode;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -88,6 +89,7 @@ export function EstimateBuilder({
   defaultValidDays,
   defaultOpeningStatement,
   defaultClosingStatement,
+  mode = "estimate",
 }: EstimateBuilderProps) {
   const [state, setState] = useState<BuilderState>({
     estimate,
@@ -677,6 +679,7 @@ export function EstimateBuilder({
           saveStatus={saveStatus}
           lastSavedAt={lastSavedAt}
           isVoiding={isVoiding}
+          mode={mode}
         />
 
         {/* ── SLOT 2: MetadataBar ──────────────────────────────────────────── */}
@@ -684,10 +687,11 @@ export function EstimateBuilder({
           estimate={state.estimate}
           onIssuedDateChange={onIssuedDateChange}
           onValidUntilChange={onValidUntilChange}
+          mode={mode}
         />
 
         {/* ── SLOT 3: CustomerBlock ────────────────────────────────────────── */}
-        <CustomerBlock job={job} />
+        <CustomerBlock job={job} mode={mode} />
 
         {/* ── SLOT 4: Opening statement ────────────────────────────────────── */}
         <StatementEditor
@@ -696,6 +700,7 @@ export function EstimateBuilder({
           onChange={onOpeningStatementChange}
           defaultText={defaultOpeningStatement}
           readOnly={isVoided}
+          mode={mode}
         />
 
         {/* ── SLOT 5: Sections list (Task 24) ──────────────────────────────── */}
@@ -742,6 +747,7 @@ export function EstimateBuilder({
                     onSubsectionDelete={onSubsectionDelete}
                     onSubsectionLineItemDelete={onLineItemDelete}
                     readOnly={isVoided}
+                    mode={mode}
                   />
                 ))}
               </ul>
@@ -810,6 +816,7 @@ export function EstimateBuilder({
           onChange={onClosingStatementChange}
           defaultText={defaultClosingStatement}
           readOnly={isVoided}
+          mode={mode}
         />
       </main>
 
@@ -820,6 +827,7 @@ export function EstimateBuilder({
         onDiscountChange={onDiscountChange}
         onTaxRateChange={onTaxRateChange}
         readOnly={isVoided}
+        mode={mode}
       />
 
       {/* ── Task 26: AddItemDialog ────────────────────────────────────────── */}
@@ -830,6 +838,7 @@ export function EstimateBuilder({
         sectionId={addItemTarget?.sectionId ?? ""}
         jobDamageType={job.damage_type}
         onAdded={onLineItemAdded}
+        mode={mode}
       />
     </div>
   );

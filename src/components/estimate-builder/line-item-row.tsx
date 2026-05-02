@@ -15,7 +15,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
-import type { EstimateLineItem } from "@/lib/types";
+import type { BuilderMode, EstimateLineItem } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -28,6 +28,7 @@ export interface LineItemRowProps {
   onChange: (next: Partial<EstimateLineItem>) => void;
   onDelete: () => void;
   readOnly?: boolean;
+  mode?: BuilderMode;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -40,6 +41,7 @@ export function LineItemRow({
   onChange,
   onDelete,
   readOnly = false,
+  mode = "estimate",
 }: LineItemRowProps) {
   // ── dnd-kit sortable ──────────────────────────────────────────────────────
   const {

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/format";
-import type { EstimateLineItem, ItemCategory, ItemLibraryItem } from "@/lib/types";
+import type { BuilderMode, EstimateLineItem, ItemCategory, ItemLibraryItem } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +35,7 @@ export interface AddItemDialogProps {
   sectionId: string;
   jobDamageType?: string;
   onAdded: (item: EstimateLineItem) => void;
+  mode?: BuilderMode;
 }
 
 const CATEGORY_OPTIONS: { value: ItemCategory; label: string }[] = [
@@ -473,6 +474,7 @@ export function AddItemDialog({
   sectionId,
   jobDamageType,
   onAdded,
+  mode = "estimate",
 }: AddItemDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

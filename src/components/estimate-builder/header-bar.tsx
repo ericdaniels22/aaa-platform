@@ -15,7 +15,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import type { Estimate } from "@/lib/types";
+import type { BuilderMode, Estimate } from "@/lib/types";
 import { STATUS_BADGE_CLASSES, formatStatusLabel } from "@/lib/estimate-status";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -31,6 +31,7 @@ interface HeaderBarProps {
   saveStatus: "idle" | "saving" | "saved" | "error";
   lastSavedAt: Date | null;
   isVoiding: boolean;
+  mode?: BuilderMode;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -134,6 +135,7 @@ export function HeaderBar({
   saveStatus,
   lastSavedAt,
   isVoiding,
+  mode = "estimate",
 }: HeaderBarProps) {
   const isVoided = estimate.status === "voided";
 

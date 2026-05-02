@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Check, AlertTriangle } from "lucide-react";
+import type { BuilderMode } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Props
@@ -9,13 +10,14 @@ import { Loader2, Check, AlertTriangle } from "lucide-react";
 export interface SaveIndicatorProps {
   status: "idle" | "saving" | "saved" | "error";
   lastSavedAt: Date | null;
+  mode?: BuilderMode;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SaveIndicator
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function SaveIndicator({ status, lastSavedAt }: SaveIndicatorProps) {
+export function SaveIndicator({ status, lastSavedAt, mode = "estimate" }: SaveIndicatorProps) {
   if (status === "idle") return null;
 
   if (status === "saving") {

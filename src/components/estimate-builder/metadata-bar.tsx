@@ -1,6 +1,6 @@
 "use client";
 
-import type { Estimate } from "@/lib/types";
+import type { BuilderMode, Estimate } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MetadataBar — horizontal strip with Issued date + Valid until date pickers.
@@ -13,12 +13,14 @@ interface MetadataBarProps {
   estimate: Estimate;
   onIssuedDateChange: (d: string | null) => void;
   onValidUntilChange: (d: string | null) => void;
+  mode?: BuilderMode;
 }
 
 export function MetadataBar({
   estimate,
   onIssuedDateChange,
   onValidUntilChange,
+  mode = "estimate",
 }: MetadataBarProps) {
   const isVoided = estimate.status === "voided";
 

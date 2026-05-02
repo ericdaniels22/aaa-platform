@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import TiptapEditor from "@/components/tiptap-editor";
+import type { BuilderMode } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utilities
@@ -38,6 +39,7 @@ interface StatementEditorProps {
   onChange: (next: string | null) => void;
   defaultText: string; // resolved from company_settings by parent
   readOnly?: boolean;
+  mode?: BuilderMode;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -50,6 +52,7 @@ export function StatementEditor({
   onChange,
   defaultText,
   readOnly = false,
+  mode = "estimate",
 }: StatementEditorProps) {
   // resetCounter forces TiptapEditor to unmount/remount when the user clicks
   // "Reset to default", so the editor re-initializes with the new content prop.

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { Input } from "@/components/ui/input";
-import type { AdjustmentType, Estimate } from "@/lib/types";
+import type { AdjustmentType, BuilderMode, Estimate } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Props
@@ -16,6 +16,7 @@ interface TotalsPanelProps {
   onDiscountChange: (type: AdjustmentType, value: number) => void;
   onTaxRateChange: (rate: number) => void;
   readOnly?: boolean;
+  mode?: BuilderMode;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -141,6 +142,7 @@ export function TotalsPanel({
   onDiscountChange,
   onTaxRateChange,
   readOnly = false,
+  mode = "estimate",
 }: TotalsPanelProps) {
   const isNegative = estimate.total < 0;
   const [isMinimized, setIsMinimized] = useState(false);

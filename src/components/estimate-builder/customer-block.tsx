@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
-import type { Contact, Job } from "@/lib/types";
+import type { BuilderMode, Contact, Job } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CustomerBlock — read-only display of customer info pulled from the job.
@@ -12,9 +12,10 @@ import type { Contact, Job } from "@/lib/types";
 
 interface CustomerBlockProps {
   job: Job & { contact: Contact | null };
+  mode?: BuilderMode;
 }
 
-export function CustomerBlock({ job }: CustomerBlockProps) {
+export function CustomerBlock({ job, mode = "estimate" }: CustomerBlockProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { contact } = job;
   const customerName = contact

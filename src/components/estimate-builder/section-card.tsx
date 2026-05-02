@@ -54,7 +54,7 @@ import {
 } from "@/components/ui/dialog";
 import { SubsectionCard } from "./subsection-card";
 import { LineItemRow } from "./line-item-row";
-import type { EstimateSection, EstimateLineItem } from "@/lib/types";
+import type { BuilderMode, EstimateSection, EstimateLineItem } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -78,6 +78,7 @@ export interface SectionCardProps {
   onSubsectionLineItemDelete: (id: string) => void;
   /** Task 25: when true, hides editing controls (voided estimate). */
   readOnly?: boolean;
+  mode?: BuilderMode;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -221,6 +222,7 @@ export function SectionCard({
   onSubsectionDelete,
   onSubsectionLineItemDelete,
   readOnly = false,
+  mode = "estimate",
 }: SectionCardProps) {
   const {
     attributes,
@@ -410,6 +412,7 @@ export function SectionCard({
                     onLineItemDelete={onSubsectionLineItemDelete}
                     onLineItemChange={onLineItemChange}
                     readOnly={readOnly}
+                    mode={mode}
                   />
                 ))}
               </ul>
@@ -434,6 +437,7 @@ export function SectionCard({
                 onChange={(partial) => onLineItemChange(item.id, partial)}
                 onDelete={() => onLineItemDelete(item.id)}
                 readOnly={readOnly}
+                mode={mode}
               />
             ))}
           </div>

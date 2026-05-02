@@ -41,7 +41,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { LineItemRow } from "./line-item-row";
-import type { EstimateSection, EstimateLineItem } from "@/lib/types";
+import type { BuilderMode, EstimateSection, EstimateLineItem } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -57,6 +57,7 @@ export interface SubsectionCardProps {
   onLineItemChange: (itemId: string, partial: Partial<EstimateLineItem>) => void;
   /** Task 25: when true, hides editing controls (voided estimate). */
   readOnly?: boolean;
+  mode?: BuilderMode;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,6 +120,7 @@ export function SubsectionCard({
   onLineItemDelete,
   onLineItemChange,
   readOnly = false,
+  mode = "estimate",
 }: SubsectionCardProps) {
   const {
     attributes,
@@ -286,6 +288,7 @@ export function SubsectionCard({
               onChange={(partial) => onLineItemChange(item.id, partial)}
               onDelete={() => onLineItemDelete(item.id)}
               readOnly={readOnly}
+              mode={mode}
             />
           ))}
         </SortableContext>
