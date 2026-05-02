@@ -3,8 +3,18 @@
 import { useState } from "react";
 import { AlertOctagon, Plus } from "lucide-react";
 import { toast } from "sonner";
-import type { AdjustmentType, BuilderMode, Contact, Job } from "@/lib/types";
-import type { EstimateWithContents, EstimateLineItem } from "@/lib/types";
+import type {
+  AdjustmentType,
+  BuilderEntity,
+  Contact,
+  Job,
+} from "@/lib/types";
+import type {
+  EstimateWithContents,
+  EstimateLineItem,
+  InvoiceWithContents,
+  TemplateWithContents,
+} from "@/lib/types";
 import { useAutoSave } from "./use-auto-save";
 import { computeEstimateTotals, sumLineItemsFromSections } from "@/lib/estimates-calc";
 import {
@@ -63,20 +73,68 @@ function pickEstimateFieldsForPut(estimate: EstimateWithContents): EstimateField
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Invoice-level root-PUT serializer (Task 33.5 — used by Task 43 consumer page)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const INVOICE_FIELDS = [
+  "title",
+  "opening_statement",
+  "closing_statement",
+  "issued_date",
+  "due_date",
+  "po_number",
+  "markup_type",
+  "markup_value",
+  "discount_type",
+  "discount_value",
+  "tax_rate",
+  "status",
+] as const;
+
+type InvoiceFieldKey = typeof INVOICE_FIELDS[number];
+type InvoiceFieldsSubset = Pick<InvoiceWithContents, InvoiceFieldKey>;
+
+function pickInvoiceFieldsForPut(invoice: InvoiceWithContents): InvoiceFieldsSubset {
+  const result = {} as InvoiceFieldsSubset;
+  for (const k of INVOICE_FIELDS) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (result as any)[k] = invoice[k];
+  }
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Template-level root-PUT serializer (Task 33.5 — used by Task 40 consumer page)
+// The whole template object is sent as `builder_state` so the server can
+// snapshot it; promoted fields are sent flat for query-friendly columns.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function serializeTemplateRootPut(template: TemplateWithContents) {
+  return {
+    name: template.name,
+    description: template.description,
+    damage_type_tags: template.damage_type_tags,
+    opening_statement: template.opening_statement,
+    closing_statement: template.closing_statement,
+    builder_state: template,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface BuilderState {
-  estimate: EstimateWithContents;
+  entity: BuilderEntity;
 }
 
 export interface EstimateBuilderProps {
-  estimate: EstimateWithContents;
-  job: Job & { contact: Contact | null };
-  defaultValidDays: number;
-  defaultOpeningStatement: string;
-  defaultClosingStatement: string;
-  mode?: BuilderMode;
+  entity: BuilderEntity;
+  job?: (Job & { contact: Contact | null }) | null;
+  defaultValidDays?: number;
+  defaultDueDays?: number;
+  defaultOpeningStatement?: string;
+  defaultClosingStatement?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,34 +142,86 @@ export interface EstimateBuilderProps {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function EstimateBuilder({
-  estimate,
+  entity,
   job,
-  defaultValidDays,
-  defaultOpeningStatement,
-  defaultClosingStatement,
-  mode = "estimate",
+  defaultValidDays = 30,
+  defaultOpeningStatement = "",
+  defaultClosingStatement = "",
 }: EstimateBuilderProps) {
-  const [state, setState] = useState<BuilderState>({
-    estimate,
-  });
+  const [state, setState] = useState<BuilderState>({ entity });
 
-  // ── Task 28: auto-save hook (generic, Task 7 refactor) ────────────────────
+  // ── Task 33.5: auto-save config branches on entity.kind ───────────────────
+  const autoSaveConfig =
+    state.entity.kind === "estimate"
+      ? {
+          entityKind: "estimate" as const,
+          entityId: state.entity.data.id,
+          paths: {
+            rootPut: `/api/estimates/${state.entity.data.id}`,
+            sectionsReorder: `/api/estimates/${state.entity.data.id}/sections`,
+            sectionRoute: (sid: string) =>
+              `/api/estimates/${state.entity.data.id}/sections/${sid}`,
+            lineItemsReorder: `/api/estimates/${state.entity.data.id}/line-items`,
+            lineItemRoute: (iid: string) =>
+              `/api/estimates/${state.entity.data.id}/line-items/${iid}`,
+          },
+          serializeRootPut: pickEstimateFieldsForPut,
+          hasSnapshotConcurrency: true,
+        }
+      : state.entity.kind === "invoice"
+      ? {
+          entityKind: "invoice" as const,
+          entityId: state.entity.data.id,
+          paths: {
+            rootPut: `/api/invoices/${state.entity.data.id}`,
+            sectionsReorder: `/api/invoices/${state.entity.data.id}/sections`,
+            sectionRoute: (sid: string) =>
+              `/api/invoices/${state.entity.data.id}/sections/${sid}`,
+            lineItemsReorder: `/api/invoices/${state.entity.data.id}/line-items`,
+            lineItemRoute: (iid: string) =>
+              `/api/invoices/${state.entity.data.id}/line-items/${iid}`,
+          },
+          serializeRootPut: pickInvoiceFieldsForPut,
+          hasSnapshotConcurrency: true,
+        }
+      : {
+          entityKind: "template" as const,
+          entityId: state.entity.data.id,
+          paths: {
+            // Templates only persist via rootPut on debounce; the granular
+            // section/line-item routes are never invoked (gated by entityKind).
+            rootPut: `/api/estimate-templates/${state.entity.data.id}`,
+            sectionsReorder: `/api/estimate-templates/${state.entity.data.id}`,
+            sectionRoute: () =>
+              `/api/estimate-templates/${state.entity.data.id}`,
+            lineItemsReorder: `/api/estimate-templates/${state.entity.data.id}`,
+            lineItemRoute: () =>
+              `/api/estimate-templates/${state.entity.data.id}`,
+          },
+          serializeRootPut: serializeTemplateRootPut,
+          hasSnapshotConcurrency: false,
+        };
+
+  // useAutoSave is generic over the entity type; each branch above passes a
+  // type-correct config. We narrow on state.entity.kind to invoke the correct
+  // hook instance — but React requires hooks called in stable order across
+  // renders. Since the config switches per kind, we collapse via a single
+  // call with type-erased config + state.
+  const autoSaveState = {
+    entity: state.entity.data,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setEntity: (e: any) =>
+      setState((prev) => ({
+        ...prev,
+        entity: { ...prev.entity, data: e } as BuilderEntity,
+      })),
+  };
   const { saveStatus, lastSavedAt, saveSectionsReorder, saveLineItemsReorder } =
-    useAutoSave<EstimateWithContents>(
-      {
-        entityKind: "estimate",
-        entityId: state.estimate.id,
-        paths: {
-          rootPut: `/api/estimates/${estimate.id}`,
-          sectionsReorder: `/api/estimates/${estimate.id}/sections`,
-          sectionRoute: (sid) => `/api/estimates/${estimate.id}/sections/${sid}`,
-          lineItemsReorder: `/api/estimates/${estimate.id}/line-items`,
-          lineItemRoute: (iid) => `/api/estimates/${estimate.id}/line-items/${iid}`,
-        },
-        serializeRootPut: pickEstimateFieldsForPut,
-        hasSnapshotConcurrency: true,
-      },
-      { entity: state.estimate, setEntity: (e) => setState((prev) => ({ ...prev, estimate: e })) },
+    useAutoSave(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      autoSaveConfig as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      autoSaveState as any,
     );
 
   // Separate transient flag — not part of BuilderState because it's purely UI.
@@ -127,98 +237,150 @@ export function EstimateBuilder({
   // ── Callbacks ──────────────────────────────────────────────────────────────
 
   function onTitleChange(title: string) {
-    setState((prev) => ({ ...prev, estimate: { ...prev.estimate, title } }));
+    setState((prev) => ({
+      ...prev,
+      entity: { ...prev.entity, data: { ...prev.entity.data, title } } as BuilderEntity,
+    }));
     // Task 28 auto-save will pick this up.
   }
 
   function onIssuedDateChange(d: string | null) {
     setState((prev) => {
-      const next = { ...prev, estimate: { ...prev.estimate, issued_date: d } };
-      // Auto-default valid_until if issued date is set and valid_until is currently null.
-      // Use UTC components to avoid timezone off-by-one on the day-add.
-      if (d && prev.estimate.valid_until === null) {
+      // issued_date exists on estimate + invoice but not template.
+      if (prev.entity.kind === "template") return prev; // TODO Task 40
+      const next_data = { ...prev.entity.data, issued_date: d };
+      // Auto-default valid_until is estimate-only.
+      if (prev.entity.kind === "estimate" && d && prev.entity.data.valid_until === null) {
         const [y, m, day] = d.split("-").map(Number);
         const issued = new Date(Date.UTC(y, m - 1, day));
         issued.setUTCDate(issued.getUTCDate() + defaultValidDays);
         const yyyy = issued.getUTCFullYear();
         const mm = String(issued.getUTCMonth() + 1).padStart(2, "0");
         const dd = String(issued.getUTCDate()).padStart(2, "0");
-        next.estimate.valid_until = `${yyyy}-${mm}-${dd}`;
+        (next_data as EstimateWithContents).valid_until = `${yyyy}-${mm}-${dd}`;
       }
-      return next;
+      return {
+        ...prev,
+        entity: { ...prev.entity, data: next_data } as BuilderEntity,
+      };
     });
     // Task 28 auto-save will pick this up.
   }
 
   function onValidUntilChange(d: string | null) {
-    setState((prev) => ({ ...prev, estimate: { ...prev.estimate, valid_until: d } }));
+    setState((prev) => {
+      if (prev.entity.kind !== "estimate") return prev;
+      return {
+        ...prev,
+        entity: {
+          ...prev.entity,
+          data: { ...prev.entity.data, valid_until: d },
+        },
+      };
+    });
     // Task 28 auto-save will pick this up.
   }
 
   function onOpeningStatementChange(next: string | null) {
-    setState((prev) => ({ ...prev, estimate: { ...prev.estimate, opening_statement: next } }));
+    setState((prev) => ({
+      ...prev,
+      entity: {
+        ...prev.entity,
+        data: { ...prev.entity.data, opening_statement: next },
+      } as BuilderEntity,
+    }));
     // Task 28 auto-save will pick this up.
   }
 
   function onClosingStatementChange(next: string | null) {
-    setState((prev) => ({ ...prev, estimate: { ...prev.estimate, closing_statement: next } }));
+    setState((prev) => ({
+      ...prev,
+      entity: {
+        ...prev.entity,
+        data: { ...prev.entity.data, closing_statement: next },
+      } as BuilderEntity,
+    }));
     // Task 28 auto-save will pick this up.
   }
 
   async function onVoid(reason: string) {
     if (isVoiding) return;
+    if (state.entity.kind === "template") return; // templates have no void flow
     setIsVoiding(true);
     try {
-      const url = `/api/estimates/${state.estimate.id}?reason=${encodeURIComponent(reason)}`;
+      const entityBase = state.entity.kind === "invoice" ? "invoices" : "estimates";
+      const url = `/api/${entityBase}/${state.entity.data.id}?reason=${encodeURIComponent(reason)}`;
       const res = await fetch(url, { method: "DELETE" });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        toast.error(body.error || "Failed to void estimate");
+        toast.error(body.error || "Failed to void");
         return;
       }
       // Optimistic update — voided_at uses client clock; server's value is canonical
       // and will be reconciled on the next read. Display-only divergence today.
-      setState((prev) => ({
-        ...prev,
-        estimate: {
-          ...prev.estimate,
-          status: "voided",
-          void_reason: reason,
-          voided_at: new Date().toISOString(),
-        },
-      }));
-      toast.success("Estimate voided");
+      setState((prev) => {
+        if (prev.entity.kind === "template") return prev;
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: {
+              ...prev.entity.data,
+              status: "voided",
+              void_reason: reason,
+              voided_at: new Date().toISOString(),
+            },
+          } as BuilderEntity,
+        };
+      });
+      toast.success(
+        state.entity.kind === "invoice" ? "Invoice voided" : "Estimate voided",
+      );
     } finally {
       setIsVoiding(false);
     }
   }
 
-  const isVoided = state.estimate.status === "voided";
+  const isVoided =
+    state.entity.kind !== "template" && state.entity.data.status === "voided";
 
   // ── Task 27: markup / discount / tax callbacks ─────────────────────────
+  // Estimate-only at runtime today. Tasks 40/43 will widen these.
 
   function onMarkupChange(type: AdjustmentType, value: number) {
     setState((prev) => {
-      const next_estimate = { ...prev.estimate, markup_type: type, markup_value: value };
+      if (prev.entity.kind !== "estimate") return prev; // TODO Tasks 40/43
+      const next_estimate = { ...prev.entity.data, markup_type: type, markup_value: value };
       const totals = computeEstimateTotals(next_estimate);
-      return { ...prev, estimate: { ...next_estimate, ...totals } };
+      return {
+        ...prev,
+        entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
+      };
     });
   }
 
   function onDiscountChange(type: AdjustmentType, value: number) {
     setState((prev) => {
-      const next_estimate = { ...prev.estimate, discount_type: type, discount_value: value };
+      if (prev.entity.kind !== "estimate") return prev; // TODO Tasks 40/43
+      const next_estimate = { ...prev.entity.data, discount_type: type, discount_value: value };
       const totals = computeEstimateTotals(next_estimate);
-      return { ...prev, estimate: { ...next_estimate, ...totals } };
+      return {
+        ...prev,
+        entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
+      };
     });
   }
 
   function onTaxRateChange(rate: number) {
     const clamped = Math.max(0, Math.min(100, rate));
     setState((prev) => {
-      const next_estimate = { ...prev.estimate, tax_rate: clamped };
+      if (prev.entity.kind !== "estimate") return prev; // TODO Tasks 40/43
+      const next_estimate = { ...prev.entity.data, tax_rate: clamped };
       const totals = computeEstimateTotals(next_estimate);
-      return { ...prev, estimate: { ...next_estimate, ...totals } };
+      return {
+        ...prev,
+        entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
+      };
     });
   }
 
@@ -231,9 +393,10 @@ export function EstimateBuilder({
   // ── Slot 5: section CRUD ───────────────────────────────────────────────
 
   async function onAddSection(title: string) {
-    // Plan deviation: title passed directly (spec had `() => void`, which omitted it).
+    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
+    const estimateId = state.entity.data.id;
     try {
-      const res = await fetch(`/api/estimates/${state.estimate.id}/sections`, {
+      const res = await fetch(`/api/estimates/${estimateId}/sections`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, parent_section_id: null }),
@@ -247,13 +410,19 @@ export function EstimateBuilder({
         section: EstimateWithContents["sections"][number];
       };
       const newSection = { ...section, items: [], subsections: [] };
-      setState((prev) => ({
-        ...prev,
-        estimate: {
-          ...prev.estimate,
-          sections: [...prev.estimate.sections, newSection],
-        },
-      }));
+      setState((prev) => {
+        if (prev.entity.kind !== "estimate") return prev;
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: {
+              ...prev.entity.data,
+              sections: [...prev.entity.data.sections, newSection],
+            },
+          },
+        };
+      });
       setShowAddSection(false);
       setNewSectionTitle("");
     } catch {
@@ -262,19 +431,27 @@ export function EstimateBuilder({
   }
 
   async function onSectionRename(id: string, title: string) {
+    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
+    const estimateId = state.entity.data.id;
     // Optimistic local update
-    setState((prev) => ({
-      ...prev,
-      estimate: {
-        ...prev.estimate,
-        sections: prev.estimate.sections.map((s) =>
-          s.id === id ? { ...s, title } : s
-        ),
-      },
-    }));
+    setState((prev) => {
+      if (prev.entity.kind !== "estimate") return prev;
+      return {
+        ...prev,
+        entity: {
+          ...prev.entity,
+          data: {
+            ...prev.entity.data,
+            sections: prev.entity.data.sections.map((s) =>
+              s.id === id ? { ...s, title } : s
+            ),
+          },
+        },
+      };
+    });
     try {
       const res = await fetch(
-        `/api/estimates/${state.estimate.id}/sections/${id}`,
+        `/api/estimates/${estimateId}/sections/${id}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -291,38 +468,53 @@ export function EstimateBuilder({
   }
 
   async function onSectionDelete(id: string) {
-    const snapshot = state.estimate; // capture before mutation
-    setState((prev) => ({
-      ...prev,
-      estimate: {
-        ...prev.estimate,
-        sections: prev.estimate.sections.filter((s) => s.id !== id),
-      },
-    }));
+    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
+    const estimateId = state.entity.data.id;
+    const snapshot = state.entity.data; // capture before mutation
+    setState((prev) => {
+      if (prev.entity.kind !== "estimate") return prev;
+      return {
+        ...prev,
+        entity: {
+          ...prev.entity,
+          data: {
+            ...prev.entity.data,
+            sections: prev.entity.data.sections.filter((s) => s.id !== id),
+          },
+        },
+      };
+    });
     try {
       const res = await fetch(
-        `/api/estimates/${state.estimate.id}/sections/${id}`,
+        `/api/estimates/${estimateId}/sections/${id}`,
         { method: "DELETE" }
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         toast.error(body.error || "Failed to delete section");
-        setState((prev) => ({ ...prev, estimate: snapshot }));
+        setState((prev) => {
+          if (prev.entity.kind !== "estimate") return prev;
+          return { ...prev, entity: { ...prev.entity, data: snapshot } };
+        });
       } else {
         toast.success("Section deleted");
       }
     } catch {
       toast.error("Network error — could not delete section");
-      setState((prev) => ({ ...prev, estimate: snapshot }));
+      setState((prev) => {
+        if (prev.entity.kind !== "estimate") return prev;
+        return { ...prev, entity: { ...prev.entity, data: snapshot } };
+      });
     }
   }
 
   // ── Slot 5: subsection CRUD ────────────────────────────────────────────
 
   async function onSubsectionAdd(parentId: string, title: string) {
-    // Plan deviation: title passed directly (spec had `(parentId: string) => void`).
+    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
+    const estimateId = state.entity.data.id;
     try {
-      const res = await fetch(`/api/estimates/${state.estimate.id}/sections`, {
+      const res = await fetch(`/api/estimates/${estimateId}/sections`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, parent_section_id: parentId }),
@@ -336,39 +528,53 @@ export function EstimateBuilder({
         section: import("@/lib/types").EstimateSection;
       };
       const newSub = { ...section, items: [] };
-      setState((prev) => ({
-        ...prev,
-        estimate: {
-          ...prev.estimate,
-          sections: prev.estimate.sections.map((s) =>
-            s.id === parentId
-              ? { ...s, subsections: [...s.subsections, newSub] }
-              : s
-          ),
-        },
-      }));
+      setState((prev) => {
+        if (prev.entity.kind !== "estimate") return prev;
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: {
+              ...prev.entity.data,
+              sections: prev.entity.data.sections.map((s) =>
+                s.id === parentId
+                  ? { ...s, subsections: [...s.subsections, newSub] }
+                  : s
+              ),
+            },
+          },
+        };
+      });
     } catch {
       toast.error("Network error — could not add subsection");
     }
   }
 
   async function onSubsectionRename(id: string, title: string) {
+    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
+    const estimateId = state.entity.data.id;
     // Optimistic update
-    setState((prev) => ({
-      ...prev,
-      estimate: {
-        ...prev.estimate,
-        sections: prev.estimate.sections.map((s) => ({
-          ...s,
-          subsections: s.subsections.map((sub) =>
-            sub.id === id ? { ...sub, title } : sub
-          ),
-        })),
-      },
-    }));
+    setState((prev) => {
+      if (prev.entity.kind !== "estimate") return prev;
+      return {
+        ...prev,
+        entity: {
+          ...prev.entity,
+          data: {
+            ...prev.entity.data,
+            sections: prev.entity.data.sections.map((s) => ({
+              ...s,
+              subsections: s.subsections.map((sub) =>
+                sub.id === id ? { ...sub, title } : sub
+              ),
+            })),
+          },
+        },
+      };
+    });
     try {
       const res = await fetch(
-        `/api/estimates/${state.estimate.id}/sections/${id}`,
+        `/api/estimates/${estimateId}/sections/${id}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -385,42 +591,59 @@ export function EstimateBuilder({
   }
 
   async function onSubsectionDelete(id: string) {
-    const snapshot = state.estimate; // capture before mutation
-    setState((prev) => ({
-      ...prev,
-      estimate: {
-        ...prev.estimate,
-        sections: prev.estimate.sections.map((s) => ({
-          ...s,
-          subsections: s.subsections.filter((sub) => sub.id !== id),
-        })),
-      },
-    }));
+    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
+    const estimateId = state.entity.data.id;
+    const snapshot = state.entity.data; // capture before mutation
+    setState((prev) => {
+      if (prev.entity.kind !== "estimate") return prev;
+      return {
+        ...prev,
+        entity: {
+          ...prev.entity,
+          data: {
+            ...prev.entity.data,
+            sections: prev.entity.data.sections.map((s) => ({
+              ...s,
+              subsections: s.subsections.filter((sub) => sub.id !== id),
+            })),
+          },
+        },
+      };
+    });
     try {
       const res = await fetch(
-        `/api/estimates/${state.estimate.id}/sections/${id}`,
+        `/api/estimates/${estimateId}/sections/${id}`,
         { method: "DELETE" }
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         toast.error(body.error || "Failed to delete subsection");
-        setState((prev) => ({ ...prev, estimate: snapshot }));
+        setState((prev) => {
+          if (prev.entity.kind !== "estimate") return prev;
+          return { ...prev, entity: { ...prev.entity, data: snapshot } };
+        });
       } else {
         toast.success("Subsection deleted");
       }
     } catch {
       toast.error("Network error — could not delete subsection");
-      setState((prev) => ({ ...prev, estimate: snapshot }));
+      setState((prev) => {
+        if (prev.entity.kind !== "estimate") return prev;
+        return { ...prev, entity: { ...prev.entity, data: snapshot } };
+      });
     }
   }
 
   // ── Slot 5: line-item delete ───────────────────────────────────────────
 
   async function onLineItemDelete(id: string) {
-    const snapshot = state.estimate; // capture before mutation
+    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
+    const estimateId = state.entity.data.id;
+    const snapshot = state.entity.data; // capture before mutation
     // Remove from local state (works for items in sections OR subsections)
     setState((prev) => {
-      const sections_after = prev.estimate.sections.map((s) => ({
+      if (prev.entity.kind !== "estimate") return prev;
+      const sections_after = prev.entity.data.sections.map((s) => ({
         ...s,
         items: s.items.filter((i) => i.id !== id),
         subsections: s.subsections.map((sub) => ({
@@ -429,25 +652,34 @@ export function EstimateBuilder({
         })),
       }));
       const subtotal = sumLineItemsFromSections(sections_after);
-      const next_estimate = { ...prev.estimate, sections: sections_after, subtotal };
+      const next_estimate = { ...prev.entity.data, sections: sections_after, subtotal };
       const totals = computeEstimateTotals(next_estimate);
-      return { ...prev, estimate: { ...next_estimate, ...totals } };
+      return {
+        ...prev,
+        entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
+      };
     });
     try {
       const res = await fetch(
-        `/api/estimates/${state.estimate.id}/line-items/${id}`,
+        `/api/estimates/${estimateId}/line-items/${id}`,
         { method: "DELETE" }
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         toast.error(body.error || "Failed to delete line item");
-        setState((prev) => ({ ...prev, estimate: snapshot }));
+        setState((prev) => {
+          if (prev.entity.kind !== "estimate") return prev;
+          return { ...prev, entity: { ...prev.entity, data: snapshot } };
+        });
       } else {
         toast.success("Line item deleted");
       }
     } catch {
       toast.error("Network error — could not delete line item");
-      setState((prev) => ({ ...prev, estimate: snapshot }));
+      setState((prev) => {
+        if (prev.entity.kind !== "estimate") return prev;
+        return { ...prev, entity: { ...prev.entity, data: snapshot } };
+      });
     }
   }
 
@@ -455,7 +687,8 @@ export function EstimateBuilder({
 
   function onLineItemChange(itemId: string, partial: Partial<EstimateLineItem>) {
     setState((prev) => {
-      const sections_after = prev.estimate.sections.map((sec) => ({
+      if (prev.entity.kind !== "estimate") return prev; // TODO Tasks 40/43
+      const sections_after = prev.entity.data.sections.map((sec) => ({
         ...sec,
         items: sec.items.map((item) =>
           item.id === itemId ? { ...item, ...partial } : item
@@ -468,9 +701,12 @@ export function EstimateBuilder({
         })),
       }));
       const subtotal = sumLineItemsFromSections(sections_after);
-      const next_estimate = { ...prev.estimate, sections: sections_after, subtotal };
+      const next_estimate = { ...prev.entity.data, sections: sections_after, subtotal };
       const totals = computeEstimateTotals(next_estimate);
-      return { ...prev, estimate: { ...next_estimate, ...totals } };
+      return {
+        ...prev,
+        entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
+      };
     });
     // Task 28 auto-save will pick this up.
   }
@@ -481,7 +717,8 @@ export function EstimateBuilder({
 
   function onLineItemAdded(newItem: EstimateLineItem) {
     setState((prev) => {
-      const sections_after = prev.estimate.sections.map((sec) => {
+      if (prev.entity.kind !== "estimate") return prev; // TODO Tasks 40/43
+      const sections_after = prev.entity.data.sections.map((sec) => {
         if (sec.id === newItem.section_id) {
           return { ...sec, items: [...sec.items, newItem] };
         }
@@ -495,9 +732,12 @@ export function EstimateBuilder({
         };
       });
       const subtotal = sumLineItemsFromSections(sections_after);
-      const next_estimate = { ...prev.estimate, sections: sections_after, subtotal };
+      const next_estimate = { ...prev.entity.data, sections: sections_after, subtotal };
       const totals = computeEstimateTotals(next_estimate);
-      return { ...prev, estimate: { ...next_estimate, ...totals } };
+      return {
+        ...prev,
+        entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
+      };
     });
   }
 
@@ -506,24 +746,31 @@ export function EstimateBuilder({
   // PUT immediately (not debounced). On failure, the local state is rolled back.
 
   function handleDragEnd(event: DragEndEvent) {
+    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
     const activeType = active.data.current?.type as string | undefined;
 
     if (activeType === "section") {
-      const secs = state.estimate.sections;
+      const secs = state.entity.data.sections;
       const oldIdx = secs.findIndex((s) => s.id === active.id);
       const newIdx = secs.findIndex((s) => s.id === over.id);
       if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return;
 
       const reorderedSections = arrayMove(secs, oldIdx, newIdx);
-      const snapshot = state.estimate; // capture before setState
+      const snapshot = state.entity.data; // capture before setState
 
-      setState((prev) => ({
-        ...prev,
-        estimate: { ...prev.estimate, sections: reorderedSections },
-      }));
+      setState((prev) => {
+        if (prev.entity.kind !== "estimate") return prev;
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: { ...prev.entity.data, sections: reorderedSections },
+          },
+        };
+      });
 
       // Build the flat list including subsections with updated sort_order
       const sectionPayload = reorderedSections.flatMap((sec, idx) => [
@@ -538,7 +785,10 @@ export function EstimateBuilder({
       void saveSectionsReorder(sectionPayload).then((ok) => {
         if (!ok) {
           toast.error("Failed to save section order");
-          setState((prev) => ({ ...prev, estimate: snapshot }));
+          setState((prev) => {
+            if (prev.entity.kind !== "estimate") return prev;
+            return { ...prev, entity: { ...prev.entity, data: snapshot } };
+          });
         }
       });
       return;
@@ -551,23 +801,29 @@ export function EstimateBuilder({
       if (activeParent !== overParent) return; // snap back
 
       // Compute outside setState — synchronous event handler, state is current.
-      const parentSection = state.estimate.sections.find((s) => s.id === activeParent);
+      const parentSection = state.entity.data.sections.find((s) => s.id === activeParent);
       if (!parentSection) return;
       const subs = parentSection.subsections;
       const oldIdx = subs.findIndex((sub) => sub.id === active.id);
       const newIdx = subs.findIndex((sub) => sub.id === over.id);
       if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return;
 
-      const reorderedSections = state.estimate.sections.map((s) => {
+      const reorderedSections = state.entity.data.sections.map((s) => {
         if (s.id !== activeParent) return s;
         return { ...s, subsections: arrayMove(subs, oldIdx, newIdx) };
       });
-      const snapshot = state.estimate; // capture before setState
+      const snapshot = state.entity.data; // capture before setState
 
-      setState((prev) => ({
-        ...prev,
-        estimate: { ...prev.estimate, sections: reorderedSections },
-      }));
+      setState((prev) => {
+        if (prev.entity.kind !== "estimate") return prev;
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: { ...prev.entity.data, sections: reorderedSections },
+          },
+        };
+      });
 
       const sectionPayload = reorderedSections.flatMap((sec, idx) => [
         { id: sec.id, sort_order: idx, parent_section_id: null as string | null },
@@ -581,7 +837,10 @@ export function EstimateBuilder({
       void saveSectionsReorder(sectionPayload).then((ok) => {
         if (!ok) {
           toast.error("Failed to save subsection order");
-          setState((prev) => ({ ...prev, estimate: snapshot }));
+          setState((prev) => {
+            if (prev.entity.kind !== "estimate") return prev;
+            return { ...prev, entity: { ...prev.entity, data: snapshot } };
+          });
         }
       });
       return;
@@ -595,7 +854,7 @@ export function EstimateBuilder({
 
       // Compute outside setState — synchronous event handler, state is current.
       let reorderedItems: import("@/lib/types").EstimateLineItem[] = [];
-      const reorderedSections = state.estimate.sections.map((s) => {
+      const reorderedSections = state.entity.data.sections.map((s) => {
         // Check direct items
         if (s.id === activeParentSectionId) {
           const items = s.items;
@@ -622,15 +881,21 @@ export function EstimateBuilder({
 
       if (reorderedItems.length === 0) return; // no valid reorder found
 
-      const snapshot = state.estimate; // capture before setState
+      const snapshot = state.entity.data; // capture before setState
 
-      setState((prev) => ({
-        ...prev,
-        estimate: {
-          ...prev.estimate,
-          sections: reorderedSections,
-        },
-      }));
+      setState((prev) => {
+        if (prev.entity.kind !== "estimate") return prev;
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: {
+              ...prev.entity.data,
+              sections: reorderedSections,
+            },
+          },
+        };
+      });
 
       const itemPayload = reorderedItems.map((item, idx) => ({
         id: item.id,
@@ -641,14 +906,51 @@ export function EstimateBuilder({
       void saveLineItemsReorder(itemPayload).then((ok) => {
         if (!ok) {
           toast.error("Failed to save line item order");
-          setState((prev) => ({ ...prev, estimate: snapshot }));
+          setState((prev) => {
+            if (prev.entity.kind !== "estimate") return prev;
+            return { ...prev, entity: { ...prev.entity, data: snapshot } };
+          });
         }
       });
     }
   }
 
-  // ── Derived ───────────────────────────────────────────────────────────
-  const sections = state.estimate.sections;
+  // ── Render ─────────────────────────────────────────────────────────────────
+  // Estimate-mode is the only fully-implemented branch today. Invoice and
+  // template branches render minimal stubs; Tasks 40 / 43 fill them in.
+
+  if (state.entity.kind === "invoice") {
+    // TODO Task 43 — invoice builder consumer page wires this up.
+    return (
+      <div className="relative min-h-screen bg-background">
+        <main className="max-w-4xl mx-auto px-4 py-6 pb-24">
+          <p className="text-sm text-muted-foreground">
+            Invoice builder coming in Task 43.
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  if (state.entity.kind === "template") {
+    // TODO Task 40 — template builder consumer page wires this up.
+    return (
+      <div className="relative min-h-screen bg-background">
+        <main className="max-w-4xl mx-auto px-4 py-6 pb-24">
+          <p className="text-sm text-muted-foreground">
+            Template builder coming in Task 40.
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  // ── Estimate-mode JSX ─────────────────────────────────────────────────────
+  // state.entity is now narrowed to { kind: "estimate"; data: EstimateWithContents }
+  const estimateEntity = state.entity; // narrowed
+  const estimate = estimateEntity.data;
+  const sections = estimate.sections;
+  const mode = estimateEntity.kind;
 
   return (
     <div className="relative min-h-screen bg-background">
@@ -657,9 +959,9 @@ export function EstimateBuilder({
         <div className="w-full bg-destructive/10 border-b border-destructive/20 px-4 py-2 flex items-center gap-2 text-sm text-destructive font-medium">
           <AlertOctagon size={16} />
           This estimate has been voided
-          {state.estimate.void_reason && (
+          {estimate.void_reason && (
             <span className="font-normal text-destructive/80">
-              — {state.estimate.void_reason}
+              — {estimate.void_reason}
             </span>
           )}
         </div>
@@ -671,8 +973,7 @@ export function EstimateBuilder({
 
         {/* ── SLOT 1: HeaderBar ────────────────────────────────────────────── */}
         <HeaderBar
-          mode="estimate"
-          entity={state.estimate}
+          entity={estimateEntity}
           onTitleChange={onTitleChange}
           onVoid={onVoid}
           saveStatus={saveStatus}
@@ -682,19 +983,19 @@ export function EstimateBuilder({
 
         {/* ── SLOT 2: MetadataBar ──────────────────────────────────────────── */}
         <MetadataBar
-          entity={state.estimate}
+          entity={estimate}
           onIssuedDateChange={onIssuedDateChange}
           onValidUntilChange={onValidUntilChange}
           mode={mode}
         />
 
         {/* ── SLOT 3: CustomerBlock ────────────────────────────────────────── */}
-        <CustomerBlock job={job} mode={mode} />
+        {job && <CustomerBlock job={job} mode={mode} />}
 
         {/* ── SLOT 4: Opening statement ────────────────────────────────────── */}
         <StatementEditor
           label="Opening statement"
-          value={state.estimate.opening_statement}
+          value={estimate.opening_statement}
           onChange={onOpeningStatementChange}
           defaultText={defaultOpeningStatement}
           readOnly={isVoided}
@@ -810,7 +1111,7 @@ export function EstimateBuilder({
         {/* ── SLOT 6: Closing statement ────────────────────────────────────── */}
         <StatementEditor
           label="Closing statement"
-          value={state.estimate.closing_statement}
+          value={estimate.closing_statement}
           onChange={onClosingStatementChange}
           defaultText={defaultClosingStatement}
           readOnly={isVoided}
@@ -820,7 +1121,7 @@ export function EstimateBuilder({
 
       {/* ── SLOT 7: TotalsPanel (sticky bottom-right) ─────────────────────── */}
       <TotalsPanel
-        estimate={state.estimate}
+        estimate={estimate}
         onMarkupChange={onMarkupChange}
         onDiscountChange={onDiscountChange}
         onTaxRateChange={onTaxRateChange}
@@ -832,9 +1133,9 @@ export function EstimateBuilder({
       <AddItemDialog
         open={addItemTarget !== null}
         onOpenChange={(open) => !open && setAddItemTarget(null)}
-        estimateId={state.estimate.id}
+        estimateId={estimate.id}
         sectionId={addItemTarget?.sectionId ?? ""}
-        jobDamageType={job.damage_type}
+        jobDamageType={job?.damage_type}
         onAdded={onLineItemAdded}
         mode={mode}
       />

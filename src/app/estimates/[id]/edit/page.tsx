@@ -118,7 +118,7 @@ export default async function EstimateEditPage({
   // 6. Hand off to the client-component state container.
   return (
     <EstimateBuilder
-      estimate={estimate}
+      entity={{ kind: "estimate", data: estimate }}
       job={job}
       defaultValidDays={defaultValidDays}
       defaultOpeningStatement={defaultOpeningStatement}

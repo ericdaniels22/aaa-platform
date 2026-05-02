@@ -17,14 +17,16 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import type { Estimate, Invoice, TemplateWithContents } from "@/lib/types";
+import type { BuilderEntity } from "@/lib/types";
 import { getStatusBadgeClasses, formatStatusLabel } from "@/lib/estimate-status";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Discriminated-union props — lets TypeScript narrow `entity` from `mode`
+// Props — single `entity: BuilderEntity` discriminator (Task 33.5).
+// Internally narrowed via `entity.kind`.
 // ─────────────────────────────────────────────────────────────────────────────
 
-type CommonProps = {
+export interface HeaderBarProps {
+  entity: BuilderEntity;
   onTitleChange: (title: string) => void;
   onVoid: (reason: string) => void;
   saveStatus: "idle" | "saving" | "saved" | "error";
@@ -34,12 +36,7 @@ type CommonProps = {
   onSaveTemplate?: () => void;
   onSendPaymentRequest?: () => void;
   onConvertClick?: () => void;
-};
-
-export type HeaderBarProps =
-  | ({ mode: "estimate"; entity: Estimate } & CommonProps)
-  | ({ mode: "invoice";  entity: Invoice }  & CommonProps)
-  | ({ mode?: "template"; entity: TemplateWithContents } & CommonProps);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VoidDialog — confirm dialog with required reason field
@@ -134,33 +131,26 @@ function VoidDialog({
 // HeaderBar
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function HeaderBar(props: HeaderBarProps) {
-  const {
-    onTitleChange,
-    onVoid,
-    saveStatus,
-    lastSavedAt,
-    isVoiding,
-    onSaveTemplate,
-    onSendPaymentRequest,
-    onConvertClick,
-  } = props;
-
-  const resolvedMode = props.mode ?? "template";
-  const entity = props.entity;
-
+export function HeaderBar({
+  entity,
+  onTitleChange,
+  onVoid,
+  saveStatus,
+  lastSavedAt,
+  isVoiding,
+  onSaveTemplate,
+  onSendPaymentRequest,
+  onConvertClick,
+}: HeaderBarProps) {
   const router = useRouter();
 
   // Derive entity title: EstimateTemplate uses `name`, everything else uses `title`
   const entityTitle =
-    resolvedMode === "template"
-      ? (entity as TemplateWithContents).name
-      : (entity as Estimate | Invoice).title;
+    entity.kind === "template" ? entity.data.name : entity.data.title;
 
   // Derive whether entity is voided (templates have no status)
   const isVoided =
-    resolvedMode !== "template" &&
-    (entity as Estimate | Invoice).status === "voided";
+    entity.kind !== "template" && entity.data.status === "voided";
 
   // ── Title inline-edit state ──────────────────────────────────────────────
   const [isEditing, setIsEditing] = useState(false);
@@ -218,11 +208,12 @@ export function HeaderBar(props: HeaderBarProps) {
 
   // ── Status transition ────────────────────────────────────────────────────
   async function transitionStatus(next: string) {
-    const base = resolvedMode === "invoice" ? "invoices" : "estimates";
-    const res = await fetch(`/api/${base}/${entity.id}/status`, {
+    if (entity.kind === "template") return; // templates have no status workflow
+    const base = entity.kind === "invoice" ? "invoices" : "estimates";
+    const res = await fetch(`/api/${base}/${entity.data.id}/status`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: next, updated_at_snapshot: entity.updated_at }),
+      body: JSON.stringify({ status: next, updated_at_snapshot: entity.data.updated_at }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -238,42 +229,37 @@ export function HeaderBar(props: HeaderBarProps) {
 
   // ── Back link ─────────────────────────────────────────────────────────────
   const backHref =
-    resolvedMode === "template"
+    entity.kind === "template"
       ? "/settings/estimate-templates"
-      : `/jobs/${(entity as Estimate | Invoice).job_id}`;
+      : `/jobs/${entity.data.job_id}`;
 
   // ── Entity number label (estimate_number / invoice_number / none) ─────────
   const entityNumberLabel =
-    resolvedMode === "estimate"
-      ? (entity as Estimate).estimate_number
-      : resolvedMode === "invoice"
-      ? (entity as Invoice).invoice_number
+    entity.kind === "estimate"
+      ? entity.data.estimate_number
+      : entity.kind === "invoice"
+      ? entity.data.invoice_number
       : null;
 
   // ── Status badge ──────────────────────────────────────────────────────────
   const statusBadgeClasses =
-    resolvedMode !== "template"
-      ? getStatusBadgeClasses(
-          resolvedMode,
-          (entity as Estimate | Invoice).status
-        )
+    entity.kind !== "template"
+      ? getStatusBadgeClasses(entity.kind, entity.data.status)
       : null;
   const statusLabel =
-    resolvedMode !== "template"
-      ? formatStatusLabel((entity as Estimate | Invoice).status)
-      : null;
+    entity.kind !== "template" ? formatStatusLabel(entity.data.status) : null;
 
   // ── Void dialog label ─────────────────────────────────────────────────────
   const entityLabel =
-    resolvedMode === "invoice"
+    entity.kind === "invoice"
       ? "invoice"
-      : resolvedMode === "template"
+      : entity.kind === "template"
       ? "template"
       : "estimate";
 
   // ── Action buttons ────────────────────────────────────────────────────────
   function renderActions() {
-    if (resolvedMode === "template") {
+    if (entity.kind === "template") {
       return (
         <Button
           variant="default"
@@ -286,8 +272,8 @@ export function HeaderBar(props: HeaderBarProps) {
       );
     }
 
-    if (resolvedMode === "invoice") {
-      const inv = entity as Invoice;
+    if (entity.kind === "invoice") {
+      const inv = entity.data;
       return (
         <>
           {inv.status === "draft" && (
@@ -337,8 +323,8 @@ export function HeaderBar(props: HeaderBarProps) {
       );
     }
 
-    // mode === "estimate"
-    const est = entity as Estimate;
+    // entity.kind === "estimate"
+    const est = entity.data;
     return (
       <>
         {est.status === "draft" && (
@@ -407,8 +393,8 @@ export function HeaderBar(props: HeaderBarProps) {
           <Link
             href={backHref}
             className="inline-flex items-center gap-1 px-2 py-1 -ml-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-            title={resolvedMode === "template" ? "Back to templates" : "Back to job"}
-            aria-label={resolvedMode === "template" ? "Back to templates" : "Back to job"}
+            title={entity.kind === "template" ? "Back to templates" : "Back to job"}
+            aria-label={entity.kind === "template" ? "Back to templates" : "Back to job"}
           >
             <ArrowLeft size={14} />
             <span className="hidden sm:inline">Back</span>
@@ -457,7 +443,7 @@ export function HeaderBar(props: HeaderBarProps) {
 
         {/* ── Right: action buttons + save indicator ────────────────────── */}
         <div className="flex items-center gap-2 shrink-0">
-          <SaveIndicator status={saveStatus} lastSavedAt={lastSavedAt} mode={resolvedMode} />
+          <SaveIndicator status={saveStatus} lastSavedAt={lastSavedAt} mode={entity.kind} />
           {renderActions()}
         </div>
       </div>
