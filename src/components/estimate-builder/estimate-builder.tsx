@@ -393,10 +393,36 @@ export function EstimateBuilder({
   // ── Slot 5: section CRUD ───────────────────────────────────────────────
 
   async function onAddSection(title: string) {
-    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
-    const estimateId = state.entity.data.id;
+    // Template mode: local synthesis; rootPut auto-save persists.
+    if (state.entity.kind === "template") {
+      const nextOrder = state.entity.data.sections.length;
+      const newSection = {
+        id: crypto.randomUUID(),
+        title,
+        sort_order: nextOrder,
+        parent_section_id: null,
+        items: [],
+        subsections: [],
+      };
+      setState((prev) => ({
+        ...prev,
+        entity: {
+          ...prev.entity,
+          data: {
+            ...prev.entity.data,
+            sections: [...prev.entity.data.sections, newSection],
+          },
+        } as BuilderEntity,
+      }));
+      setShowAddSection(false);
+      setNewSectionTitle("");
+      return;
+    }
+    // Estimate or invoice: HTTP path with entityBase substituted.
+    const entityBase = state.entity.kind === "invoice" ? "invoices" : "estimates";
+    const entityId = state.entity.data.id;
     try {
-      const res = await fetch(`/api/estimates/${estimateId}/sections`, {
+      const res = await fetch(`/api/${entityBase}/${entityId}/sections`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, parent_section_id: null }),
@@ -411,7 +437,7 @@ export function EstimateBuilder({
       };
       const newSection = { ...section, items: [], subsections: [] };
       setState((prev) => {
-        if (prev.entity.kind !== "estimate") return prev;
+        if (prev.entity.kind === "template") return prev;
         return {
           ...prev,
           entity: {
@@ -420,7 +446,7 @@ export function EstimateBuilder({
               ...prev.entity.data,
               sections: [...prev.entity.data.sections, newSection],
             },
-          },
+          } as BuilderEntity,
         };
       });
       setShowAddSection(false);
@@ -431,11 +457,28 @@ export function EstimateBuilder({
   }
 
   async function onSectionRename(id: string, title: string) {
-    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
-    const estimateId = state.entity.data.id;
+    // Template mode: local synthesis; rootPut auto-save persists.
+    if (state.entity.kind === "template") {
+      setState((prev) => ({
+        ...prev,
+        entity: {
+          ...prev.entity,
+          data: {
+            ...prev.entity.data,
+            sections: (prev.entity.data as TemplateWithContents).sections.map((s) =>
+              s.id === id ? { ...s, title } : s
+            ),
+          },
+        } as BuilderEntity,
+      }));
+      return;
+    }
+    // Estimate or invoice: HTTP path with entityBase substituted.
+    const entityBase = state.entity.kind === "invoice" ? "invoices" : "estimates";
+    const entityId = state.entity.data.id;
     // Optimistic local update
     setState((prev) => {
-      if (prev.entity.kind !== "estimate") return prev;
+      if (prev.entity.kind === "template") return prev;
       return {
         ...prev,
         entity: {
@@ -446,12 +489,12 @@ export function EstimateBuilder({
               s.id === id ? { ...s, title } : s
             ),
           },
-        },
+        } as BuilderEntity,
       };
     });
     try {
       const res = await fetch(
-        `/api/estimates/${estimateId}/sections/${id}`,
+        `/api/${entityBase}/${entityId}/sections/${id}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -468,11 +511,28 @@ export function EstimateBuilder({
   }
 
   async function onSectionDelete(id: string) {
-    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
-    const estimateId = state.entity.data.id;
+    // Template mode: local synthesis; rootPut auto-save persists.
+    if (state.entity.kind === "template") {
+      setState((prev) => ({
+        ...prev,
+        entity: {
+          ...prev.entity,
+          data: {
+            ...prev.entity.data,
+            sections: (prev.entity.data as TemplateWithContents).sections.filter(
+              (s) => s.id !== id,
+            ),
+          },
+        } as BuilderEntity,
+      }));
+      return;
+    }
+    // Estimate or invoice: HTTP path with entityBase substituted.
+    const entityBase = state.entity.kind === "invoice" ? "invoices" : "estimates";
+    const entityId = state.entity.data.id;
     const snapshot = state.entity.data; // capture before mutation
     setState((prev) => {
-      if (prev.entity.kind !== "estimate") return prev;
+      if (prev.entity.kind === "template") return prev;
       return {
         ...prev,
         entity: {
@@ -481,20 +541,23 @@ export function EstimateBuilder({
             ...prev.entity.data,
             sections: prev.entity.data.sections.filter((s) => s.id !== id),
           },
-        },
+        } as BuilderEntity,
       };
     });
     try {
       const res = await fetch(
-        `/api/estimates/${estimateId}/sections/${id}`,
+        `/api/${entityBase}/${entityId}/sections/${id}`,
         { method: "DELETE" }
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         toast.error(body.error || "Failed to delete section");
         setState((prev) => {
-          if (prev.entity.kind !== "estimate") return prev;
-          return { ...prev, entity: { ...prev.entity, data: snapshot } };
+          if (prev.entity.kind === "template") return prev;
+          return {
+            ...prev,
+            entity: { ...prev.entity, data: snapshot } as BuilderEntity,
+          };
         });
       } else {
         toast.success("Section deleted");
@@ -502,8 +565,11 @@ export function EstimateBuilder({
     } catch {
       toast.error("Network error — could not delete section");
       setState((prev) => {
-        if (prev.entity.kind !== "estimate") return prev;
-        return { ...prev, entity: { ...prev.entity, data: snapshot } };
+        if (prev.entity.kind === "template") return prev;
+        return {
+          ...prev,
+          entity: { ...prev.entity, data: snapshot } as BuilderEntity,
+        };
       });
     }
   }
@@ -511,10 +577,38 @@ export function EstimateBuilder({
   // ── Slot 5: subsection CRUD ────────────────────────────────────────────
 
   async function onSubsectionAdd(parentId: string, title: string) {
-    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
-    const estimateId = state.entity.data.id;
+    // Template mode: local synthesis; rootPut auto-save persists.
+    if (state.entity.kind === "template") {
+      setState((prev) => {
+        if (prev.entity.kind !== "template") return prev;
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: {
+              ...prev.entity.data,
+              sections: prev.entity.data.sections.map((s) => {
+                if (s.id !== parentId) return s;
+                const nextOrder = s.subsections.length;
+                const newSub = {
+                  id: crypto.randomUUID(),
+                  title,
+                  sort_order: nextOrder,
+                  items: [],
+                };
+                return { ...s, subsections: [...s.subsections, newSub] };
+              }),
+            },
+          } as BuilderEntity,
+        };
+      });
+      return;
+    }
+    // Estimate or invoice: HTTP path with entityBase substituted.
+    const entityBase = state.entity.kind === "invoice" ? "invoices" : "estimates";
+    const entityId = state.entity.data.id;
     try {
-      const res = await fetch(`/api/estimates/${estimateId}/sections`, {
+      const res = await fetch(`/api/${entityBase}/${entityId}/sections`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, parent_section_id: parentId }),
@@ -529,7 +623,7 @@ export function EstimateBuilder({
       };
       const newSub = { ...section, items: [] };
       setState((prev) => {
-        if (prev.entity.kind !== "estimate") return prev;
+        if (prev.entity.kind === "template") return prev;
         return {
           ...prev,
           entity: {
@@ -538,11 +632,12 @@ export function EstimateBuilder({
               ...prev.entity.data,
               sections: prev.entity.data.sections.map((s) =>
                 s.id === parentId
-                  ? { ...s, subsections: [...s.subsections, newSub] }
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  ? { ...s, subsections: [...s.subsections, newSub as any] }
                   : s
               ),
             },
-          },
+          } as BuilderEntity,
         };
       });
     } catch {
@@ -551,11 +646,31 @@ export function EstimateBuilder({
   }
 
   async function onSubsectionRename(id: string, title: string) {
-    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
-    const estimateId = state.entity.data.id;
+    // Template mode: local synthesis; rootPut auto-save persists.
+    if (state.entity.kind === "template") {
+      setState((prev) => ({
+        ...prev,
+        entity: {
+          ...prev.entity,
+          data: {
+            ...prev.entity.data,
+            sections: (prev.entity.data as TemplateWithContents).sections.map((s) => ({
+              ...s,
+              subsections: s.subsections.map((sub) =>
+                sub.id === id ? { ...sub, title } : sub
+              ),
+            })),
+          },
+        } as BuilderEntity,
+      }));
+      return;
+    }
+    // Estimate or invoice: HTTP path with entityBase substituted.
+    const entityBase = state.entity.kind === "invoice" ? "invoices" : "estimates";
+    const entityId = state.entity.data.id;
     // Optimistic update
     setState((prev) => {
-      if (prev.entity.kind !== "estimate") return prev;
+      if (prev.entity.kind === "template") return prev;
       return {
         ...prev,
         entity: {
@@ -569,12 +684,12 @@ export function EstimateBuilder({
               ),
             })),
           },
-        },
+        } as BuilderEntity,
       };
     });
     try {
       const res = await fetch(
-        `/api/estimates/${estimateId}/sections/${id}`,
+        `/api/${entityBase}/${entityId}/sections/${id}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -591,11 +706,29 @@ export function EstimateBuilder({
   }
 
   async function onSubsectionDelete(id: string) {
-    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
-    const estimateId = state.entity.data.id;
+    // Template mode: local synthesis; rootPut auto-save persists.
+    if (state.entity.kind === "template") {
+      setState((prev) => ({
+        ...prev,
+        entity: {
+          ...prev.entity,
+          data: {
+            ...prev.entity.data,
+            sections: (prev.entity.data as TemplateWithContents).sections.map((s) => ({
+              ...s,
+              subsections: s.subsections.filter((sub) => sub.id !== id),
+            })),
+          },
+        } as BuilderEntity,
+      }));
+      return;
+    }
+    // Estimate or invoice: HTTP path with entityBase substituted.
+    const entityBase = state.entity.kind === "invoice" ? "invoices" : "estimates";
+    const entityId = state.entity.data.id;
     const snapshot = state.entity.data; // capture before mutation
     setState((prev) => {
-      if (prev.entity.kind !== "estimate") return prev;
+      if (prev.entity.kind === "template") return prev;
       return {
         ...prev,
         entity: {
@@ -607,20 +740,23 @@ export function EstimateBuilder({
               subsections: s.subsections.filter((sub) => sub.id !== id),
             })),
           },
-        },
+        } as BuilderEntity,
       };
     });
     try {
       const res = await fetch(
-        `/api/estimates/${estimateId}/sections/${id}`,
+        `/api/${entityBase}/${entityId}/sections/${id}`,
         { method: "DELETE" }
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         toast.error(body.error || "Failed to delete subsection");
         setState((prev) => {
-          if (prev.entity.kind !== "estimate") return prev;
-          return { ...prev, entity: { ...prev.entity, data: snapshot } };
+          if (prev.entity.kind === "template") return prev;
+          return {
+            ...prev,
+            entity: { ...prev.entity, data: snapshot } as BuilderEntity,
+          };
         });
       } else {
         toast.success("Subsection deleted");
@@ -628,8 +764,11 @@ export function EstimateBuilder({
     } catch {
       toast.error("Network error — could not delete subsection");
       setState((prev) => {
-        if (prev.entity.kind !== "estimate") return prev;
-        return { ...prev, entity: { ...prev.entity, data: snapshot } };
+        if (prev.entity.kind === "template") return prev;
+        return {
+          ...prev,
+          entity: { ...prev.entity, data: snapshot } as BuilderEntity,
+        };
       });
     }
   }
@@ -637,8 +776,31 @@ export function EstimateBuilder({
   // ── Slot 5: line-item delete ───────────────────────────────────────────
 
   async function onLineItemDelete(id: string) {
-    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
-    const estimateId = state.entity.data.id;
+    // Template mode: local synthesis; rootPut auto-save persists.
+    if (state.entity.kind === "template") {
+      setState((prev) => {
+        if (prev.entity.kind !== "template") return prev;
+        const sections_after = prev.entity.data.sections.map((s) => ({
+          ...s,
+          items: s.items.filter((i) => i.id !== id),
+          subsections: s.subsections.map((sub) => ({
+            ...sub,
+            items: sub.items.filter((i) => i.id !== id),
+          })),
+        }));
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: { ...prev.entity.data, sections: sections_after },
+          } as BuilderEntity,
+        };
+      });
+      return;
+    }
+    // Estimate or invoice: HTTP path with entityBase substituted.
+    const entityBase = state.entity.kind === "invoice" ? "invoices" : "estimates";
+    const entityId = state.entity.data.id;
     const snapshot = state.entity.data; // capture before mutation
     // Remove from local state (works for items in sections OR subsections)
     setState((prev) => {
@@ -661,15 +823,18 @@ export function EstimateBuilder({
     });
     try {
       const res = await fetch(
-        `/api/estimates/${estimateId}/line-items/${id}`,
+        `/api/${entityBase}/${entityId}/line-items/${id}`,
         { method: "DELETE" }
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         toast.error(body.error || "Failed to delete line item");
         setState((prev) => {
-          if (prev.entity.kind !== "estimate") return prev;
-          return { ...prev, entity: { ...prev.entity, data: snapshot } };
+          if (prev.entity.kind === "template") return prev;
+          return {
+            ...prev,
+            entity: { ...prev.entity, data: snapshot } as BuilderEntity,
+          };
         });
       } else {
         toast.success("Line item deleted");
@@ -677,8 +842,11 @@ export function EstimateBuilder({
     } catch {
       toast.error("Network error — could not delete line item");
       setState((prev) => {
-        if (prev.entity.kind !== "estimate") return prev;
-        return { ...prev, entity: { ...prev.entity, data: snapshot } };
+        if (prev.entity.kind === "template") return prev;
+        return {
+          ...prev,
+          entity: { ...prev.entity, data: snapshot } as BuilderEntity,
+        };
       });
     }
   }
@@ -686,8 +854,34 @@ export function EstimateBuilder({
   // ── Slot 5: line-item inline edit (Task 25) ───────────────────────────
 
   function onLineItemChange(itemId: string, partial: Partial<EstimateLineItem>) {
+    // Template mode: local synthesis; rootPut auto-save persists.
+    if (state.entity.kind === "template") {
+      setState((prev) => {
+        if (prev.entity.kind !== "template") return prev;
+        const sections_after = prev.entity.data.sections.map((sec) => ({
+          ...sec,
+          items: sec.items.map((item) =>
+            item.id === itemId ? { ...item, ...partial } : item
+          ),
+          subsections: sec.subsections.map((sub) => ({
+            ...sub,
+            items: sub.items.map((item) =>
+              item.id === itemId ? { ...item, ...partial } : item
+            ),
+          })),
+        }));
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: { ...prev.entity.data, sections: sections_after },
+          } as BuilderEntity,
+        };
+      });
+      return;
+    }
     setState((prev) => {
-      if (prev.entity.kind !== "estimate") return prev; // TODO Tasks 40/43
+      if (prev.entity.kind !== "estimate") return prev; // TODO Task 43 (invoice)
       const sections_after = prev.entity.data.sections.map((sec) => ({
         ...sec,
         items: sec.items.map((item) =>
@@ -716,8 +910,38 @@ export function EstimateBuilder({
   }
 
   function onLineItemAdded(newItem: EstimateLineItem) {
+    // Template mode: AddItemDialog passes a synthesized item (per Task 32);
+    // insert it into local state. rootPut auto-save handles persistence.
+    if (state.entity.kind === "template") {
+      setState((prev) => {
+        if (prev.entity.kind !== "template") return prev;
+        const sections_after = prev.entity.data.sections.map((sec) => {
+          if (sec.id === newItem.section_id) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return { ...sec, items: [...sec.items, newItem as any] };
+          }
+          return {
+            ...sec,
+            subsections: sec.subsections.map((sub) =>
+              sub.id === newItem.section_id
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ? { ...sub, items: [...sub.items, newItem as any] }
+                : sub
+            ),
+          };
+        });
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: { ...prev.entity.data, sections: sections_after },
+          } as BuilderEntity,
+        };
+      });
+      return;
+    }
     setState((prev) => {
-      if (prev.entity.kind !== "estimate") return prev; // TODO Tasks 40/43
+      if (prev.entity.kind !== "estimate") return prev; // TODO Task 43 (invoice)
       const sections_after = prev.entity.data.sections.map((sec) => {
         if (sec.id === newItem.section_id) {
           return { ...sec, items: [...sec.items, newItem] };
