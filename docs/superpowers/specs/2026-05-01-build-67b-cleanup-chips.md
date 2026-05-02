@@ -66,4 +66,83 @@ Recommend C if 67c is imminent; A otherwise.
 
 **Action when addressed:** Run the 4-check happy path in browser preview before declaring 67b shipped.
 
+## From Task 33.5 + Task 40/43 + Task 52 manual test pass (2026-05-02)
+
+Pre-flagged in `2026-05-01-build-67b-test-results.md` and confirmed during the §11 manual run.
+
+### C1 — Invoice POST /line-items response shape mismatch
+
+**Location:** `src/app/api/invoices/[id]/line-items/route.ts` POST handler vs `src/app/api/estimates/[id]/line-items/route.ts` POST handler.
+
+**Finding:** Invoice POST returns `data` directly (raw row). Estimate POST returns `{ line_item: data }`. `AddItemDialog` reads `data.line_item`, so in invoice mode the optimistic insert reads `undefined` until auto-save / refresh reconciles.
+
+**Bug shape:** Cosmetic during the brief window between dialog close and parent's rootPut returning. Confirmed during Test 7.
+
+**Fix path:** Wrap invoice POST response in `{ line_item: data }` to match estimate.
+
+### C2 — Invoice-mode drag-reorder is a no-op
+
+**Location:** `src/components/estimate-builder/estimate-builder.tsx` `handleDragEnd`.
+
+**Finding:** After Task 33.5 widening, `handleDragEnd` short-circuits when `state.entity.kind !== "estimate"`. Template-mode local-state reorder shipped at `ba1d007` during Test 1; invoice mode still no-ops.
+
+**Bug shape:** User can drag in invoice editor but section/subsection/item snaps back. Confirmed during Test 7.
+
+**Fix path:** Either (a) replicate the template-mode local-state branch + rely on rootPut auto-save to persist (matches template), or (b) wire an HTTP reorder path (matches estimate behavior). Option (a) is cheaper.
+
+### C3 — Invoice-mode totals don't recompute locally
+
+**Location:** Same file, markup/discount/tax change handlers.
+
+**Finding:** Estimate mode recomputes totals locally on every change for instant feedback. Invoice mode updates only the field and lets the server recompute via root PUT.
+
+**Bug shape:** Brief UI flash of stale totals between edit and auto-save round-trip. Confirmed during Test 7.
+
+**Fix path:** Pull recompute math out of estimate-only branch and run client-side regardless of kind. Server still owns the source of truth.
+
+### C4 — `onLineItemChange` / `onLineItemAdded` cast through `any`
+
+**Location:** `estimate-builder.tsx` invoice-mode JSX in SectionCard / SubsectionCard renders.
+
+**Finding:** Partial typed as `Partial<EstimateLineItem>`; invoice-mode passes `Partial<InvoiceLineItem>`. Tsc-passes via `as any`. Today the two shapes are compatible enough that runtime works; if they diverge, the cast goes silent.
+
+**Fix path:** Polymorphic generic `Partial<EntityLineItem<K>>` parameterized by kind, OR a discriminated-union version of the callback prop.
+
+### C5 — TotalsPanel `total: invoice.total_amount` aliasing
+
+**Location:** `estimate-builder.tsx` invoice-mode TotalsPanel render site.
+
+**Finding:** TotalsPanel typed `estimate: Estimate` and reads `.total`. Invoice has `total_amount`, not `total`. Aliased at the call site via `{ ...inv, total: inv.total_amount } as unknown as Estimate`.
+
+**Fix path:** Same polymorphism pass as C4 — TotalsPanel takes `BuilderEntity` and narrows on kind.
+
+### C6 — SectionCard `as any` cast for invoice/template sections
+
+**Location:** `estimate-builder.tsx` SectionCard render in non-estimate branches.
+
+**Finding:** SectionCard typed against `EstimateSection`. Invoice has `InvoiceSection`, template has its own structural shape inside `template.structure.sections`. Cast at the call site keeps tsc happy.
+
+**Fix path:** Parameterize SectionCard / SubsectionCard / LineItemRow on the entity kind, or accept a normalized `BuilderSection` shape with a kind discriminator.
+
+### C7 — `/invoices` list page lost Customer + QB columns
+
+**Location:** `src/components/invoices/invoice-list-client.tsx`.
+
+**Finding:** Task 45 implementer trimmed to the spec's required column set, dropping Customer and QB columns that were present pre-67b.
+
+**Bug shape:** Eric uses these columns on the list page. Accepted as-is during Test 9; tagged for restoration if needed.
+
+**Fix path:** Restore the two columns, conditioned on org having QB connected.
+
+---
+
+## From Task 52 testing — fixed inline (no follow-up needed)
+
+These two were caught during the §11 run and fixed in-pass; logged here for traceability.
+
+- **Apply-template UI didn't update after success** — fix `a936be0` (added `useEffect` to re-sync local state when `entity` prop advances after `router.refresh()`).
+- **Template-mode drag-and-drop snapped back** — fix `ba1d007` (added template branch to `handleDragEnd` with local-state mutation; rootPut persists via auto-save).
+
+---
+
 ## (Future findings appended here as build progresses.)
