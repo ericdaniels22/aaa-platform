@@ -17,6 +17,7 @@ interface CustomerBlockProps {
 
 export function CustomerBlock({ job, mode = "estimate" }: CustomerBlockProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  if (mode === "template") return null;
   const { contact } = job;
   const customerName = contact
     ? `${contact.first_name} ${contact.last_name}`.trim()

@@ -146,6 +146,7 @@ export function TotalsPanel({
 }: TotalsPanelProps) {
   const isNegative = estimate.total < 0;
   const [isMinimized, setIsMinimized] = useState(false);
+  if (mode === "template") return null;
 
   if (isMinimized) {
     return (
