@@ -682,7 +682,7 @@ export function EstimateBuilder({
 
         {/* ── SLOT 2: MetadataBar ──────────────────────────────────────────── */}
         <MetadataBar
-          estimate={state.estimate}
+          entity={state.estimate}
           onIssuedDateChange={onIssuedDateChange}
           onValidUntilChange={onValidUntilChange}
           mode={mode}
