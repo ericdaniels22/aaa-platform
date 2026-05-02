@@ -1217,11 +1217,86 @@ export function EstimateBuilder({
   // PUT immediately (not debounced). On failure, the local state is rolled back.
 
   function handleDragEnd(event: DragEndEvent) {
-    // Estimate-only today. Invoice mode no-op (TODO post-67b: invoice already
-    // has granular sections/line-items reorder routes wired through autoSaveConfig
-    // — widening this handler requires either a polymorphic local-state mutator
-    // or an estimate↔invoice section-shape adapter; non-blocking for Task 43).
-    // Templates persist via root PUT only and don't support drag-reorder today.
+    // Template mode: local-only reorder; rootPut auto-save persists via
+    // builder_state. No HTTP per-section/per-item.
+    if (state.entity.kind === "template") {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const activeType = active.data.current?.type as string | undefined;
+
+      if (activeType === "section") {
+        const secs = state.entity.data.sections;
+        const oldIdx = secs.findIndex((s) => s.id === active.id);
+        const newIdx = secs.findIndex((s) => s.id === over.id);
+        if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return;
+        const reorderedSections = arrayMove(secs, oldIdx, newIdx);
+        setState((prev) => {
+          if (prev.entity.kind !== "template") return prev;
+          return {
+            ...prev,
+            entity: { ...prev.entity, data: { ...prev.entity.data, sections: reorderedSections } } as BuilderEntity,
+          };
+        });
+        return;
+      }
+
+      if (activeType === "subsection") {
+        const activeParent = active.data.current?.parentSectionId as string | undefined;
+        const overParent = over.data.current?.parentSectionId as string | undefined;
+        if (activeParent !== overParent) return;
+        const parent = state.entity.data.sections.find((s) => s.id === activeParent);
+        if (!parent) return;
+        const oldIdx = parent.subsections.findIndex((sub) => sub.id === active.id);
+        const newIdx = parent.subsections.findIndex((sub) => sub.id === over.id);
+        if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return;
+        const reorderedSections = state.entity.data.sections.map((s) =>
+          s.id !== activeParent ? s : { ...s, subsections: arrayMove(s.subsections, oldIdx, newIdx) },
+        );
+        setState((prev) => {
+          if (prev.entity.kind !== "template") return prev;
+          return {
+            ...prev,
+            entity: { ...prev.entity, data: { ...prev.entity.data, sections: reorderedSections } } as BuilderEntity,
+          };
+        });
+        return;
+      }
+
+      if (activeType === "line-item") {
+        const activeParentSectionId = active.data.current?.parentSectionId as string | undefined;
+        const overParentSectionId = over.data.current?.parentSectionId as string | undefined;
+        if (activeParentSectionId !== overParentSectionId) return;
+        const reorderedSections = state.entity.data.sections.map((s) => {
+          if (s.id === activeParentSectionId) {
+            const oldIdx = s.items.findIndex((i) => i.id === active.id);
+            const newIdx = s.items.findIndex((i) => i.id === over.id);
+            if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return s;
+            return { ...s, items: arrayMove(s.items, oldIdx, newIdx) };
+          }
+          return {
+            ...s,
+            subsections: s.subsections.map((sub) => {
+              if (sub.id !== activeParentSectionId) return sub;
+              const oldIdx = sub.items.findIndex((i) => i.id === active.id);
+              const newIdx = sub.items.findIndex((i) => i.id === over.id);
+              if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return sub;
+              return { ...sub, items: arrayMove(sub.items, oldIdx, newIdx) };
+            }),
+          };
+        });
+        setState((prev) => {
+          if (prev.entity.kind !== "template") return prev;
+          return {
+            ...prev,
+            entity: { ...prev.entity, data: { ...prev.entity.data, sections: reorderedSections } } as BuilderEntity,
+          };
+        });
+      }
+      return;
+    }
+
+    // Invoice-mode drag-reorder is a no-op today (TODO post-67b: needs polymorphic
+    // local-state mutator or estimate↔invoice section-shape adapter).
     if (state.entity.kind !== "estimate") return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
