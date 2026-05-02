@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertOctagon, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -165,6 +165,13 @@ export function EstimateBuilder({
 }: EstimateBuilderProps) {
   const router = useRouter();
   const [state, setState] = useState<BuilderState>({ entity });
+  // Re-sync local state when the server-rendered entity prop advances (e.g.
+  // after router.refresh() following apply-template). Keyed on updated_at so
+  // we don't clobber optimistic auto-save state on every parent re-render.
+  useEffect(() => {
+    setState({ entity });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entity.data.id, (entity.data as { updated_at?: string }).updated_at]);
   // Task 36: broken-refs banner state — set by template-applicator after apply.
   const [brokenRefs, setBrokenRefs] = useState<BrokenRef[] | null>(null);
 
