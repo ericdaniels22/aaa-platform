@@ -313,7 +313,10 @@ export function EstimateBuilder({
       const res = await fetch(url, { method: "DELETE" });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        toast.error(body.error || "Failed to void");
+        toast.error(
+          body.error ||
+            (state.entity.kind === "invoice" ? "Failed to void invoice" : "Failed to void estimate"),
+        );
         return;
       }
       // Optimistic update — voided_at uses client clock; server's value is canonical
