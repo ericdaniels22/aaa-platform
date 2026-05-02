@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { EstimateWithContents, EstimateLineItem } from "@/lib/types";
+import type { AutoSaveConfig } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -39,25 +39,10 @@ export interface UseAutoSaveResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Saveable field subsets
+// Saveable field subsets — line-item subset stays internal; shared across
+// estimate and invoice (same field names). Template per-line-item save is
+// gated off via entityKind so LineItemSubset never needs template item fields.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const ESTIMATE_FIELDS = [
-  "title",
-  "opening_statement",
-  "closing_statement",
-  "issued_date",
-  "valid_until",
-  "markup_type",
-  "markup_value",
-  "discount_type",
-  "discount_value",
-  "tax_rate",
-  "status",
-] as const;
-
-type EstimateFieldKey = typeof ESTIMATE_FIELDS[number];
-type EstimateFieldsSubset = Pick<EstimateWithContents, EstimateFieldKey>;
 
 const LINE_ITEM_FIELDS = [
   "description",
@@ -70,33 +55,37 @@ const LINE_ITEM_FIELDS = [
 ] as const;
 
 type LineItemFieldKey = typeof LINE_ITEM_FIELDS[number];
-type LineItemSubset = Pick<EstimateLineItem, LineItemFieldKey>;
+type LineItemSubset = Record<LineItemFieldKey, unknown>;
+
+// Minimal internal shape used for sections traversal — all three entity kinds
+// (EstimateWithContents, InvoiceWithContents, TemplateWithContents) share this
+// nested structure at runtime even though TypeScript sees different types.
+interface SectionLike {
+  items: Array<{ id: string } & Record<string, unknown>>;
+  subsections: Array<{
+    items: Array<{ id: string } & Record<string, unknown>>;
+  }>;
+}
+
+interface EntityWithSections {
+  sections: SectionLike[];
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function pickEstimateFields(estimate: EstimateWithContents): EstimateFieldsSubset {
-  const result = {} as EstimateFieldsSubset;
-  for (const k of ESTIMATE_FIELDS) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (result as any)[k] = estimate[k];
-  }
-  return result;
-}
-
-function pickLineItemFields(item: EstimateLineItem): LineItemSubset {
+function pickLineItemFields(item: { id: string } & Record<string, unknown>): LineItemSubset {
   const result = {} as LineItemSubset;
   for (const k of LINE_ITEM_FIELDS) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (result as any)[k] = item[k];
+    result[k] = item[k];
   }
   return result;
 }
 
-function collectLineItems(estimate: EstimateWithContents): Map<string, LineItemSubset> {
+function collectLineItems(entity: EntityWithSections): Map<string, LineItemSubset> {
   const map = new Map<string, LineItemSubset>();
-  for (const sec of estimate.sections) {
+  for (const sec of entity.sections) {
     for (const item of sec.items) {
       map.set(item.id, pickLineItemFields(item));
     }
@@ -109,9 +98,9 @@ function collectLineItems(estimate: EstimateWithContents): Map<string, LineItemS
   return map;
 }
 
-function getAllLineItems(estimate: EstimateWithContents): EstimateLineItem[] {
-  const items: EstimateLineItem[] = [];
-  for (const sec of estimate.sections) {
+function getAllLineItems(entity: EntityWithSections): Array<{ id: string } & Record<string, unknown>> {
+  const items: Array<{ id: string } & Record<string, unknown>> = [];
+  for (const sec of entity.sections) {
     items.push(...sec.items);
     for (const sub of sec.subsections) {
       items.push(...sub.items);
@@ -132,12 +121,17 @@ function diffSubset<T extends Record<string, unknown>>(a: T, b: T): boolean {
 // useAutoSave
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
+export function useAutoSave<T extends { id: string; updated_at?: string | null }>(
+  config: AutoSaveConfig<T>,
+  state: { entity: T; setEntity: (e: T) => void },
+): UseAutoSaveResult {
+  const { entity } = state;
+
   // ── Snapshots of last successfully-saved data ─────────────────────────────
-  const lastSavedSnapshotRef = useRef<EstimateFieldsSubset | null>(null);
+  const lastSavedSnapshotRef = useRef<unknown | null>(null);
   const lastSavedLineItemsRef = useRef<Map<string, LineItemSubset>>(new Map());
   // The updated_at value from the server (sent as updated_at_snapshot for 409 guard).
-  const updatedAtRef = useRef<string>(estimate.updated_at ?? "");
+  const updatedAtRef = useRef<string>(entity.updated_at ?? "");
 
   // ── State machine ─────────────────────────────────────────────────────────
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -157,8 +151,12 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
   // ── Mount: initialize snapshots ────────────────────────────────────────────
   useEffect(() => {
     if (lastSavedSnapshotRef.current === null) {
-      lastSavedSnapshotRef.current = pickEstimateFields(estimate);
-      lastSavedLineItemsRef.current = collectLineItems(estimate);
+      lastSavedSnapshotRef.current = config.serializeRootPut(entity);
+      if (config.entityKind !== "template") {
+        lastSavedLineItemsRef.current = collectLineItems(
+          entity as unknown as EntityWithSections,
+        );
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // only on mount
@@ -211,14 +209,17 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
     [],
   );
 
-  // ── Estimate-level auto-save ──────────────────────────────────────────────
+  // ── Entity-level auto-save ────────────────────────────────────────────────
 
-  const performEstimateSave = useCallback(async () => {
+  const performEntitySave = useCallback(async () => {
     if (staleConflictRef.current) return;
     if (lastSavedSnapshotRef.current === null) return;
 
-    const current = pickEstimateFields(estimate);
-    if (!diffSubset(current, lastSavedSnapshotRef.current)) {
+    const current = config.serializeRootPut(entity);
+    if (!diffSubset(
+      current as Record<string, unknown>,
+      lastSavedSnapshotRef.current as Record<string, unknown>,
+    )) {
       // No changes — stay idle (or go back to idle if we were in error from a prior run)
       return;
     }
@@ -226,7 +227,7 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
     if (inFlightRef.current) {
       // Re-schedule: another save is in flight, check again after it finishes
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(performEstimateSave, DEBOUNCE_MS);
+      saveTimerRef.current = setTimeout(performEntitySave, DEBOUNCE_MS);
       return;
     }
 
@@ -236,11 +237,11 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
-      const body = {
-        ...current,
-        updated_at_snapshot: updatedAtRef.current,
-      };
-      const res = await fetch(`/api/estimates/${estimate.id}`, {
+      const body = config.hasSnapshotConcurrency
+        ? { ...(current as object), updated_at_snapshot: updatedAtRef.current }
+        : current;
+
+      const res = await fetch(config.paths.rootPut, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -248,24 +249,36 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
       });
 
       if (res.ok) {
-        const data = (await res.json()) as { estimate: EstimateWithContents };
-        lastSavedSnapshotRef.current = pickEstimateFields(data.estimate);
-        if (data.estimate.updated_at) {
-          updatedAtRef.current = data.estimate.updated_at;
+        const data = (await res.json()) as { estimate?: T; invoice?: T; template?: T; updated_at?: string | null };
+        // Extract the returned entity from the response (shape varies by kind)
+        const returned =
+          (data as Record<string, unknown>)[config.entityKind] as T | undefined;
+        if (returned) {
+          lastSavedSnapshotRef.current = config.serializeRootPut(returned);
+          if (returned.updated_at) {
+            updatedAtRef.current = returned.updated_at;
+          }
+        } else {
+          // Some routes return just updated_at instead of the full entity
+          if (data.updated_at) updatedAtRef.current = data.updated_at;
+          lastSavedSnapshotRef.current = current;
         }
         transitionToSaved();
-      } else if (res.status === 409) {
+      } else if (res.status === 409 && config.hasSnapshotConcurrency) {
         handleStaleConflict();
+      } else if (res.status === 409 && !config.hasSnapshotConcurrency) {
+        // Templates have no snapshot concurrency — treat 409 as a generic error
+        handleSaveError(saveTimerRef, performEntitySave);
       } else {
         // 4xx other than 409: treat as error too
-        handleSaveError(saveTimerRef, performEstimateSave);
+        handleSaveError(saveTimerRef, performEntitySave);
       }
     } catch (err) {
       // AbortError (timeout) is treated the same as a network error
       if (err instanceof Error && err.name === "AbortError") {
-        handleSaveError(saveTimerRef, performEstimateSave);
+        handleSaveError(saveTimerRef, performEntitySave);
       } else {
-        handleSaveError(saveTimerRef, performEstimateSave);
+        handleSaveError(saveTimerRef, performEntitySave);
       }
     } finally {
       clearTimeout(timeoutId);
@@ -273,50 +286,47 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
 
       // After in-flight completes, check if there are still unsaved changes
       if (!staleConflictRef.current && lastSavedSnapshotRef.current !== null) {
-        const after = pickEstimateFields(estimate);
-        if (diffSubset(after, lastSavedSnapshotRef.current)) {
+        const after = config.serializeRootPut(entity);
+        if (diffSubset(
+          after as Record<string, unknown>,
+          lastSavedSnapshotRef.current as Record<string, unknown>,
+        )) {
           if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-          saveTimerRef.current = setTimeout(performEstimateSave, DEBOUNCE_MS);
+          saveTimerRef.current = setTimeout(performEntitySave, DEBOUNCE_MS);
         }
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimate, transitionToSaved, handleStaleConflict, handleSaveError]);
+  }, [entity, config, transitionToSaved, handleStaleConflict, handleSaveError]);
 
-  // ── Watch estimate-level fields, schedule debounced save ─────────────────
+  // ── Watch entity-level fields, schedule debounced save ─────────────────
   useEffect(() => {
     if (staleConflictRef.current) return;
     if (lastSavedSnapshotRef.current === null) return; // not yet initialized
 
-    const current = pickEstimateFields(estimate);
-    if (!diffSubset(current, lastSavedSnapshotRef.current)) return; // no change
+    const current = config.serializeRootPut(entity);
+    if (!diffSubset(
+      current as Record<string, unknown>,
+      lastSavedSnapshotRef.current as Record<string, unknown>,
+    )) return; // no change
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(performEstimateSave, DEBOUNCE_MS);
+    saveTimerRef.current = setTimeout(performEntitySave, DEBOUNCE_MS);
 
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [
-    // Individual estimate-level fields — each triggers re-check
-    estimate.title,
-    estimate.opening_statement,
-    estimate.closing_statement,
-    estimate.issued_date,
-    estimate.valid_until,
-    estimate.markup_type,
-    estimate.markup_value,
-    estimate.discount_type,
-    estimate.discount_value,
-    estimate.tax_rate,
-    estimate.status,
-    performEstimateSave,
-  ]);
+  // We use entity as a whole so that any field change triggers re-check.
+  // The serializer picks only the relevant fields for the diff.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entity, performEntitySave]);
 
   // ── Per-line-item auto-save ───────────────────────────────────────────────
+  // Gated: templates do not use per-line-item saves (no live DB rows backing
+  // template line items until a future task implements the draft-estimate pattern).
 
   const performLineItemSave = useCallback(
-    async (item: EstimateLineItem) => {
+    async (item: { id: string } & Record<string, unknown>) => {
       if (staleConflictRef.current) return;
 
       const savedSubset = lastSavedLineItemsRef.current.get(item.id);
@@ -346,21 +356,22 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
       try {
+        const lineItemBody = config.hasSnapshotConcurrency
+          ? { ...currentSubset, updated_at_snapshot: updatedAtRef.current }
+          : currentSubset;
+
         const res = await fetch(
-          `/api/estimates/${estimate.id}/line-items/${item.id}`,
+          config.paths.lineItemRoute(item.id),
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...currentSubset,
-              updated_at_snapshot: updatedAtRef.current,
-            }),
+            body: JSON.stringify(lineItemBody),
             signal: controller.signal,
           }
         );
 
         if (res.ok) {
-          const data = (await res.json()) as { line_item: EstimateLineItem; updated_at?: string | null };
+          const data = (await res.json()) as { line_item?: unknown; updated_at?: string | null };
           lastSavedLineItemsRef.current.set(item.id, currentSubset);
           if (data.updated_at) updatedAtRef.current = data.updated_at;
           transitionToSaved();
@@ -383,14 +394,17 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
         inFlightItemsRef.current.delete(item.id);
       }
     },
-    [estimate.id, transitionToSaved, handleStaleConflict]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [config, transitionToSaved, handleStaleConflict]
   );
 
-  // Watch line-item changes — debounce per item
+  // Watch line-item changes — debounce per item (estimates + invoices only)
   useEffect(() => {
+    if (config.entityKind === "template") return; // templates: no per-line-item save
     if (staleConflictRef.current) return;
 
-    const allItems = getAllLineItems(estimate);
+    const entityWithSections = entity as unknown as EntityWithSections;
+    const allItems = getAllLineItems(entityWithSections);
     for (const item of allItems) {
       const saved = lastSavedLineItemsRef.current.get(item.id);
       if (!saved) {
@@ -412,9 +426,9 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
       }, DEBOUNCE_MS);
       lineItemTimersRef.current.set(item.id, timer);
     }
-  // We intentionally use the raw sections to detect item changes.
+  // We intentionally use the raw entity to detect item changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimate.sections, performLineItemSave]);
+  }, [entity, config.entityKind, performLineItemSave]);
 
   // ── Reorder save methods (called immediately from handleDragEnd) ──────────
 
@@ -432,10 +446,14 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
       try {
-        const res = await fetch(`/api/estimates/${estimate.id}/sections`, {
+        const reorderBody = config.hasSnapshotConcurrency
+          ? { sections, updated_at_snapshot: updatedAtRef.current }
+          : { sections };
+
+        const res = await fetch(config.paths.sectionsReorder, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sections, updated_at_snapshot: updatedAtRef.current }),
+          body: JSON.stringify(reorderBody),
           signal: controller.signal,
         });
         if (res.ok) {
@@ -445,7 +463,11 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
           return true;
         } else if (res.status === 409 || res.status === 404) {
           // I3: 404 (a section we're reordering is gone) is treated as stale.
-          handleStaleConflict();
+          if (config.hasSnapshotConcurrency) {
+            handleStaleConflict();
+          } else {
+            handleSaveError(sectionsReorderTimerRef, () => void saveSectionsReorder(sections));
+          }
           return false;
         } else {
           // I1: retry with the same payload after exp backoff.
@@ -461,7 +483,8 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
         clearTimeout(timeoutId);
       }
     },
-    [estimate.id, transitionToSaved, handleStaleConflict, handleSaveError]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [config, transitionToSaved, handleStaleConflict, handleSaveError]
   );
 
   const saveLineItemsReorder = useCallback(
@@ -477,10 +500,14 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
       try {
-        const res = await fetch(`/api/estimates/${estimate.id}/line-items`, {
+        const reorderBody = config.hasSnapshotConcurrency
+          ? { items, updated_at_snapshot: updatedAtRef.current }
+          : { items };
+
+        const res = await fetch(config.paths.lineItemsReorder, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items, updated_at_snapshot: updatedAtRef.current }),
+          body: JSON.stringify(reorderBody),
           signal: controller.signal,
         });
         if (res.ok) {
@@ -489,7 +516,11 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
           transitionToSaved();
           return true;
         } else if (res.status === 409 || res.status === 404) {
-          handleStaleConflict();
+          if (config.hasSnapshotConcurrency) {
+            handleStaleConflict();
+          } else {
+            handleSaveError(lineItemsReorderTimerRef, () => void saveLineItemsReorder(items));
+          }
           return false;
         } else {
           handleSaveError(lineItemsReorderTimerRef, () => void saveLineItemsReorder(items));
@@ -503,7 +534,8 @@ export function useAutoSave(estimate: EstimateWithContents): UseAutoSaveResult {
         clearTimeout(timeoutId);
       }
     },
-    [estimate.id, transitionToSaved, handleStaleConflict, handleSaveError]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [config, transitionToSaved, handleStaleConflict, handleSaveError]
   );
 
   // ── Public interface ──────────────────────────────────────────────────────

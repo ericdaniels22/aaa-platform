@@ -33,6 +33,36 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Estimate-level root-PUT serializer (moved from use-auto-save.ts in Task 7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ESTIMATE_FIELDS = [
+  "title",
+  "opening_statement",
+  "closing_statement",
+  "issued_date",
+  "valid_until",
+  "markup_type",
+  "markup_value",
+  "discount_type",
+  "discount_value",
+  "tax_rate",
+  "status",
+] as const;
+
+type EstimateFieldKey = typeof ESTIMATE_FIELDS[number];
+type EstimateFieldsSubset = Pick<EstimateWithContents, EstimateFieldKey>;
+
+function pickEstimateFieldsForPut(estimate: EstimateWithContents): EstimateFieldsSubset {
+  const result = {} as EstimateFieldsSubset;
+  for (const k of ESTIMATE_FIELDS) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (result as any)[k] = estimate[k];
+  }
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -63,9 +93,24 @@ export function EstimateBuilder({
     estimate,
   });
 
-  // ── Task 28: auto-save hook ────────────────────────────────────────────────
+  // ── Task 28: auto-save hook (generic, Task 7 refactor) ────────────────────
   const { saveStatus, lastSavedAt, saveSectionsReorder, saveLineItemsReorder } =
-    useAutoSave(state.estimate);
+    useAutoSave<EstimateWithContents>(
+      {
+        entityKind: "estimate",
+        entityId: state.estimate.id,
+        paths: {
+          rootPut: `/api/estimates/${estimate.id}`,
+          sectionsReorder: `/api/estimates/${estimate.id}/sections`,
+          sectionRoute: (sid) => `/api/estimates/${estimate.id}/sections/${sid}`,
+          lineItemsReorder: `/api/estimates/${estimate.id}/line-items`,
+          lineItemRoute: (iid) => `/api/estimates/${estimate.id}/line-items/${iid}`,
+        },
+        serializeRootPut: pickEstimateFieldsForPut,
+        hasSnapshotConcurrency: true,
+      },
+      { entity: state.estimate, setEntity: (e) => setState((prev) => ({ ...prev, estimate: e })) },
+    );
 
   // Separate transient flag — not part of BuilderState because it's purely UI.
   const [isVoiding, setIsVoiding] = useState(false);
