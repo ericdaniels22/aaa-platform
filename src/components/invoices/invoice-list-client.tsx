@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, MoreVertical, Plus } from "lucide-react";
+import { Loader2, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -78,12 +78,6 @@ export default function InvoiceListClient() {
           <h1 className="text-2xl font-semibold">Invoices</h1>
           <p className="text-sm text-muted-foreground">All invoices across all jobs</p>
         </div>
-        <Link
-          href="/invoices/new"
-          className="px-4 py-2 rounded-lg bg-[#0F6E56] text-white text-sm font-medium hover:brightness-110 flex items-center gap-2"
-        >
-          <Plus size={14} /> New invoice
-        </Link>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
