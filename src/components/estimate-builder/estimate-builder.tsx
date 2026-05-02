@@ -364,6 +364,36 @@ export function EstimateBuilder({
     // Task 28 auto-save will pick this up.
   }
 
+  // Task 43: invoice-only — Due date.
+  function onDueDateChange(d: string | null) {
+    setState((prev) => {
+      if (prev.entity.kind !== "invoice") return prev;
+      return {
+        ...prev,
+        entity: {
+          ...prev.entity,
+          data: { ...prev.entity.data, due_date: d },
+        },
+      };
+    });
+    // Auto-save picks this up via root PUT.
+  }
+
+  // Task 43: invoice-only — PO number.
+  function onPoNumberChange(po: string | null) {
+    setState((prev) => {
+      if (prev.entity.kind !== "invoice") return prev;
+      return {
+        ...prev,
+        entity: {
+          ...prev.entity,
+          data: { ...prev.entity.data, po_number: po },
+        },
+      };
+    });
+    // Auto-save picks this up via root PUT.
+  }
+
   function onOpeningStatementChange(next: string | null) {
     setState((prev) => ({
       ...prev,
@@ -431,42 +461,77 @@ export function EstimateBuilder({
     state.entity.kind !== "template" && state.entity.data.status === "voided";
 
   // ── Task 27: markup / discount / tax callbacks ─────────────────────────
-  // Estimate-only at runtime today. Tasks 40/43 will widen these.
+  // Estimate: live local recompute via computeEstimateTotals. Invoice: optimistic
+  // local field update only; the server's recalculateInvoiceTotals on the next
+  // root PUT settles the panel values (TotalsPanel may briefly show stale totals).
 
   function onMarkupChange(type: AdjustmentType, value: number) {
     setState((prev) => {
-      if (prev.entity.kind !== "estimate") return prev; // TODO Tasks 40/43
-      const next_estimate = { ...prev.entity.data, markup_type: type, markup_value: value };
-      const totals = computeEstimateTotals(next_estimate);
-      return {
-        ...prev,
-        entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
-      };
+      if (prev.entity.kind === "estimate") {
+        const next_estimate = { ...prev.entity.data, markup_type: type, markup_value: value };
+        const totals = computeEstimateTotals(next_estimate);
+        return {
+          ...prev,
+          entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
+        };
+      }
+      if (prev.entity.kind === "invoice") {
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: { ...prev.entity.data, markup_type: type, markup_value: value },
+          } as BuilderEntity,
+        };
+      }
+      return prev;
     });
   }
 
   function onDiscountChange(type: AdjustmentType, value: number) {
     setState((prev) => {
-      if (prev.entity.kind !== "estimate") return prev; // TODO Tasks 40/43
-      const next_estimate = { ...prev.entity.data, discount_type: type, discount_value: value };
-      const totals = computeEstimateTotals(next_estimate);
-      return {
-        ...prev,
-        entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
-      };
+      if (prev.entity.kind === "estimate") {
+        const next_estimate = { ...prev.entity.data, discount_type: type, discount_value: value };
+        const totals = computeEstimateTotals(next_estimate);
+        return {
+          ...prev,
+          entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
+        };
+      }
+      if (prev.entity.kind === "invoice") {
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: { ...prev.entity.data, discount_type: type, discount_value: value },
+          } as BuilderEntity,
+        };
+      }
+      return prev;
     });
   }
 
   function onTaxRateChange(rate: number) {
     const clamped = Math.max(0, Math.min(100, rate));
     setState((prev) => {
-      if (prev.entity.kind !== "estimate") return prev; // TODO Tasks 40/43
-      const next_estimate = { ...prev.entity.data, tax_rate: clamped };
-      const totals = computeEstimateTotals(next_estimate);
-      return {
-        ...prev,
-        entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
-      };
+      if (prev.entity.kind === "estimate") {
+        const next_estimate = { ...prev.entity.data, tax_rate: clamped };
+        const totals = computeEstimateTotals(next_estimate);
+        return {
+          ...prev,
+          entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
+        };
+      }
+      if (prev.entity.kind === "invoice") {
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: { ...prev.entity.data, tax_rate: clamped },
+          } as BuilderEntity,
+        };
+      }
+      return prev;
     });
   }
 
@@ -888,24 +953,48 @@ export function EstimateBuilder({
     const entityBase = state.entity.kind === "invoice" ? "invoices" : "estimates";
     const entityId = state.entity.data.id;
     const snapshot = state.entity.data; // capture before mutation
-    // Remove from local state (works for items in sections OR subsections)
+    // Remove from local state (works for items in sections OR subsections).
+    // Task 43 fix: previously early-returned for non-estimate, dropping the
+    // optimistic update for invoice mode.
     setState((prev) => {
-      if (prev.entity.kind !== "estimate") return prev;
-      const sections_after = prev.entity.data.sections.map((s) => ({
-        ...s,
-        items: s.items.filter((i) => i.id !== id),
-        subsections: s.subsections.map((sub) => ({
-          ...sub,
-          items: sub.items.filter((i) => i.id !== id),
-        })),
-      }));
-      const subtotal = sumLineItemsFromSections(sections_after);
-      const next_estimate = { ...prev.entity.data, sections: sections_after, subtotal };
-      const totals = computeEstimateTotals(next_estimate);
-      return {
-        ...prev,
-        entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
-      };
+      if (prev.entity.kind === "estimate") {
+        const sections_after = prev.entity.data.sections.map((s) => ({
+          ...s,
+          items: s.items.filter((i) => i.id !== id),
+          subsections: s.subsections.map((sub) => ({
+            ...sub,
+            items: sub.items.filter((i) => i.id !== id),
+          })),
+        }));
+        const subtotal = sumLineItemsFromSections(sections_after);
+        const next_estimate = { ...prev.entity.data, sections: sections_after, subtotal };
+        const totals = computeEstimateTotals(next_estimate);
+        return {
+          ...prev,
+          entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
+        };
+      }
+      if (prev.entity.kind === "invoice") {
+        // Invoice mode: optimistic local removal only — server reconciles totals
+        // via recalculateInvoiceTotals on the DELETE route, and the next root PUT
+        // / page refresh picks up authoritative values.
+        const sections_after = prev.entity.data.sections.map((s) => ({
+          ...s,
+          items: s.items.filter((i) => i.id !== id),
+          subsections: s.subsections.map((sub) => ({
+            ...sub,
+            items: sub.items.filter((i) => i.id !== id),
+          })),
+        }));
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: { ...prev.entity.data, sections: sections_after },
+          } as BuilderEntity,
+        };
+      }
+      return prev;
     });
     try {
       const res = await fetch(
@@ -967,26 +1056,58 @@ export function EstimateBuilder({
       return;
     }
     setState((prev) => {
-      if (prev.entity.kind !== "estimate") return prev; // TODO Task 43 (invoice)
-      const sections_after = prev.entity.data.sections.map((sec) => ({
-        ...sec,
-        items: sec.items.map((item) =>
-          item.id === itemId ? { ...item, ...partial } : item
-        ),
-        subsections: sec.subsections.map((sub) => ({
-          ...sub,
-          items: sub.items.map((item) =>
+      if (prev.entity.kind === "estimate") {
+        const sections_after = prev.entity.data.sections.map((sec) => ({
+          ...sec,
+          items: sec.items.map((item) =>
             item.id === itemId ? { ...item, ...partial } : item
           ),
-        })),
-      }));
-      const subtotal = sumLineItemsFromSections(sections_after);
-      const next_estimate = { ...prev.entity.data, sections: sections_after, subtotal };
-      const totals = computeEstimateTotals(next_estimate);
-      return {
-        ...prev,
-        entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
-      };
+          subsections: sec.subsections.map((sub) => ({
+            ...sub,
+            items: sub.items.map((item) =>
+              item.id === itemId ? { ...item, ...partial } : item
+            ),
+          })),
+        }));
+        const subtotal = sumLineItemsFromSections(sections_after);
+        const next_estimate = { ...prev.entity.data, sections: sections_after, subtotal };
+        const totals = computeEstimateTotals(next_estimate);
+        return {
+          ...prev,
+          entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
+        };
+      }
+      if (prev.entity.kind === "invoice") {
+        // Task 43: invoice mode — optimistic local edit; totals recompute
+        // happens server-side via recalculateInvoiceTotals on the line-item PUT.
+        // The TotalsPanel may briefly show stale totals until auto-save returns.
+        const sections_after = prev.entity.data.sections.map((sec) => ({
+          ...sec,
+          // Cast: partial is typed as Partial<EstimateLineItem>; runtime fields
+          // line up with InvoiceLineItem for the editable subset (description,
+          // quantity, unit_price, code, unit).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          items: sec.items.map((item) =>
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            item.id === itemId ? ({ ...item, ...(partial as any) }) : item
+          ),
+          subsections: sec.subsections.map((sub) => ({
+            ...sub,
+            items: sub.items.map((item) =>
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              item.id === itemId ? ({ ...item, ...(partial as any) }) : item
+            ),
+          })),
+        }));
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: { ...prev.entity.data, sections: sections_after },
+          } as BuilderEntity,
+        };
+      }
+      return prev;
     });
     // Task 28 auto-save will pick this up.
   }
@@ -1027,27 +1148,60 @@ export function EstimateBuilder({
       return;
     }
     setState((prev) => {
-      if (prev.entity.kind !== "estimate") return prev; // TODO Task 43 (invoice)
-      const sections_after = prev.entity.data.sections.map((sec) => {
-        if (sec.id === newItem.section_id) {
-          return { ...sec, items: [...sec.items, newItem] };
-        }
+      if (prev.entity.kind === "estimate") {
+        const sections_after = prev.entity.data.sections.map((sec) => {
+          if (sec.id === newItem.section_id) {
+            return { ...sec, items: [...sec.items, newItem] };
+          }
+          return {
+            ...sec,
+            subsections: sec.subsections.map((sub) =>
+              sub.id === newItem.section_id
+                ? { ...sub, items: [...sub.items, newItem] }
+                : sub
+            ),
+          };
+        });
+        const subtotal = sumLineItemsFromSections(sections_after);
+        const next_estimate = { ...prev.entity.data, sections: sections_after, subtotal };
+        const totals = computeEstimateTotals(next_estimate);
         return {
-          ...sec,
-          subsections: sec.subsections.map((sub) =>
-            sub.id === newItem.section_id
-              ? { ...sub, items: [...sub.items, newItem] }
-              : sub
-          ),
+          ...prev,
+          entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
         };
-      });
-      const subtotal = sumLineItemsFromSections(sections_after);
-      const next_estimate = { ...prev.entity.data, sections: sections_after, subtotal };
-      const totals = computeEstimateTotals(next_estimate);
-      return {
-        ...prev,
-        entity: { ...prev.entity, data: { ...next_estimate, ...totals } },
-      };
+      }
+      if (prev.entity.kind === "invoice") {
+        // Task 43: invoice mode — server reconciles totals via
+        // recalculateInvoiceTotals on the line-item POST; we splice the new
+        // item locally so it appears immediately. TotalsPanel may show briefly
+        // stale totals until the next auto-save settles.
+        // Note: the invoice POST route returns the raw row whose total field
+        // is `amount` (not `total`). AddItemDialog still types it as
+        // EstimateLineItem; cast through any to splice into invoice-shape arrays.
+        const sections_after = prev.entity.data.sections.map((sec) => {
+          if (sec.id === newItem.section_id) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return { ...sec, items: [...sec.items, newItem as any] };
+          }
+          return {
+            ...sec,
+            subsections: sec.subsections.map((sub) =>
+              sub.id === newItem.section_id
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ? { ...sub, items: [...sub.items, newItem as any] }
+                : sub
+            ),
+          };
+        });
+        return {
+          ...prev,
+          entity: {
+            ...prev.entity,
+            data: { ...prev.entity.data, sections: sections_after },
+          } as BuilderEntity,
+        };
+      }
+      return prev;
     });
   }
 
@@ -1056,7 +1210,12 @@ export function EstimateBuilder({
   // PUT immediately (not debounced). On failure, the local state is rolled back.
 
   function handleDragEnd(event: DragEndEvent) {
-    if (state.entity.kind !== "estimate") return; // TODO Tasks 40/43
+    // Estimate-only today. Invoice mode no-op (TODO post-67b: invoice already
+    // has granular sections/line-items reorder routes wired through autoSaveConfig
+    // — widening this handler requires either a polymorphic local-state mutator
+    // or an estimate↔invoice section-shape adapter; non-blocking for Task 43).
+    // Templates persist via root PUT only and don't support drag-reorder today.
+    if (state.entity.kind !== "estimate") return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -1226,18 +1385,215 @@ export function EstimateBuilder({
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
-  // Estimate-mode is the only fully-implemented branch today. Invoice and
-  // template branches render minimal stubs; Tasks 40 / 43 fill them in.
+  // All three modes (estimate / invoice / template) now have real JSX branches.
 
   if (state.entity.kind === "invoice") {
-    // TODO Task 43 — invoice builder consumer page wires this up.
+    // ── Invoice-mode JSX (Task 43) ─────────────────────────────────────────
+    // Mirrors estimate-mode shape but strips: TemplateBanner, BrokenRefsBanner,
+    // ConvertConfirmModal, Convert button (HeaderBar handles per-kind action
+    // buttons — Mark as Sent / Mark as Paid / Send Payment Request / Void).
+    const invoiceEntity = state.entity; // narrowed
+    const invoice = invoiceEntity.data;
+    const invSections = invoice.sections;
+    const invMode = invoiceEntity.kind;
+
+    // TotalsPanel was authored against `Estimate.total` but Invoice uses
+    // `total_amount`. Adapt by aliasing total ← total_amount before passing
+    // through. Other monetary fields (subtotal, markup_*, discount_*, tax_*,
+    // adjusted_subtotal) are name-compatible across both entities.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const invoiceForTotals = { ...invoice, total: invoice.total_amount } as any;
+
     return (
       <div className="relative min-h-screen bg-background">
-        <main className="max-w-4xl mx-auto px-4 py-6 pb-24">
-          <p className="text-sm text-muted-foreground">
-            Invoice builder coming in Task 43.
-          </p>
+        {/* Voided banner */}
+        {isVoided && (
+          <div className="w-full bg-destructive/10 border-b border-destructive/20 px-4 py-2 flex items-center gap-2 text-sm text-destructive font-medium">
+            <AlertOctagon size={16} />
+            This invoice has been voided
+            {invoice.void_reason && (
+              <span className="font-normal text-destructive/80">
+                — {invoice.void_reason}
+              </span>
+            )}
+          </div>
+        )}
+
+        <main className="max-w-4xl mx-auto px-4 py-6 pb-24 space-y-4">
+          {/* ── HeaderBar — Mark as Sent / Mark as Paid / Send Payment / Void ── */}
+          <HeaderBar
+            entity={invoiceEntity}
+            onTitleChange={onTitleChange}
+            onVoid={onVoid}
+            saveStatus={saveStatus}
+            lastSavedAt={lastSavedAt}
+            isVoiding={isVoiding}
+          />
+
+          {/* ── MetadataBar — Issued + Due + PO + converted-from-link ── */}
+          <MetadataBar
+            entity={invoice}
+            onIssuedDateChange={onIssuedDateChange}
+            onValidUntilChange={onValidUntilChange}
+            onDueDateChange={onDueDateChange}
+            onPoNumberChange={onPoNumberChange}
+            mode={invMode}
+          />
+
+          {/* ── CustomerBlock ── */}
+          {job && <CustomerBlock job={job} mode={invMode} />}
+
+          {/* ── Opening statement ── */}
+          <StatementEditor
+            label="Opening statement"
+            value={invoice.opening_statement}
+            onChange={onOpeningStatementChange}
+            defaultText={defaultOpeningStatement}
+            readOnly={isVoided}
+            mode={invMode}
+          />
+
+          {/* ── Sections list ── */}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            {invSections.length === 0 ? (
+              <div className="rounded-xl border-2 border-dashed border-border bg-card p-12 flex flex-col items-center gap-4 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Add a section to get started
+                </p>
+                <Button
+                  onClick={() => setShowAddSection(true)}
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={isVoided}
+                >
+                  <Plus size={14} />
+                  New Section
+                </Button>
+              </div>
+            ) : (
+              <SortableContext
+                items={invSections.map((s) => s.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <ul className="space-y-3">
+                  {invSections.map((sec, sIdx) => (
+                    <SectionCard
+                      key={sec.id}
+                      // Invoice sections are structurally compatible at the
+                      // fields SectionCard reads (id, title, sort_order, items,
+                      // subsections), but use InvoiceLineItem (`amount`) where
+                      // the prop expects EstimateLineItem (`total`). Cast.
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      section={sec as any}
+                      onRename={onSectionRename}
+                      onDelete={onSectionDelete}
+                      onAddSubsection={onSubsectionAdd}
+                      onAddLineItem={onAddLineItem}
+                      onLineItemDelete={onLineItemDelete}
+                      onLineItemChange={onLineItemChange}
+                      onSubsectionRename={onSubsectionRename}
+                      onSubsectionDelete={onSubsectionDelete}
+                      onSubsectionLineItemDelete={onLineItemDelete}
+                      readOnly={isVoided}
+                      mode={invMode}
+                      sectionIdx={sIdx}
+                    />
+                  ))}
+                </ul>
+              </SortableContext>
+            )}
+
+            {/* Add Section inline input */}
+            <div className="mt-3 pt-3 border-t border-border">
+              {showAddSection ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    autoFocus
+                    value={newSectionTitle}
+                    maxLength={200}
+                    placeholder="Section name"
+                    onChange={(e) => setNewSectionTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newSectionTitle.trim()) {
+                        void onAddSection(newSectionTitle.trim());
+                      }
+                      if (e.key === "Escape") {
+                        setShowAddSection(false);
+                        setNewSectionTitle("");
+                      }
+                    }}
+                    className="h-8 text-sm flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (newSectionTitle.trim()) {
+                        void onAddSection(newSectionTitle.trim());
+                      }
+                    }}
+                    disabled={!newSectionTitle.trim()}
+                  >
+                    Add
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setShowAddSection(false);
+                      setNewSectionTitle("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAddSection(true)}
+                  disabled={isVoided}
+                  className="flex items-center gap-1.5 px-3 py-2 w-full rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors border border-dashed border-border disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Plus size={13} />
+                  Add Section
+                </button>
+              )}
+            </div>
+          </DndContext>
+
+          {/* ── Closing statement ── */}
+          <StatementEditor
+            label="Closing statement"
+            value={invoice.closing_statement}
+            onChange={onClosingStatementChange}
+            defaultText={defaultClosingStatement}
+            readOnly={isVoided}
+            mode={invMode}
+          />
         </main>
+
+        {/* ── TotalsPanel (sticky bottom-right) ─────────────────────────── */}
+        <TotalsPanel
+          estimate={invoiceForTotals}
+          onMarkupChange={onMarkupChange}
+          onDiscountChange={onDiscountChange}
+          onTaxRateChange={onTaxRateChange}
+          readOnly={isVoided}
+          mode={invMode}
+        />
+
+        {/* ── AddItemDialog ─────────────────────────────────────────────── */}
+        <AddItemDialog
+          open={addItemTarget !== null}
+          onOpenChange={(open) => !open && setAddItemTarget(null)}
+          estimateId={invoice.id}
+          sectionId={addItemTarget?.sectionId ?? ""}
+          jobDamageType={job?.damage_type}
+          onAdded={onLineItemAdded}
+          mode={invMode}
+        />
       </div>
     );
   }
