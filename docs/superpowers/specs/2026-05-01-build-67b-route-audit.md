@@ -129,3 +129,14 @@ No contact with `title` or `sequence_number`.
 type-hygiene update to `InvoiceRow` / `InvoiceLineItemRow` in
 `src/lib/invoices/types.ts` to reflect the 67a-added columns — this is bookkeeping
 for Task 30 and does not affect runtime behaviour of any kept route.
+
+---
+
+## Final dispositions (post-67b implementation, pre-ship)
+
+- mark-sent: PASS — ships untouched.
+- void: PASS — ships untouched (CHECK constraint backstops; route has its own already-voided guard at line 26).
+- send: PASS — ships untouched. PDF visual fidelity degrades for 67b-era invoices with markup/discount; spec'd as 67c rewrite.
+- pdf: PASS — ships untouched. Same caveat as send.
+
+No freezing required. All four kept routes work against the new schema.
