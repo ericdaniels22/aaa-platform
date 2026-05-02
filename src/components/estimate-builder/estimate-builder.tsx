@@ -671,15 +671,13 @@ export function EstimateBuilder({
 
         {/* ── SLOT 1: HeaderBar ────────────────────────────────────────────── */}
         <HeaderBar
-          estimate={state.estimate}
+          mode="estimate"
+          entity={state.estimate}
           onTitleChange={onTitleChange}
           onVoid={onVoid}
-          onSend={() => {}}
-          onPdfExport={() => {}}
           saveStatus={saveStatus}
           lastSavedAt={lastSavedAt}
           isVoiding={isVoiding}
-          mode={mode}
         />
 
         {/* ── SLOT 2: MetadataBar ──────────────────────────────────────────── */}
