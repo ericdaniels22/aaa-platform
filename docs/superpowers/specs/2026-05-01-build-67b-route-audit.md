@@ -41,7 +41,7 @@ Both columns exist and have correct nullability for the operation (writing a non
     `subtotal`, `tax_amount`, `tax_rate`, `total_amount`, `memo`
 - Reads from `invoice_line_items`: `*` (via `select("*")`)
   - Columns actually consumed by renderer: `id`, `xactimate_code`,
-    `description`, `quantity`, `unit_price`, `amount`
+    `description`, `quantity`, `unit_price`, `amount`, `sort_order`
 - Also reads `jobs` and `contacts` for customer block (separate tables, unaffected by 67a).
 - Writes (mode=attachment only): Supabase Storage — no DB row writes.
 
@@ -57,7 +57,7 @@ needs; TypeScript type-checks use the interface, not the DB shape, so no compile
 
 **Column check — `invoice_line_items`:**
 
-All six line-item columns consumed by the renderer are present post-67a. The `select("*")`
+All seven line-item columns consumed by the renderer are present post-67a. The `select("*")`
 also returns `section_id`, `library_item_id`, `unit`, `organization_id` — ignored by renderer.
 
 **Important type-gap note (non-blocking):** `InvoiceRow` (and therefore `InvoiceWithItems`)
